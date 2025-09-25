@@ -119,7 +119,7 @@ fn test_complete_step_basic() {
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 3, 'hash3', 75);
     
     // Complete step
-    let interactions_hash = contract.complete_step(user_id, challenge_id, session_id, step_id);
+    let interactions_hash = contract.complete_step_success(user_id, challenge_id, session_id, step_id);
     assert!(interactions_hash != 0);
     
     // Verify step is marked as completed
@@ -149,7 +149,7 @@ fn test_complete_step_and_get_completed_step() {
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 3, 'hash3', 75);
     
     // Complete step
-    let interactions_hash = contract.complete_step(user_id, challenge_id, session_id, step_id);
+    let interactions_hash = contract.complete_step_success(user_id, challenge_id, session_id, step_id);
     
     // Get completed step info
     let completed_step = contract.get_completed_step(user_id, challenge_id, session_id, step_id);
@@ -228,7 +228,7 @@ fn test_user_stats_accumulation() {
     
     // Advance time and complete step 1
     start_cheat_block_timestamp(contract.contract_address, 2000);
-    contract.complete_step(user_id, challenge_id, session_id, step1);
+    contract.complete_step_success(user_id, challenge_id, session_id, step1);
     
     // Check stats after completion
     let stats_after = contract.get_user_stats(user_id);
@@ -268,8 +268,8 @@ fn test_total_contract_stats() {
     assert_eq!(total_steps_after, 0);
     
     // Complete steps
-    contract.complete_step(user1, challenge_id, session_id, step_id);
-    contract.complete_step(user2, challenge_id, session_id, step_id);
+    contract.complete_step_success(user1, challenge_id, session_id, step_id);
+    contract.complete_step_success(user2, challenge_id, session_id, step_id);
     
     // Check final stats
     let (final_interactions, final_steps) = contract.get_total_stats();
@@ -352,7 +352,7 @@ fn test_complete_step_when_paused() {
     stop_cheat_caller_address(contract.contract_address);
     
     // Try to complete step when paused
-    contract.complete_step('user', 'challenge', 'session', 'step');
+    contract.complete_step_success('user', 'challenge', 'session', 'step');
 }
 
 #[test]
@@ -505,7 +505,7 @@ fn test_full_workflow_with_stats() {
     
     // Advance time and complete step
     start_cheat_block_timestamp(contract.contract_address, 2000);
-    let hash = contract.complete_step(user_id, challenge_id, session_id, step_id);
+    let hash = contract.complete_step_success(user_id, challenge_id, session_id, step_id);
     
     // Check stats after completion
     let stats_after = contract.get_user_stats(user_id);
@@ -548,8 +548,8 @@ fn test_multiple_users_isolated_stats() {
     contract.register_interaction(user2, challenge_id, session_id, step_id, 3, 'h3u2', 85);
     
     // Complete both steps
-    contract.complete_step(user1, challenge_id, session_id, step_id);
-    contract.complete_step(user2, challenge_id, session_id, step_id);
+    contract.complete_step_success(user1, challenge_id, session_id, step_id);
+    contract.complete_step_success(user2, challenge_id, session_id, step_id);
     
     // Check isolated stats
     let stats1 = contract.get_user_stats(user1);
@@ -745,10 +745,10 @@ fn test_complete_already_completed_step() {
     
     // Register interaction and complete step
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
-    contract.complete_step(user_id, challenge_id, session_id, step_id);
+    contract.complete_step_success(user_id, challenge_id, session_id, step_id);
     
     // Try to complete again - should fail
-    contract.complete_step(user_id, challenge_id, session_id, step_id);
+    contract.complete_step_success(user_id, challenge_id, session_id, step_id);
 }
 
 #[test]
@@ -763,7 +763,7 @@ fn test_register_interaction_after_step_completed() {
     
     // Register interaction and complete step
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
-    contract.complete_step(user_id, challenge_id, session_id, step_id);
+    contract.complete_step_success(user_id, challenge_id, session_id, step_id);
     
     // Try to register another interaction - should fail
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 85);
@@ -775,7 +775,7 @@ fn test_complete_step_no_interactions() {
     let (contract, _) = deploy_contract();
     
     // Try to complete step without any interactions
-    contract.complete_step('user123', 'challenge456', 'session789', 'step001');
+    contract.complete_step_success('user123', 'challenge456', 'session789', 'step001');
 }
 
 // ================================
@@ -787,7 +787,7 @@ fn test_complete_step_no_interactions() {
 fn test_complete_step_zero_user_id() {
     let (contract, _) = deploy_contract();
     
-    contract.complete_step(0, 'challenge456', 'session789', 'step001');
+    contract.complete_step_success(0, 'challenge456', 'session789', 'step001');
 }
 
 #[test]
@@ -795,7 +795,7 @@ fn test_complete_step_zero_user_id() {
 fn test_complete_step_zero_challenge_id() {
     let (contract, _) = deploy_contract();
     
-    contract.complete_step('user123', 0, 'session789', 'step001');
+    contract.complete_step_success('user123', 0, 'session789', 'step001');
 }
 
 #[test]
@@ -803,7 +803,7 @@ fn test_complete_step_zero_challenge_id() {
 fn test_complete_step_zero_session_id() {
     let (contract, _) = deploy_contract();
     
-    contract.complete_step('user123', 'challenge456', 0, 'step001');
+    contract.complete_step_success('user123', 'challenge456', 0, 'step001');
 }
 
 #[test]
@@ -811,7 +811,7 @@ fn test_complete_step_zero_session_id() {
 fn test_complete_step_zero_step_id() {
     let (contract, _) = deploy_contract();
     
-    contract.complete_step('user123', 'challenge456', 'session789', 0);
+    contract.complete_step_success('user123', 'challenge456', 'session789', 0);
 }
 
 // ================================
@@ -1000,8 +1000,8 @@ fn test_completed_step_hash_consistency() {
     contract.register_interaction(user_id, challenge_id, session_id2, step_id, 2, 'hash2', 90);
     
     // Complete both steps
-    let hash1 = contract.complete_step(user_id, challenge_id, session_id1, step_id);
-    let hash2 = contract.complete_step(user_id, challenge_id, session_id2, step_id);
+    let hash1 = contract.complete_step_success(user_id, challenge_id, session_id1, step_id);
+    let hash2 = contract.complete_step_success(user_id, challenge_id, session_id2, step_id);
     
     // Same interactions should produce same hash
     assert_eq!(hash1, hash2);
@@ -1025,8 +1025,8 @@ fn test_completed_step_hash_different_order() {
     contract.register_interaction(user_id, challenge_id, session_id2, step_id, 2, 'hash1', 80);
     
     // Complete both steps
-    let hash1 = contract.complete_step(user_id, challenge_id, session_id1, step_id);
-    let hash2 = contract.complete_step(user_id, challenge_id, session_id2, step_id);
+    let hash1 = contract.complete_step_success(user_id, challenge_id, session_id1, step_id);
+    let hash2 = contract.complete_step_success(user_id, challenge_id, session_id2, step_id);
     
     // Different content should produce different hashes
     assert!(hash1 != hash2);
@@ -1061,15 +1061,15 @@ fn test_contract_stats_after_multiple_completions() {
     contract.register_interaction(user1, challenge_id, session_id, step1, 1, 'hash1', 80);
     contract.register_interaction(user1, challenge_id, session_id, step1, 2, 'hash2', 90);
     contract.register_interaction(user1, challenge_id, session_id, step1, 3, 'hash3', 85);
-    contract.complete_step(user1, challenge_id, session_id, step1);
+    contract.complete_step_success(user1, challenge_id, session_id, step1);
     
     contract.register_interaction(user1, challenge_id, session_id, step2, 1, 'hash4', 95);
-    contract.complete_step(user1, challenge_id, session_id, step2);
+    contract.complete_step_success(user1, challenge_id, session_id, step2);
     
     // User 2 completes 1 step
     contract.register_interaction(user2, challenge_id, session_id, step1, 1, 'hash5', 70);
     contract.register_interaction(user2, challenge_id, session_id, step1, 2, 'hash6', 75);
-    contract.complete_step(user2, challenge_id, session_id, step1);
+    contract.complete_step_success(user2, challenge_id, session_id, step1);
     
     // Check global stats
     let (total_interactions, total_steps) = contract.get_total_stats();
@@ -1101,9 +1101,9 @@ fn test_concurrent_users_same_challenge() {
     contract.register_interaction(user2, challenge_id, session_id, step_id, 2, 'hash5', 95);
     
     // Complete steps
-    contract.complete_step(user1, challenge_id, session_id, step_id);
-    contract.complete_step(user2, challenge_id, session_id, step_id);
-    contract.complete_step(user3, challenge_id, session_id, step_id);
+    contract.complete_step_success(user1, challenge_id, session_id, step_id);
+    contract.complete_step_success(user2, challenge_id, session_id, step_id);
+    contract.complete_step_success(user3, challenge_id, session_id, step_id);
     
     // Verify individual user stats
     let stats1 = contract.get_user_stats(user1);
@@ -1145,16 +1145,16 @@ fn test_user_multiple_challenges_stats() {
     contract.register_interaction(user_id, challenge1, session_id, step_id, 1, 'hash1', 80);
     contract.register_interaction(user_id, challenge1, session_id, step_id, 2, 'hash2', 90);
     contract.register_interaction(user_id, challenge1, session_id, step_id, 3, 'hash3', 85);
-    contract.complete_step(user_id, challenge1, session_id, step_id);
+    contract.complete_step_success(user_id, challenge1, session_id, step_id);
     
     // Challenge 2 - 2 interactions
     contract.register_interaction(user_id, challenge2, session_id, step_id, 1, 'hash4', 95);
     contract.register_interaction(user_id, challenge2, session_id, step_id, 2, 'hash5', 75);
-    contract.complete_step(user_id, challenge2, session_id, step_id);
+    contract.complete_step_success(user_id, challenge2, session_id, step_id);
     
     // Challenge 3 - 1 interaction
     contract.register_interaction(user_id, challenge3, session_id, step_id, 1, 'hash6', 100);
-    contract.complete_step(user_id, challenge3, session_id, step_id);
+    contract.complete_step_success(user_id, challenge3, session_id, step_id);
     
     // Check user's accumulated stats across all challenges
     let stats = contract.get_user_stats(user_id);
@@ -1254,13 +1254,13 @@ fn test_complex_session_workflow() {
     // Step 1 - 2 interactions
     contract.register_interaction(user_id, challenge_id, session1, step1, 1, 's1_step1_1', 80);
     contract.register_interaction(user_id, challenge_id, session1, step1, 2, 's1_step1_2', 85);
-    contract.complete_step(user_id, challenge_id, session1, step1);
+    contract.complete_step_success(user_id, challenge_id, session1, step1);
     
     // Step 2 - 3 interactions
     contract.register_interaction(user_id, challenge_id, session1, step2, 1, 's1_step2_1', 90);
     contract.register_interaction(user_id, challenge_id, session1, step2, 2, 's1_step2_2', 75);
     contract.register_interaction(user_id, challenge_id, session1, step2, 3, 's1_step2_3', 95);
-    contract.complete_step(user_id, challenge_id, session1, step2);
+    contract.complete_step_success(user_id, challenge_id, session1, step2);
     
     // Advance time for Session 2
     start_cheat_block_timestamp(contract.contract_address, 2000);
@@ -1268,14 +1268,14 @@ fn test_complex_session_workflow() {
     // Session 2: User works on different steps
     // Step 1 - 1 interaction (different session, same step name)
     contract.register_interaction(user_id, challenge_id, session2, step1, 1, 's2_step1_1', 88);
-    contract.complete_step(user_id, challenge_id, session2, step1);
+    contract.complete_step_success(user_id, challenge_id, session2, step1);
     
     // Step 3 - 4 interactions
     contract.register_interaction(user_id, challenge_id, session2, step3, 1, 's2_step3_1', 70);
     contract.register_interaction(user_id, challenge_id, session2, step3, 2, 's2_step3_2', 85);
     contract.register_interaction(user_id, challenge_id, session2, step3, 3, 's2_step3_3', 92);
     contract.register_interaction(user_id, challenge_id, session2, step3, 4, 's2_step3_4', 78);
-    contract.complete_step(user_id, challenge_id, session2, step3);
+    contract.complete_step_success(user_id, challenge_id, session2, step3);
     
     // Advance time for Session 3
     start_cheat_block_timestamp(contract.contract_address, 3000);
@@ -1284,7 +1284,7 @@ fn test_complex_session_workflow() {
     // Step 2 - 2 interactions (different session, same step name as session1)
     contract.register_interaction(user_id, challenge_id, session3, step2, 1, 's3_step2_1', 82);
     contract.register_interaction(user_id, challenge_id, session3, step2, 2, 's3_step2_2', 89);
-    contract.complete_step(user_id, challenge_id, session3, step2);
+    contract.complete_step_success(user_id, challenge_id, session3, step2);
     
     // Verify user's accumulated stats across all sessions
     let user_stats = contract.get_user_stats(user_id);
@@ -1443,7 +1443,7 @@ fn test_complete_step_success() {
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 95);
     
     // Complete step successfully
-    let hash = contract.complete_step(user_id, challenge_id, session_id, step_id);
+    let hash = contract.complete_step_success(user_id, challenge_id, session_id, step_id);
     assert!(hash != 0);
     
     // Verify step is completed
@@ -1477,7 +1477,7 @@ fn test_cannot_complete_success_after_failed() {
     
     // Try to complete second step successfully - should fail
     contract.register_interaction(user_id, challenge_id, session_id, step2, 1, 'hash2', 90);
-    contract.complete_step(user_id, challenge_id, session_id, step2); // This should panic
+    contract.complete_step_success(user_id, challenge_id, session_id, step2); // This should panic
 }
 
 #[test]
@@ -1523,7 +1523,7 @@ fn test_different_sessions_independent() {
     
     // Complete step in session2 successfully - should work
     contract.register_interaction(user_id, challenge_id, session2, step_id, 1, 'hash2', 90);
-    let hash2 = contract.complete_step(user_id, challenge_id, session2, step_id);
+    let hash2 = contract.complete_step_success(user_id, challenge_id, session2, step_id);
     assert!(hash2 != 0);
     
     // Verify session1 has failed step but session2 doesn't
@@ -1558,14 +1558,14 @@ fn test_workflow_with_mixed_completions() {
     
     // Session 1: Complete steps successfully
     contract.register_interaction(user_id, challenge_id, session1, step1, 1, 'hash1', 80);
-    contract.complete_step(user_id, challenge_id, session1, step1);
+    contract.complete_step_success(user_id, challenge_id, session1, step1);
     
     contract.register_interaction(user_id, challenge_id, session1, step2, 1, 'hash2', 90);
-    contract.complete_step(user_id, challenge_id, session1, step2);
+    contract.complete_step_success(user_id, challenge_id, session1, step2);
     
     // Session 2: Complete first step successfully, then fail second step
     contract.register_interaction(user_id, challenge_id, session2, step1, 1, 'hash3', 85);
-    contract.complete_step(user_id, challenge_id, session2, step1);
+    contract.complete_step_success(user_id, challenge_id, session2, step1);
     
     contract.register_interaction(user_id, challenge_id, session2, step2, 1, 'hash4', 70);
     contract.complete_step_failed(user_id, challenge_id, session2, step2);
