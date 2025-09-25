@@ -90,15 +90,6 @@ pub trait IKliverSessionsRegistry<TContractState> {
         step_id: felt252
     ) -> felt252;
 
-    /// Complete a step successfully (legacy name for backward compatibility)
-    fn complete_step(
-        ref self: TContractState,
-        user_id: felt252,
-        challenge_id: felt252,
-        session_id: felt252,
-        step_id: felt252
-    ) -> felt252;
-
     /// Get all interactions for a specific step
     fn get_step_interactions(
         self: @TContractState,
@@ -366,17 +357,6 @@ pub mod KliverSessionsRegistry {
             step_id: felt252
         ) -> felt252 {
             self._complete_step_internal(user_id, challenge_id, session_id, step_id, StepCompletionStatus::Success)
-        }
-
-        fn complete_step(
-            ref self: ContractState,
-            user_id: felt252,
-            challenge_id: felt252,
-            session_id: felt252,
-            step_id: felt252
-        ) -> felt252 {
-            // Legacy function - calls complete_step_success for backward compatibility
-            self.complete_step_success(user_id, challenge_id, session_id, step_id)
         }
 
         fn complete_step_failed(
