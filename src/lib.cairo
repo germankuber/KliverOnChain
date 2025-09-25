@@ -144,7 +144,7 @@ mod KliverSessionsRegistry {
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{get_block_timestamp, get_caller_address, ContractAddress};
     use core::poseidon::poseidon_hash_span;
-    use core::array::{ArrayTrait, SpanTrait};
+    use core::array::ArrayTrait;
     use core::num::traits::Zero;
 
     #[storage]
