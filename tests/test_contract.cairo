@@ -386,7 +386,30 @@ fn test_transfer_ownership_not_owner() {
 #[should_panic(expected: 'Score too high')]
 fn test_register_interaction_score_too_high() {
     let (contract, _) = deploy_contract();
-    contract.register_interaction('user', 'challenge', 'session', 'step', 1, 'hash', 10001);
+    contract.register_interaction('user', 'challenge', 'session', 'step', 1, 'hash', 101);
+}
+
+#[test]
+fn test_register_interaction_max_score_valid() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Score of 100 should be valid (max allowed)
+    let result = contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash', 100);
+    assert_eq!(result, true);
+    
+    // Verify the interaction was registered
+    let count = contract.get_step_interaction_count(user_id, challenge_id, session_id, step_id);
+    assert_eq!(count, 1);
+    
+    // Verify user stats updated with max score
+    let stats = contract.get_user_stats(user_id);
+    assert_eq!(stats.total_interactions, 1);
+    assert_eq!(stats.total_score, 100);
 }
 
 #[test]
@@ -685,8 +708,8 @@ fn test_register_interaction_score_boundary_values() {
     let result1 = contract.register_interaction(user_id, challenge_id, session_id, step1, 1, 'hash1', 0);
     assert_eq!(result1, true);
     
-    // Test maximum valid score (10000)
-    let result2 = contract.register_interaction(user_id, challenge_id, session_id, step2, 1, 'hash2', 10000);
+    // Test maximum valid score (100)
+    let result2 = contract.register_interaction(user_id, challenge_id, session_id, step2, 1, 'hash2', 100);
     assert_eq!(result2, true);
 }
 
@@ -1317,4 +1340,230 @@ fn test_complex_session_workflow() {
     assert_eq!(total_steps, 5);
     
     stop_cheat_block_timestamp(contract.contract_address);
+}
+
+// ================================
+// STEP COMPLETION STATUS TESTS
+// ================================
+
+#[test]
+fn test_complete_step_failed() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register some interactions
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 90);
+    
+    // Complete step as failed
+    let hash = contract.complete_step_failed(user_id, challenge_id, session_id, step_id);
+    assert!(hash != 0);
+    
+    // Verify step is completed
+    let is_completed = contract.is_step_completed(user_id, challenge_id, session_id, step_id);
+    assert_eq!(is_completed, true);
+    
+    // Verify session has failed step
+    let has_failed = contract.session_has_failed_step(user_id, challenge_id, session_id);
+    assert_eq!(has_failed, true);
+    
+    // Get completed step and verify status
+    let completed_step = contract.get_completed_step(user_id, challenge_id, session_id, step_id);
+    assert_eq!(completed_step.max_score, 90);
+    assert_eq!(completed_step.total_interactions, 2);
+    // Note: We can't directly test the enum status in the test due to Cairo limitations
+}
+
+#[test]
+fn test_complete_step_success_function() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register some interactions
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 75);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 85);
+    
+    // Complete step using the new success function
+    let hash = contract.complete_step_success(user_id, challenge_id, session_id, step_id);
+    assert!(hash != 0);
+    
+    // Verify step is completed
+    let is_completed = contract.is_step_completed(user_id, challenge_id, session_id, step_id);
+    assert_eq!(is_completed, true);
+    
+    // Verify session does not have failed step
+    let has_failed = contract.session_has_failed_step(user_id, challenge_id, session_id);
+    assert_eq!(has_failed, false);
+    
+    // Get completed step and verify
+    let completed_step = contract.get_completed_step(user_id, challenge_id, session_id, step_id);
+    assert_eq!(completed_step.max_score, 85);
+    assert_eq!(completed_step.total_interactions, 2);
+}
+
+#[test]
+fn test_complete_step_success() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register some interactions
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 85);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 95);
+    
+    // Complete step successfully
+    let hash = contract.complete_step(user_id, challenge_id, session_id, step_id);
+    assert!(hash != 0);
+    
+    // Verify step is completed
+    let is_completed = contract.is_step_completed(user_id, challenge_id, session_id, step_id);
+    assert_eq!(is_completed, true);
+    
+    // Verify session does not have failed step
+    let has_failed = contract.session_has_failed_step(user_id, challenge_id, session_id);
+    assert_eq!(has_failed, false);
+    
+    // Get completed step and verify
+    let completed_step = contract.get_completed_step(user_id, challenge_id, session_id, step_id);
+    assert_eq!(completed_step.max_score, 95);
+    assert_eq!(completed_step.total_interactions, 2);
+}
+
+#[test]
+#[should_panic(expected: 'Session has failed step')]
+fn test_cannot_complete_success_after_failed() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step1: felt252 = 'step001';
+    let step2: felt252 = 'step002';
+    
+    // Complete first step as failed
+    contract.register_interaction(user_id, challenge_id, session_id, step1, 1, 'hash1', 50);
+    contract.complete_step_failed(user_id, challenge_id, session_id, step1);
+    
+    // Try to complete second step successfully - should fail
+    contract.register_interaction(user_id, challenge_id, session_id, step2, 1, 'hash2', 90);
+    contract.complete_step(user_id, challenge_id, session_id, step2); // This should panic
+}
+
+#[test]
+fn test_can_complete_multiple_failed_steps() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step1: felt252 = 'step001';
+    let step2: felt252 = 'step002';
+    
+    // Complete first step as failed
+    contract.register_interaction(user_id, challenge_id, session_id, step1, 1, 'hash1', 50);
+    contract.complete_step_failed(user_id, challenge_id, session_id, step1);
+    
+    // Complete second step as failed - should work
+    contract.register_interaction(user_id, challenge_id, session_id, step2, 1, 'hash2', 60);
+    let hash2 = contract.complete_step_failed(user_id, challenge_id, session_id, step2);
+    assert!(hash2 != 0);
+    
+    // Verify both steps are completed
+    assert_eq!(contract.is_step_completed(user_id, challenge_id, session_id, step1), true);
+    assert_eq!(contract.is_step_completed(user_id, challenge_id, session_id, step2), true);
+    
+    // Verify session has failed step
+    assert_eq!(contract.session_has_failed_step(user_id, challenge_id, session_id), true);
+}
+
+#[test]
+fn test_different_sessions_independent() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session1: felt252 = 'session789';
+    let session2: felt252 = 'session999';
+    let step_id: felt252 = 'step001';
+    
+    // Complete step in session1 as failed
+    contract.register_interaction(user_id, challenge_id, session1, step_id, 1, 'hash1', 50);
+    contract.complete_step_failed(user_id, challenge_id, session1, step_id);
+    
+    // Complete step in session2 successfully - should work
+    contract.register_interaction(user_id, challenge_id, session2, step_id, 1, 'hash2', 90);
+    let hash2 = contract.complete_step(user_id, challenge_id, session2, step_id);
+    assert!(hash2 != 0);
+    
+    // Verify session1 has failed step but session2 doesn't
+    assert_eq!(contract.session_has_failed_step(user_id, challenge_id, session1), true);
+    assert_eq!(contract.session_has_failed_step(user_id, challenge_id, session2), false);
+}
+
+#[test]
+fn test_session_has_failed_step_empty_session() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    
+    // Check empty session - should return false
+    let has_failed = contract.session_has_failed_step(user_id, challenge_id, session_id);
+    assert_eq!(has_failed, false);
+}
+
+#[test]
+fn test_workflow_with_mixed_completions() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session1: felt252 = 'session_success';
+    let session2: felt252 = 'session_mixed';
+    let step1: felt252 = 'step001';
+    let step2: felt252 = 'step002';
+    let step3: felt252 = 'step003';
+    
+    // Session 1: Complete steps successfully
+    contract.register_interaction(user_id, challenge_id, session1, step1, 1, 'hash1', 80);
+    contract.complete_step(user_id, challenge_id, session1, step1);
+    
+    contract.register_interaction(user_id, challenge_id, session1, step2, 1, 'hash2', 90);
+    contract.complete_step(user_id, challenge_id, session1, step2);
+    
+    // Session 2: Complete first step successfully, then fail second step
+    contract.register_interaction(user_id, challenge_id, session2, step1, 1, 'hash3', 85);
+    contract.complete_step(user_id, challenge_id, session2, step1);
+    
+    contract.register_interaction(user_id, challenge_id, session2, step2, 1, 'hash4', 70);
+    contract.complete_step_failed(user_id, challenge_id, session2, step2);
+    
+    // Verify session states
+    assert_eq!(contract.session_has_failed_step(user_id, challenge_id, session1), false);
+    assert_eq!(contract.session_has_failed_step(user_id, challenge_id, session2), true);
+    
+    // Try to complete another step in session2 successfully - should fail
+    contract.register_interaction(user_id, challenge_id, session2, step3, 1, 'hash5', 95);
+    
+    // This should panic with 'Session has failed step'
+    // We can't test this directly in this test since it would cause a panic
+    // But we verified it works in test_cannot_complete_success_after_failed
+    
+    // Verify user stats accumulated correctly
+    let stats = contract.get_user_stats(user_id);
+    assert_eq!(stats.total_interactions, 5); // 1+1+1+1+1
+    assert_eq!(stats.total_completed_steps, 4); // 2 successful + 1 successful + 1 failed
+    assert_eq!(stats.total_score, 420); // 80+90+85+70+95 = 420
 }

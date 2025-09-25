@@ -19,14 +19,23 @@ mod Errors {
     const INVALID_SCORE: felt252 = 'INVALID_SCORE';
     const NO_INTERACTIONS: felt252 = 'NO_INTERACTIONS_FOUND';
     const INVALID_PAGINATION: felt252 = 'INVALID_PAGINATION';
+    const SESSION_HAS_FAILED_STEP: felt252 = 'SESSION_HAS_FAILED_STEP';
 }
 
 /// Constants
 mod Constants {
     const MAX_INTERACTIONS_PER_STEP: u32 = 15;
-    const MAX_SCORE: u32 = 10000;
+    const MAX_SCORE: u32 = 100;
     const MIN_SCORE: u32 = 0;
     const MAX_PAGINATION_LIMIT: u32 = 100;
+}
+
+/// Enum representing the completion status of a step
+#[derive(Drop, Copy, Serde, starknet::Store, PartialEq)]
+#[allow(starknet::store_no_default_variant)]
+pub enum StepCompletionStatus {
+    Success,
+    Failed,
 }
 
 /// Structure representing an individual AI interaction
@@ -45,6 +54,7 @@ pub struct CompletedStep {
     pub total_interactions: u32,    // Total number of interactions
     pub player: ContractAddress,    // Who completed the step
     pub timestamp: u64,             // When it was completed
+    pub status: StepCompletionStatus, // Success or Failed
 }
 
 /// Interface for Kliver Sessions Registry
@@ -62,7 +72,25 @@ pub trait IKliverSessionsRegistry<TContractState> {
         scoring: u32
     ) -> bool;
 
-    /// Complete a step and generate marketplace hash
+    /// Complete a step successfully and generate marketplace hash
+    fn complete_step_success(
+        ref self: TContractState,
+        user_id: felt252,
+        challenge_id: felt252,
+        session_id: felt252,
+        step_id: felt252
+    ) -> felt252;
+
+    /// Complete a step as failed
+    fn complete_step_failed(
+        ref self: TContractState,
+        user_id: felt252,
+        challenge_id: felt252,
+        session_id: felt252,
+        step_id: felt252
+    ) -> felt252;
+
+    /// Complete a step successfully (legacy name for backward compatibility)
     fn complete_step(
         ref self: TContractState,
         user_id: felt252,
@@ -107,6 +135,14 @@ pub trait IKliverSessionsRegistry<TContractState> {
         step_id: felt252
     ) -> bool;
 
+    /// Check if a session has any failed steps
+    fn session_has_failed_step(
+        self: @TContractState,
+        user_id: felt252,
+        challenge_id: felt252,
+        session_id: felt252
+    ) -> bool;
+
     /// Get paginated interactions for a step
     fn get_step_interactions_paginated(
         self: @TContractState,
@@ -140,7 +176,7 @@ pub trait IKliverSessionsRegistry<TContractState> {
 /// Kliver Sessions Registry Contract
 #[starknet::contract]
 mod KliverSessionsRegistry {
-    use super::{Interaction, CompletedStep, IKliverSessionsRegistry, UserStats};
+    use super::{Interaction, CompletedStep, IKliverSessionsRegistry, UserStats, StepCompletionStatus};
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{get_block_timestamp, get_caller_address, ContractAddress};
     use core::poseidon::poseidon_hash_span;
@@ -160,6 +196,9 @@ mod KliverSessionsRegistry {
         
         /// Step completion status: (user_id, challenge_id, session_id, step_id) -> bool
         step_completed: Map<(felt252, felt252, felt252, felt252), bool>,
+        
+        /// Session failed status: (user_id, challenge_id, session_id) -> bool
+        session_has_failure: Map<(felt252, felt252, felt252), bool>,
 
         /// Admin and security
         owner: ContractAddress,
@@ -271,7 +310,7 @@ mod KliverSessionsRegistry {
             assert(step_id != 0, 'Step ID cannot be zero');
             assert(message_hash != 0, 'Message hash cannot be zero');
             assert(interaction_pos > 0, 'Position must be > 0');
-            assert(scoring <= 10000, 'Score too high');
+            assert(scoring <= 100, 'Score too high');
 
             // Verify that the step is not completed
             let step_key = (user_id, challenge_id, session_id, step_id);
@@ -319,6 +358,16 @@ mod KliverSessionsRegistry {
             true
         }
 
+        fn complete_step_success(
+            ref self: ContractState,
+            user_id: felt252,
+            challenge_id: felt252,
+            session_id: felt252,
+            step_id: felt252
+        ) -> felt252 {
+            self._complete_step_internal(user_id, challenge_id, session_id, step_id, StepCompletionStatus::Success)
+        }
+
         fn complete_step(
             ref self: ContractState,
             user_id: felt252,
@@ -326,82 +375,18 @@ mod KliverSessionsRegistry {
             session_id: felt252,
             step_id: felt252
         ) -> felt252 {
-            // Security checks
-            self._assert_not_paused();
-            
-            // Validations
-            assert(user_id != 0, 'User ID cannot be zero');
-            assert(challenge_id != 0, 'Challenge ID cannot be zero');
-            assert(session_id != 0, 'Session ID cannot be zero');
-            assert(step_id != 0, 'Step ID cannot be zero');
+            // Legacy function - calls complete_step_success for backward compatibility
+            self.complete_step_success(user_id, challenge_id, session_id, step_id)
+        }
 
-            let step_key = (user_id, challenge_id, session_id, step_id);
-            
-            // Verificar que el step no esté ya completado
-            assert(!self.step_completed.read(step_key), 'Step already completed');
-
-            // Obtener el número de interacciones
-            let total_interactions = self.step_interaction_counts.read(step_key);
-            assert(total_interactions > 0, 'No interactions found');
-
-            // Recopilar todas las interacciones y calcular el hash
-            let mut hash_data: Array<felt252> = ArrayTrait::new();
-            let mut max_score: u32 = 0;
-
-            let mut i: u32 = 1;
-            while i != total_interactions + 1 {
-                let interaction_key = (user_id, challenge_id, session_id, step_id, i);
-                let interaction = self.interactions.read(interaction_key);
-                
-                // Add data to hash
-                hash_data.append(interaction.message_hash);
-                hash_data.append(interaction.scoring.into());
-                
-                // Update max_score
-                if interaction.scoring > max_score {
-                    max_score = interaction.scoring;
-                }
-                
-                i += 1;
-            };
-
-            // Calculate combined hash using Poseidon
-            let interactions_hash = poseidon_hash_span(hash_data.span());
-
-            // Create CompletedStep
-            let timestamp = get_block_timestamp();
-            let caller = get_caller_address();
-            let completed_step = CompletedStep {
-                interactions_hash,
-                max_score,
-                total_interactions,
-                player: caller,
-                timestamp,
-            };
-
-            // Save completed step
-            self.completed_steps.write(step_key, completed_step);
-            self.step_completed.write(step_key, true);
-
-            // Update statistics
-            self._increment_user_completed_steps(user_id);
-            let total_steps = self.total_completed_steps.read();
-            self.total_completed_steps.write(total_steps + 1);
-
-            // Emitir evento
-            self.emit(StepCompleted {
-                user_id,
-                challenge_id,
-                session_id,
-                step_id,
-                interactions_hash,
-                max_score,
-                total_interactions,
-                player: caller,
-                timestamp,
-            });
-
-            interactions_hash
+        fn complete_step_failed(
+            ref self: ContractState,
+            user_id: felt252,
+            challenge_id: felt252,
+            session_id: felt252,
+            step_id: felt252
+        ) -> felt252 {
+            self._complete_step_internal(user_id, challenge_id, session_id, step_id, StepCompletionStatus::Failed)
         }
 
         fn get_step_interactions(
@@ -482,6 +467,21 @@ mod KliverSessionsRegistry {
 
             let step_key = (user_id, challenge_id, session_id, step_id);
             self.step_completed.read(step_key)
+        }
+
+        fn session_has_failed_step(
+            self: @ContractState,
+            user_id: felt252,
+            challenge_id: felt252,
+            session_id: felt252
+        ) -> bool {
+            // Validaciones
+            assert(user_id != 0, 'User ID cannot be zero');
+            assert(challenge_id != 0, 'Challenge ID cannot be zero');
+            assert(session_id != 0, 'Session ID cannot be zero');
+
+            let session_key = (user_id, challenge_id, session_id);
+            self.session_has_failure.read(session_key)
         }
 
         fn get_step_interactions_paginated(
@@ -595,6 +595,103 @@ mod KliverSessionsRegistry {
 
         fn _assert_not_paused(self: @ContractState) {
             assert(!self.is_paused.read(), 'Contract paused');
+        }
+
+        fn _complete_step_internal(
+            ref self: ContractState,
+            user_id: felt252,
+            challenge_id: felt252,
+            session_id: felt252,
+            step_id: felt252,
+            status: StepCompletionStatus
+        ) -> felt252 {
+            // Security checks
+            self._assert_not_paused();
+            
+            // Validations
+            assert(user_id != 0, 'User ID cannot be zero');
+            assert(challenge_id != 0, 'Challenge ID cannot be zero');
+            assert(session_id != 0, 'Session ID cannot be zero');
+            assert(step_id != 0, 'Step ID cannot be zero');
+
+            let step_key = (user_id, challenge_id, session_id, step_id);
+            let session_key = (user_id, challenge_id, session_id);
+            
+            // Verificar que el step no esté ya completado
+            assert(!self.step_completed.read(step_key), 'Step already completed');
+            
+            // Solo verificar que la sesión no tenga steps fallidos si estamos completando con éxito
+            if status == StepCompletionStatus::Success {
+                assert(!self.session_has_failure.read(session_key), 'Session has failed step');
+            }
+
+            // Obtener el número de interacciones
+            let total_interactions = self.step_interaction_counts.read(step_key);
+            assert(total_interactions > 0, 'No interactions found');
+
+            // Recopilar todas las interacciones y calcular el hash
+            let mut hash_data: Array<felt252> = ArrayTrait::new();
+            let mut max_score: u32 = 0;
+
+            let mut i: u32 = 1;
+            while i != total_interactions + 1 {
+                let interaction_key = (user_id, challenge_id, session_id, step_id, i);
+                let interaction = self.interactions.read(interaction_key);
+                
+                hash_data.append(interaction.message_hash);
+                hash_data.append(interaction.scoring.into());
+                
+                // Update max_score
+                if interaction.scoring > max_score {
+                    max_score = interaction.scoring;
+                }
+                
+                i += 1;
+            };
+
+            // Generate interactions hash
+            let interactions_hash = poseidon_hash_span(hash_data.span());
+
+            // Create CompletedStep
+            let timestamp = get_block_timestamp();
+            let caller = get_caller_address();
+            let completed_step = CompletedStep {
+                interactions_hash,
+                max_score,
+                total_interactions,
+                player: caller,
+                timestamp,
+                status,
+            };
+
+            // Store completed step
+            self.completed_steps.write(step_key, completed_step);
+            self.step_completed.write(step_key, true);
+            
+            // Mark session as having a failed step if this is a failure
+            if status == StepCompletionStatus::Failed {
+                self.session_has_failure.write(session_key, true);
+            }
+
+            // Update statistics
+            self._increment_user_completed_steps(user_id);
+            let total_steps = self.total_completed_steps.read();
+            self.total_completed_steps.write(total_steps + 1);
+
+            // Emit event
+            self.emit(StepCompleted {
+                user_id,
+                challenge_id,
+                session_id,
+                step_id,
+                interactions_hash,
+                max_score,
+                total_interactions,
+                player: caller,
+                timestamp,
+            });
+
+            interactions_hash
         }
 
         fn _update_user_stats(ref self: ContractState, user_id: felt252, scoring: u32) {
