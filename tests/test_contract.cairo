@@ -1184,7 +1184,7 @@ fn test_register_interaction_max_interactions_exceeded() {
 // ================================
 
 #[test]
-#[should_panic(expected: 'CONTRACT_PAUSED')]
+#[should_panic(expected: 'Contract paused')]
 fn test_admin_cannot_interact_when_paused() {
     let (contract, owner) = deploy_contract();
     
@@ -1267,7 +1267,7 @@ fn test_complex_session_workflow() {
     let user_stats = contract.get_user_stats(user_id);
     assert_eq!(user_stats.total_interactions, 12); // 2+3+1+4+2 = 12
     assert_eq!(user_stats.total_completed_steps, 5); // 5 completed steps across sessions
-    assert_eq!(user_stats.total_score, 1019); // Sum of all scores
+    assert_eq!(user_stats.total_score, 1009); // Sum of all scores: (80+85+90+75+95) + (88+70+85+92+78) + (82+89)
     
     // Verify individual session/step combinations are isolated
     
