@@ -1148,3 +1148,173 @@ fn test_user_multiple_challenges_stats() {
     assert_eq!(count2, 2);
     assert_eq!(count3, 1);
 }
+
+// ================================
+// MISSING CRITICAL TESTS - PRIORITY HIGH
+// ================================
+
+#[test]
+#[should_panic(expected: 'Max interactions exceeded')]
+fn test_register_interaction_max_interactions_exceeded() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register exactly 15 interactions (the maximum allowed)
+    let mut i: u32 = 1;
+    while i <= 15 {
+        let hash = 'hash' + i.into();
+        contract.register_interaction(user_id, challenge_id, session_id, step_id, i, hash, 50 + i);
+        i += 1;
+    };
+    
+    // Verify we can register up to 15
+    let count = contract.get_step_interaction_count(user_id, challenge_id, session_id, step_id);
+    assert_eq!(count, 15);
+    
+    // Try to register the 16th interaction - should fail
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 16, 'hash16', 95);
+}
+
+// ================================
+// MISSING ADMIN TESTS - PRIORITY MEDIUM
+// ================================
+
+#[test]
+#[should_panic(expected: 'CONTRACT_PAUSED')]
+fn test_admin_cannot_interact_when_paused() {
+    let (contract, owner) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Owner pauses the contract
+    start_cheat_caller_address(contract.contract_address, owner);
+    contract.pause();
+    stop_cheat_caller_address(contract.contract_address);
+    
+    // Verify contract is paused
+    assert_eq!(contract.is_paused(), true);
+    
+    // Even the owner cannot register interactions when paused
+    start_cheat_caller_address(contract.contract_address, owner);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
+    stop_cheat_caller_address(contract.contract_address);
+}
+
+// ================================
+// MISSING COMPLEX WORKFLOW - PRIORITY LOW
+// ================================
+
+#[test]
+fn test_complex_session_workflow() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session1: felt252 = 'session1';
+    let session2: felt252 = 'session2';
+    let session3: felt252 = 'session3';
+    let step1: felt252 = 'step001';
+    let step2: felt252 = 'step002';
+    let step3: felt252 = 'step003';
+    
+    // Set initial timestamp
+    start_cheat_block_timestamp(contract.contract_address, 1000);
+    
+    // Session 1: User completes multiple steps
+    // Step 1 - 2 interactions
+    contract.register_interaction(user_id, challenge_id, session1, step1, 1, 's1_step1_1', 80);
+    contract.register_interaction(user_id, challenge_id, session1, step1, 2, 's1_step1_2', 85);
+    contract.complete_step(user_id, challenge_id, session1, step1);
+    
+    // Step 2 - 3 interactions
+    contract.register_interaction(user_id, challenge_id, session1, step2, 1, 's1_step2_1', 90);
+    contract.register_interaction(user_id, challenge_id, session1, step2, 2, 's1_step2_2', 75);
+    contract.register_interaction(user_id, challenge_id, session1, step2, 3, 's1_step2_3', 95);
+    contract.complete_step(user_id, challenge_id, session1, step2);
+    
+    // Advance time for Session 2
+    start_cheat_block_timestamp(contract.contract_address, 2000);
+    
+    // Session 2: User works on different steps
+    // Step 1 - 1 interaction (different session, same step name)
+    contract.register_interaction(user_id, challenge_id, session2, step1, 1, 's2_step1_1', 88);
+    contract.complete_step(user_id, challenge_id, session2, step1);
+    
+    // Step 3 - 4 interactions
+    contract.register_interaction(user_id, challenge_id, session2, step3, 1, 's2_step3_1', 70);
+    contract.register_interaction(user_id, challenge_id, session2, step3, 2, 's2_step3_2', 85);
+    contract.register_interaction(user_id, challenge_id, session2, step3, 3, 's2_step3_3', 92);
+    contract.register_interaction(user_id, challenge_id, session2, step3, 4, 's2_step3_4', 78);
+    contract.complete_step(user_id, challenge_id, session2, step3);
+    
+    // Advance time for Session 3
+    start_cheat_block_timestamp(contract.contract_address, 3000);
+    
+    // Session 3: User works on one step only
+    // Step 2 - 2 interactions (different session, same step name as session1)
+    contract.register_interaction(user_id, challenge_id, session3, step2, 1, 's3_step2_1', 82);
+    contract.register_interaction(user_id, challenge_id, session3, step2, 2, 's3_step2_2', 89);
+    contract.complete_step(user_id, challenge_id, session3, step2);
+    
+    // Verify user's accumulated stats across all sessions
+    let user_stats = contract.get_user_stats(user_id);
+    assert_eq!(user_stats.total_interactions, 12); // 2+3+1+4+2 = 12
+    assert_eq!(user_stats.total_completed_steps, 5); // 5 completed steps across sessions
+    assert_eq!(user_stats.total_score, 1019); // Sum of all scores
+    
+    // Verify individual session/step combinations are isolated
+    
+    // Session 1 verification
+    let s1_step1_count = contract.get_step_interaction_count(user_id, challenge_id, session1, step1);
+    let s1_step2_count = contract.get_step_interaction_count(user_id, challenge_id, session1, step2);
+    assert_eq!(s1_step1_count, 2);
+    assert_eq!(s1_step2_count, 3);
+    assert_eq!(contract.is_step_completed(user_id, challenge_id, session1, step1), true);
+    assert_eq!(contract.is_step_completed(user_id, challenge_id, session1, step2), true);
+    
+    // Session 2 verification
+    let s2_step1_count = contract.get_step_interaction_count(user_id, challenge_id, session2, step1);
+    let s2_step3_count = contract.get_step_interaction_count(user_id, challenge_id, session2, step3);
+    assert_eq!(s2_step1_count, 1);
+    assert_eq!(s2_step3_count, 4);
+    assert_eq!(contract.is_step_completed(user_id, challenge_id, session2, step1), true);
+    assert_eq!(contract.is_step_completed(user_id, challenge_id, session2, step3), true);
+    
+    // Session 3 verification
+    let s3_step2_count = contract.get_step_interaction_count(user_id, challenge_id, session3, step2);
+    assert_eq!(s3_step2_count, 2);
+    assert_eq!(contract.is_step_completed(user_id, challenge_id, session3, step2), true);
+    
+    // Verify cross-session isolation (same step name, different sessions)
+    let s1_step1_interactions = contract.get_step_interactions(user_id, challenge_id, session1, step1);
+    let s2_step1_interactions = contract.get_step_interactions(user_id, challenge_id, session2, step1);
+    assert_eq!(s1_step1_interactions.len(), 2);
+    assert_eq!(s2_step1_interactions.len(), 1);
+    
+    // Verify completed step data for different sessions
+    let s1_step1_completed = contract.get_completed_step(user_id, challenge_id, session1, step1);
+    let s2_step1_completed = contract.get_completed_step(user_id, challenge_id, session2, step1);
+    
+    assert_eq!(s1_step1_completed.total_interactions, 2);
+    assert_eq!(s1_step1_completed.max_score, 85); // max(80, 85)
+    
+    assert_eq!(s2_step1_completed.total_interactions, 1);
+    assert_eq!(s2_step1_completed.max_score, 88);
+    
+    // Verify different hashes for different sessions (even same step name)
+    assert!(s1_step1_completed.interactions_hash != s2_step1_completed.interactions_hash);
+    
+    // Verify global contract stats
+    let (total_interactions, total_steps) = contract.get_total_stats();
+    assert_eq!(total_interactions, 12);
+    assert_eq!(total_steps, 5);
+    
+    stop_cheat_block_timestamp(contract.contract_address);
+}

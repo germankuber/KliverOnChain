@@ -280,6 +280,9 @@ mod KliverSessionsRegistry {
             // Verify that the position is the next expected one
             let current_count = self.step_interaction_counts.read(step_key);
             assert(interaction_pos == current_count + 1, 'Invalid interaction position');
+            
+            // Verify max interactions limit
+            assert(current_count < 15, 'Max interactions exceeded');
 
             // Create the interaction
             let timestamp = get_block_timestamp();
