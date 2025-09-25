@@ -1,4 +1,4 @@
-use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address, stop_cheat_caller_address};
+use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address, stop_cheat_caller_address, start_cheat_block_timestamp, stop_cheat_block_timestamp};
 use starknet::ContractAddress;
 use core::array::ArrayTrait;
 
@@ -140,6 +140,9 @@ fn test_complete_step_and_get_completed_step() {
     let session_id: felt252 = 'session789';
     let step_id: felt252 = 'step001';
     
+    // Set timestamp
+    start_cheat_block_timestamp(contract.contract_address, 1500);
+    
     // Register interactions with different scores
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 95); // max score
@@ -155,6 +158,8 @@ fn test_complete_step_and_get_completed_step() {
     assert_eq!(completed_step.max_score, 95); // Should be the highest score
     assert_eq!(completed_step.total_interactions, 3);
     assert!(completed_step.timestamp > 0);
+    
+    stop_cheat_block_timestamp(contract.contract_address);
 }
 
 // ================================
@@ -205,6 +210,9 @@ fn test_user_stats_accumulation() {
     let step1: felt252 = 'step001';
     let step2: felt252 = 'step002';
     
+    // Set initial timestamp
+    start_cheat_block_timestamp(contract.contract_address, 1000);
+    
     // Register interactions in step 1
     contract.register_interaction(user_id, challenge_id, session_id, step1, 1, 'hash1', 80);
     contract.register_interaction(user_id, challenge_id, session_id, step1, 2, 'hash2', 90);
@@ -218,7 +226,8 @@ fn test_user_stats_accumulation() {
     assert_eq!(stats.total_score, 240); // 80 + 90 + 70
     assert_eq!(stats.total_completed_steps, 0);
     
-    // Complete step 1
+    // Advance time and complete step 1
+    start_cheat_block_timestamp(contract.contract_address, 2000);
     contract.complete_step(user_id, challenge_id, session_id, step1);
     
     // Check stats after completion
@@ -227,6 +236,8 @@ fn test_user_stats_accumulation() {
     assert_eq!(stats_after.total_score, 240);
     assert_eq!(stats_after.total_completed_steps, 1);
     assert!(stats_after.last_activity > stats.last_activity);
+    
+    stop_cheat_block_timestamp(contract.contract_address);
 }
 
 #[test]
@@ -455,6 +466,9 @@ fn test_full_workflow_with_stats() {
     let session_id: felt252 = 'session789';
     let step_id: felt252 = 'step001';
     
+    // Set initial timestamp
+    start_cheat_block_timestamp(contract.contract_address, 1000);
+    
     // Register interactions
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 70);
     contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 85);
@@ -466,7 +480,8 @@ fn test_full_workflow_with_stats() {
     assert_eq!(stats_before.total_score, 247); // 70 + 85 + 92
     assert_eq!(stats_before.total_completed_steps, 0);
     
-    // Complete step
+    // Advance time and complete step
+    start_cheat_block_timestamp(contract.contract_address, 2000);
     let hash = contract.complete_step(user_id, challenge_id, session_id, step_id);
     
     // Check stats after completion
@@ -486,6 +501,8 @@ fn test_full_workflow_with_stats() {
     let (total_interactions, total_steps) = contract.get_total_stats();
     assert_eq!(total_interactions, 3);
     assert_eq!(total_steps, 1);
+    
+    stop_cheat_block_timestamp(contract.contract_address);
 }
 
 #[test]
