@@ -1,12 +1,12 @@
 use starknet::ContractAddress;
 
 /// Structure for user statistics
-#[derive(Drop, Serde, starknet::Store)]
-struct UserStats {
-    total_interactions: u32,
-    total_completed_steps: u32,
-    total_score: u64,
-    last_activity: u64,
+#[derive(Drop, Copy, Serde, starknet::Store)]
+pub struct UserStats {
+    pub total_interactions: u32,
+    pub total_completed_steps: u32,
+    pub total_score: u64,
+    pub last_activity: u64,
 }
 
 /// Error codes
@@ -30,21 +30,21 @@ mod Constants {
 }
 
 /// Structure representing an individual AI interaction
-#[derive(Drop, Serde, starknet::Store)]
-struct Interaction {
-    message_hash: felt252,    // Hash of the message
-    scoring: u32,             // Score of this interaction
-    timestamp: u64,           // Timestamp of the interaction
+#[derive(Drop, Copy, Serde, starknet::Store)]
+pub struct Interaction {
+    pub message_hash: felt252,    // Hash of the message
+    pub scoring: u32,             // Score of this interaction
+    pub timestamp: u64,           // Timestamp of the interaction
 }
 
 /// Structure representing a completed step for marketplace
-#[derive(Drop, Serde, starknet::Store)]
-struct CompletedStep {
-    interactions_hash: felt252,  // Combined hash of all interactions
-    max_score: u32,             // Highest score in the step
-    total_interactions: u32,    // Total number of interactions
-    player: ContractAddress,    // Who completed the step
-    timestamp: u64,             // When it was completed
+#[derive(Drop, Copy, Serde, starknet::Store)]
+pub struct CompletedStep {
+    pub interactions_hash: felt252,  // Combined hash of all interactions
+    pub max_score: u32,             // Highest score in the step
+    pub total_interactions: u32,    // Total number of interactions
+    pub player: ContractAddress,    // Who completed the step
+    pub timestamp: u64,             // When it was completed
 }
 
 /// Interface for Kliver Sessions Registry
