@@ -545,3 +545,606 @@ fn test_multiple_users_isolated_stats() {
     assert_eq!(total_interactions, 5); // 2 + 3
     assert_eq!(total_steps, 2);
 }
+
+// ================================
+// CRITICAL VALIDATION TESTS - ZERO IDS
+// ================================
+
+#[test]
+#[should_panic(expected: 'User ID cannot be zero')]
+fn test_register_interaction_zero_user_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.register_interaction(
+        0, // zero user_id
+        'challenge456',
+        'session789',
+        'step001',
+        1,
+        'hash123',
+        85
+    );
+}
+
+#[test]
+#[should_panic(expected: 'Challenge ID cannot be zero')]
+fn test_register_interaction_zero_challenge_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.register_interaction(
+        'user123',
+        0, // zero challenge_id
+        'session789',
+        'step001',
+        1,
+        'hash123',
+        85
+    );
+}
+
+#[test]
+#[should_panic(expected: 'Session ID cannot be zero')]
+fn test_register_interaction_zero_session_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.register_interaction(
+        'user123',
+        'challenge456',
+        0, // zero session_id
+        'step001',
+        1,
+        'hash123',
+        85
+    );
+}
+
+#[test]
+#[should_panic(expected: 'Step ID cannot be zero')]
+fn test_register_interaction_zero_step_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.register_interaction(
+        'user123',
+        'challenge456',
+        'session789',
+        0, // zero step_id
+        1,
+        'hash123',
+        85
+    );
+}
+
+#[test]
+#[should_panic(expected: 'Message hash cannot be zero')]
+fn test_register_interaction_zero_message_hash() {
+    let (contract, _) = deploy_contract();
+    
+    contract.register_interaction(
+        'user123',
+        'challenge456',
+        'session789',
+        'step001',
+        1,
+        0, // zero message_hash
+        85
+    );
+}
+
+// ================================
+// POSITION VALIDATION TESTS
+// ================================
+
+#[test]
+#[should_panic(expected: 'Position must be > 0')]
+fn test_register_interaction_zero_position() {
+    let (contract, _) = deploy_contract();
+    
+    contract.register_interaction(
+        'user123',
+        'challenge456',
+        'session789',
+        'step001',
+        0, // zero position
+        'hash123',
+        85
+    );
+}
+
+#[test]
+#[should_panic(expected: 'Invalid interaction position')]
+fn test_register_interaction_wrong_position() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register first interaction correctly
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
+    
+    // Try to register interaction at position 3 (should be 2)
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 3, 'hash3', 85);
+}
+
+// ================================
+// SCORE VALIDATION TESTS
+// ================================
+
+#[test]
+fn test_register_interaction_score_boundary_values() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step1: felt252 = 'step001';
+    let step2: felt252 = 'step002';
+    
+    // Test minimum valid score (0)
+    let result1 = contract.register_interaction(user_id, challenge_id, session_id, step1, 1, 'hash1', 0);
+    assert_eq!(result1, true);
+    
+    // Test maximum valid score (10000)
+    let result2 = contract.register_interaction(user_id, challenge_id, session_id, step2, 1, 'hash2', 10000);
+    assert_eq!(result2, true);
+}
+
+#[test]
+#[should_panic(expected: 'Score too high')]
+fn test_register_interaction_score_over_limit() {
+    let (contract, _) = deploy_contract();
+    
+    contract.register_interaction(
+        'user123',
+        'challenge456',
+        'session789',
+        'step001',
+        1,
+        'hash123',
+        10001 // Over the limit
+    );
+}
+
+// ================================
+// STEP COMPLETION VALIDATION TESTS
+// ================================
+
+#[test]
+#[should_panic(expected: 'Step already completed')]
+fn test_complete_already_completed_step() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register interaction and complete step
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
+    contract.complete_step(user_id, challenge_id, session_id, step_id);
+    
+    // Try to complete again - should fail
+    contract.complete_step(user_id, challenge_id, session_id, step_id);
+}
+
+#[test]
+#[should_panic(expected: 'Step already completed')]
+fn test_register_interaction_after_step_completed() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register interaction and complete step
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
+    contract.complete_step(user_id, challenge_id, session_id, step_id);
+    
+    // Try to register another interaction - should fail
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 85);
+}
+
+#[test]
+#[should_panic(expected: 'No interactions found')]
+fn test_complete_step_no_interactions() {
+    let (contract, _) = deploy_contract();
+    
+    // Try to complete step without any interactions
+    contract.complete_step('user123', 'challenge456', 'session789', 'step001');
+}
+
+// ================================
+// ZERO ID VALIDATION FOR COMPLETE_STEP
+// ================================
+
+#[test]
+#[should_panic(expected: 'User ID cannot be zero')]
+fn test_complete_step_zero_user_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.complete_step(0, 'challenge456', 'session789', 'step001');
+}
+
+#[test]
+#[should_panic(expected: 'Challenge ID cannot be zero')]
+fn test_complete_step_zero_challenge_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.complete_step('user123', 0, 'session789', 'step001');
+}
+
+#[test]
+#[should_panic(expected: 'Session ID cannot be zero')]
+fn test_complete_step_zero_session_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.complete_step('user123', 'challenge456', 0, 'step001');
+}
+
+#[test]
+#[should_panic(expected: 'Step ID cannot be zero')]
+fn test_complete_step_zero_step_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.complete_step('user123', 'challenge456', 'session789', 0);
+}
+
+// ================================
+// ZERO ID VALIDATION FOR GET_COMPLETED_STEP
+// ================================
+
+#[test]
+#[should_panic(expected: 'User ID cannot be zero')]
+fn test_get_completed_step_zero_user_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.get_completed_step(0, 'challenge456', 'session789', 'step001');
+}
+
+#[test]
+#[should_panic(expected: 'Challenge ID cannot be zero')]
+fn test_get_completed_step_zero_challenge_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.get_completed_step('user123', 0, 'session789', 'step001');
+}
+
+#[test]
+#[should_panic(expected: 'Session ID cannot be zero')]
+fn test_get_completed_step_zero_session_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.get_completed_step('user123', 'challenge456', 0, 'step001');
+}
+
+#[test]
+#[should_panic(expected: 'Step ID cannot be zero')]
+fn test_get_completed_step_zero_step_id() {
+    let (contract, _) = deploy_contract();
+    
+    contract.get_completed_step('user123', 'challenge456', 'session789', 0);
+}
+
+// ================================
+// EMPTY STATE AND EDGE CASES
+// ================================
+
+#[test]
+fn test_get_user_stats_non_existent_user() {
+    let (contract, _) = deploy_contract();
+    
+    // Get stats for user that never interacted
+    let stats = contract.get_user_stats('non_existent_user');
+    
+    assert_eq!(stats.total_interactions, 0);
+    assert_eq!(stats.total_completed_steps, 0);
+    assert_eq!(stats.total_score, 0);
+    assert_eq!(stats.last_activity, 0);
+}
+
+#[test]
+fn test_get_step_interactions_empty_step() {
+    let (contract, _) = deploy_contract();
+    
+    // Get interactions for step with no interactions
+    let interactions = contract.get_step_interactions(
+        'user123', 'challenge456', 'session789', 'step001'
+    );
+    
+    assert_eq!(interactions.len(), 0);
+}
+
+#[test]
+fn test_is_step_completed_non_existent_step() {
+    let (contract, _) = deploy_contract();
+    
+    // Check if non-existent step is completed
+    let is_completed = contract.is_step_completed(
+        'user123', 'challenge456', 'session789', 'step001'
+    );
+    
+    assert_eq!(is_completed, false);
+}
+
+#[test]
+fn test_get_step_interaction_count_empty_step() {
+    let (contract, _) = deploy_contract();
+    
+    // Count interactions for empty step
+    let count = contract.get_step_interaction_count(
+        'user123', 'challenge456', 'session789', 'step001'
+    );
+    
+    assert_eq!(count, 0);
+}
+
+// ================================
+// ADVANCED PAGINATION TESTS
+// ================================
+
+#[test]
+fn test_pagination_exact_boundary() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register exactly 15 interactions
+    let mut i: u32 = 1;
+    while i <= 15 {
+        let hash = 'hash' + i.into();
+        contract.register_interaction(user_id, challenge_id, session_id, step_id, i, hash, 50 + i);
+        i += 1;
+    };
+    
+    // Test pagination at exact boundary
+    let interactions = contract.get_step_interactions_paginated(
+        user_id, challenge_id, session_id, step_id, 10, 5
+    );
+    
+    assert_eq!(interactions.len(), 5); // Should get exactly 5 results
+}
+
+#[test]
+fn test_pagination_single_result() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register 3 interactions
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 85);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 3, 'hash3', 90);
+    
+    // Get single result
+    let interactions = contract.get_step_interactions_paginated(
+        user_id, challenge_id, session_id, step_id, 1, 1
+    );
+    
+    assert_eq!(interactions.len(), 1);
+    assert_eq!(*interactions.at(0).scoring, 85); // Second interaction (index 1)
+}
+
+#[test]
+fn test_pagination_all_results() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // Register 5 interactions
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, 'hash1', 80);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, 'hash2', 85);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 3, 'hash3', 90);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 4, 'hash4', 75);
+    contract.register_interaction(user_id, challenge_id, session_id, step_id, 5, 'hash5', 95);
+    
+    // Request more than available
+    let interactions = contract.get_step_interactions_paginated(
+        user_id, challenge_id, session_id, step_id, 0, 100
+    );
+    
+    assert_eq!(interactions.len(), 5); // Should return all 5
+}
+// ================================
+// HASH CONSISTENCY TESTS
+// ================================
+
+#[test]
+fn test_completed_step_hash_consistency() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id1: felt252 = 'session789';
+    let session_id2: felt252 = 'session790';
+    let step_id: felt252 = 'step001';
+    
+    // Register same interactions in two different sessions
+    contract.register_interaction(user_id, challenge_id, session_id1, step_id, 1, 'hash1', 80);
+    contract.register_interaction(user_id, challenge_id, session_id1, step_id, 2, 'hash2', 90);
+    
+    contract.register_interaction(user_id, challenge_id, session_id2, step_id, 1, 'hash1', 80);
+    contract.register_interaction(user_id, challenge_id, session_id2, step_id, 2, 'hash2', 90);
+    
+    // Complete both steps
+    let hash1 = contract.complete_step(user_id, challenge_id, session_id1, step_id);
+    let hash2 = contract.complete_step(user_id, challenge_id, session_id2, step_id);
+    
+    // Same interactions should produce same hash
+    assert_eq!(hash1, hash2);
+}
+
+#[test]
+fn test_completed_step_hash_different_order() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id1: felt252 = 'session789';
+    let session_id2: felt252 = 'session790';
+    let step_id: felt252 = 'step001';
+    
+    // Register interactions in different order but same content
+    contract.register_interaction(user_id, challenge_id, session_id1, step_id, 1, 'hash1', 80);
+    contract.register_interaction(user_id, challenge_id, session_id1, step_id, 2, 'hash2', 90);
+    
+    contract.register_interaction(user_id, challenge_id, session_id2, step_id, 1, 'hash2', 90);
+    contract.register_interaction(user_id, challenge_id, session_id2, step_id, 2, 'hash1', 80);
+    
+    // Complete both steps
+    let hash1 = contract.complete_step(user_id, challenge_id, session_id1, step_id);
+    let hash2 = contract.complete_step(user_id, challenge_id, session_id2, step_id);
+    
+    // Different content should produce different hashes
+    assert!(hash1 != hash2);
+}
+
+// ================================
+// CONTRACT STATS EDGE CASES
+// ================================
+
+#[test]
+fn test_contract_stats_with_zero_activity() {
+    let (contract, _) = deploy_contract();
+    
+    // Check stats on fresh contract
+    let (total_interactions, total_steps) = contract.get_total_stats();
+    assert_eq!(total_interactions, 0);
+    assert_eq!(total_steps, 0);
+}
+
+#[test]
+fn test_contract_stats_after_multiple_completions() {
+    let (contract, _) = deploy_contract();
+    
+    let user1: felt252 = 'user1';
+    let user2: felt252 = 'user2';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step1: felt252 = 'step001';
+    let step2: felt252 = 'step002';
+    
+    // User 1 completes 2 steps with different interaction counts
+    contract.register_interaction(user1, challenge_id, session_id, step1, 1, 'hash1', 80);
+    contract.register_interaction(user1, challenge_id, session_id, step1, 2, 'hash2', 90);
+    contract.register_interaction(user1, challenge_id, session_id, step1, 3, 'hash3', 85);
+    contract.complete_step(user1, challenge_id, session_id, step1);
+    
+    contract.register_interaction(user1, challenge_id, session_id, step2, 1, 'hash4', 95);
+    contract.complete_step(user1, challenge_id, session_id, step2);
+    
+    // User 2 completes 1 step
+    contract.register_interaction(user2, challenge_id, session_id, step1, 1, 'hash5', 70);
+    contract.register_interaction(user2, challenge_id, session_id, step1, 2, 'hash6', 75);
+    contract.complete_step(user2, challenge_id, session_id, step1);
+    
+    // Check global stats
+    let (total_interactions, total_steps) = contract.get_total_stats();
+    assert_eq!(total_interactions, 6); // 3 + 1 + 2
+    assert_eq!(total_steps, 3); // 2 + 1
+}
+
+// ================================
+// COMPLEX INTEGRATION WORKFLOWS
+// ================================
+
+#[test]
+fn test_concurrent_users_same_challenge() {
+    let (contract, _) = deploy_contract();
+    
+    let user1: felt252 = 'user1';
+    let user2: felt252 = 'user2';
+    let user3: felt252 = 'user3';
+    let challenge_id: felt252 = 'same_challenge';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // All users work on same challenge/step concurrently
+    contract.register_interaction(user1, challenge_id, session_id, step_id, 1, 'hash1', 80);
+    contract.register_interaction(user2, challenge_id, session_id, step_id, 1, 'hash2', 85);
+    contract.register_interaction(user3, challenge_id, session_id, step_id, 1, 'hash3', 90);
+    
+    contract.register_interaction(user1, challenge_id, session_id, step_id, 2, 'hash4', 75);
+    contract.register_interaction(user2, challenge_id, session_id, step_id, 2, 'hash5', 95);
+    
+    // Complete steps
+    contract.complete_step(user1, challenge_id, session_id, step_id);
+    contract.complete_step(user2, challenge_id, session_id, step_id);
+    contract.complete_step(user3, challenge_id, session_id, step_id);
+    
+    // Verify individual user stats
+    let stats1 = contract.get_user_stats(user1);
+    let stats2 = contract.get_user_stats(user2);
+    let stats3 = contract.get_user_stats(user3);
+    
+    assert_eq!(stats1.total_interactions, 2);
+    assert_eq!(stats1.total_completed_steps, 1);
+    assert_eq!(stats1.total_score, 155); // 80 + 75
+    
+    assert_eq!(stats2.total_interactions, 2);
+    assert_eq!(stats2.total_completed_steps, 1);
+    assert_eq!(stats2.total_score, 180); // 85 + 95
+    
+    assert_eq!(stats3.total_interactions, 1);
+    assert_eq!(stats3.total_completed_steps, 1);
+    assert_eq!(stats3.total_score, 90);
+    
+    // Verify global stats
+    let (total_interactions, total_steps) = contract.get_total_stats();
+    assert_eq!(total_interactions, 5); // 2 + 2 + 1
+    assert_eq!(total_steps, 3);
+}
+
+#[test]
+fn test_user_multiple_challenges_stats() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge1: felt252 = 'challenge1';
+    let challenge2: felt252 = 'challenge2';
+    let challenge3: felt252 = 'challenge3';
+    let session_id: felt252 = 'session789';
+    let step_id: felt252 = 'step001';
+    
+    // User participates in multiple challenges
+    
+    // Challenge 1 - 3 interactions
+    contract.register_interaction(user_id, challenge1, session_id, step_id, 1, 'hash1', 80);
+    contract.register_interaction(user_id, challenge1, session_id, step_id, 2, 'hash2', 90);
+    contract.register_interaction(user_id, challenge1, session_id, step_id, 3, 'hash3', 85);
+    contract.complete_step(user_id, challenge1, session_id, step_id);
+    
+    // Challenge 2 - 2 interactions
+    contract.register_interaction(user_id, challenge2, session_id, step_id, 1, 'hash4', 95);
+    contract.register_interaction(user_id, challenge2, session_id, step_id, 2, 'hash5', 75);
+    contract.complete_step(user_id, challenge2, session_id, step_id);
+    
+    // Challenge 3 - 1 interaction
+    contract.register_interaction(user_id, challenge3, session_id, step_id, 1, 'hash6', 100);
+    contract.complete_step(user_id, challenge3, session_id, step_id);
+    
+    // Check user's accumulated stats across all challenges
+    let stats = contract.get_user_stats(user_id);
+    assert_eq!(stats.total_interactions, 6); // 3 + 2 + 1
+    assert_eq!(stats.total_completed_steps, 3);
+    assert_eq!(stats.total_score, 525); // 80+90+85 + 95+75 + 100
+    
+    // Verify each challenge separately
+    let count1 = contract.get_step_interaction_count(user_id, challenge1, session_id, step_id);
+    let count2 = contract.get_step_interaction_count(user_id, challenge2, session_id, step_id);
+    let count3 = contract.get_step_interaction_count(user_id, challenge3, session_id, step_id);
+    
+    assert_eq!(count1, 3);
+    assert_eq!(count2, 2);
+    assert_eq!(count3, 1);
+}
