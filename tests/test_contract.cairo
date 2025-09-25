@@ -1410,6 +1410,26 @@ fn test_complete_step_success_function() {
 }
 
 #[test]
+#[should_panic(expected: 'Session has failed step')]
+fn test_cannot_complete_step_success_after_failed() {
+    let (contract, _) = deploy_contract();
+    
+    let user_id: felt252 = 'user123';
+    let challenge_id: felt252 = 'challenge456';
+    let session_id: felt252 = 'session789';
+    let step1: felt252 = 'step001';
+    let step2: felt252 = 'step002';
+    
+    // Complete first step as failed
+    contract.register_interaction(user_id, challenge_id, session_id, step1, 1, 'hash1', 40);
+    contract.complete_step_failed(user_id, challenge_id, session_id, step1);
+    
+    // Try to complete second step successfully using the new function - should fail
+    contract.register_interaction(user_id, challenge_id, session_id, step2, 1, 'hash2', 95);
+    contract.complete_step_success(user_id, challenge_id, session_id, step2); // This should panic
+}
+
+#[test]
 fn test_complete_step_success() {
     let (contract, _) = deploy_contract();
     
