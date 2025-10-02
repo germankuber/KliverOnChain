@@ -4,14 +4,14 @@ use core::array::ArrayTrait;
 
 // Import contract interface
 use kliver_on_chain::{
-    IKliverRegistryDispatcher, 
+    IKliverRegistryDispatcher,
     IKliverRegistryDispatcherTrait
 };
 
 /// Helper function to deploy the contract
 fn deploy_contract() -> (IKliverRegistryDispatcher, ContractAddress) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
-    let contract = declare("KliverRegistry").unwrap().contract_class();
+    let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
@@ -29,7 +29,7 @@ fn test_constructor() {
 #[should_panic]
 fn test_constructor_zero_owner() {
     let zero_owner: ContractAddress = 0.try_into().unwrap();
-    let contract = declare("KliverRegistry").unwrap().contract_class();
+    let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(zero_owner.into());
     let (_contract_address, _) = contract.deploy(@constructor_calldata).unwrap();

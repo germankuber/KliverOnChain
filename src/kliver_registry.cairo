@@ -17,7 +17,7 @@ pub trait IKliverRegistry<TContractState> {
 
 /// Kliver Registry Contract
 #[starknet::contract]
-pub mod KliverRegistry {
+pub mod kliver_registry {
     use super::IKliverRegistry;
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{get_caller_address, ContractAddress};
