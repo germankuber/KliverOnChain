@@ -1,17 +1,13 @@
-// Kliver Sessions Registry - Main Library Entry Point
+// Kliver Registry - Main Library Entry Point
 
 // Declare the main contract module
 pub mod kliver_sessions_registry;
 
-// Re-export the main interface and structs for easy access
+// Re-export the main interface
 pub use kliver_sessions_registry::{
-    IKliverSessionsRegistry,
-    IKliverSessionsRegistryDispatcher,
-    IKliverSessionsRegistryDispatcherTrait,
-    UserStats,
-    Interaction,
-    CompletedStep,
-    StepCompletionStatus
+    IKliverRegistry,
+    IKliverRegistryDispatcher,
+    IKliverRegistryDispatcherTrait
 };
 
 // Optional: Export error constants for external use
