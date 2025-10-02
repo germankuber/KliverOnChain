@@ -1,5 +1,30 @@
 use starknet::ContractAddress;
 
+// ============= EVENTS =============
+#[derive(Drop, starknet::Event)]
+pub struct CharacterVersionRegistered {
+    #[key]
+    pub character_version_id: felt252,
+    pub character_version_hash: felt252,
+    pub registered_by: ContractAddress,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct ScenarioRegistered {
+    #[key]
+    pub scenario_id: felt252,
+    pub scenario_hash: felt252,
+    pub registered_by: ContractAddress,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct SimulationRegistered {
+    #[key]
+    pub simulation_id: felt252,
+    pub simulation_hash: felt252,
+    pub registered_by: ContractAddress,
+}
+
 /// Character Registry Interface
 #[starknet::interface]
 pub trait ICharacterRegistry<TContractState> {
@@ -38,19 +63,67 @@ pub trait ISimulationRegistry<TContractState> {
 pub trait IOwnerRegistry<TContractState> {
     /// Get the owner of the contract
     fn get_owner(self: @TContractState) -> ContractAddress;
+    /// Transfer ownership to a new address (only current owner)
+    fn transfer_ownership(ref self: TContractState, new_owner: ContractAddress);
+    /// Pause the contract (only owner)
+    fn pause(ref self: TContractState);
+    /// Unpause the contract (only owner)
+    fn unpause(ref self: TContractState);
+    /// Check if the contract is paused
+    fn is_paused(self: @TContractState) -> bool;
 }
 
 /// Kliver Registry Contract
 #[starknet::contract]
 pub mod kliver_registry {
-    use super::{ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry};
+    use super::{
+        ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry,
+        CharacterVersionRegistered, ScenarioRegistered, SimulationRegistered
+    };
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{get_caller_address, ContractAddress};
     use core::num::traits::Zero;
+    
+    // OpenZeppelin imports
+    use openzeppelin::access::ownable::OwnableComponent;
+    use openzeppelin::security::pausable::PausableComponent;
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        CharacterVersionRegistered: CharacterVersionRegistered,
+        ScenarioRegistered: ScenarioRegistered,
+        SimulationRegistered: SimulationRegistered,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct CharacterVersionRegistered {
+        #[key]
+        character_version_id: felt252,
+        character_version_hash: felt252,
+        registered_by: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct ScenarioRegistered {
+        #[key]
+        scenario_id: felt252,
+        scenario_hash: felt252,
+        registered_by: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct SimulationRegistered {
+        #[key]
+        simulation_id: felt252,
+        simulation_hash: felt252,
+        registered_by: ContractAddress,
+    }
 
     #[storage]
     struct Storage {
         owner: ContractAddress,
+        paused: bool,
         /// Maps character version ID to its hash
         character_versions: Map<felt252, felt252>,
         /// Maps scenario ID to its hash
@@ -63,12 +136,15 @@ pub mod kliver_registry {
     fn constructor(ref self: ContractState, owner: ContractAddress) {
         assert(!owner.is_zero(), 'Owner cannot be zero');
         self.owner.write(owner);
+        self.paused.write(false);
     }
 
     // Character Registry Implementation
     #[abi(embed_v0)]
     impl CharacterRegistryImpl of ICharacterRegistry<ContractState> {
         fn register_character_version(ref self: ContractState, character_version_id: felt252, character_version_hash: felt252) {
+            // Check if contract is paused
+            self._assert_not_paused();
             // Only owner can register character versions
             self._assert_only_owner();
             
@@ -82,6 +158,13 @@ pub mod kliver_registry {
             
             // Save the character version
             self.character_versions.write(character_version_id, character_version_hash);
+            
+            // Emit event
+            self.emit(CharacterVersionRegistered {
+                character_version_id,
+                character_version_hash,
+                registered_by: get_caller_address()
+            });
         }
         
         fn verify_character_version(self: @ContractState, character_version_id: felt252, character_version_hash: felt252) -> bool {
@@ -114,6 +197,8 @@ pub mod kliver_registry {
     #[abi(embed_v0)]
     impl ScenarioRegistryImpl of IScenarioRegistry<ContractState> {
         fn register_scenario(ref self: ContractState, scenario_id: felt252, scenario_hash: felt252) {
+            // Check if contract is paused
+            self._assert_not_paused();
             // Only owner can register scenarios
             self._assert_only_owner();
             
@@ -127,6 +212,13 @@ pub mod kliver_registry {
             
             // Save the scenario
             self.scenarios.write(scenario_id, scenario_hash);
+            
+            // Emit event
+            self.emit(ScenarioRegistered {
+                scenario_id,
+                scenario_hash,
+                registered_by: get_caller_address()
+            });
         }
         
         fn verify_scenario(self: @ContractState, scenario_id: felt252, scenario_hash: felt252) -> bool {
@@ -159,6 +251,8 @@ pub mod kliver_registry {
     #[abi(embed_v0)]
     impl SimulationRegistryImpl of ISimulationRegistry<ContractState> {
         fn register_simulation(ref self: ContractState, simulation_id: felt252, simulation_hash: felt252) {
+            // Check if contract is paused
+            self._assert_not_paused();
             // Only owner can register simulations
             self._assert_only_owner();
             
@@ -172,6 +266,13 @@ pub mod kliver_registry {
             
             // Save the simulation
             self.simulations.write(simulation_id, simulation_hash);
+            
+            // Emit event
+            self.emit(SimulationRegistered {
+                simulation_id,
+                simulation_hash,
+                registered_by: get_caller_address()
+            });
         }
         
         fn verify_simulation(self: @ContractState, simulation_id: felt252, simulation_hash: felt252) -> bool {
@@ -206,6 +307,26 @@ pub mod kliver_registry {
         fn get_owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
         }
+        
+        fn transfer_ownership(ref self: ContractState, new_owner: ContractAddress) {
+            self._assert_only_owner();
+            assert(!new_owner.is_zero(), 'New owner cannot be zero');
+            self.owner.write(new_owner);
+        }
+        
+        fn pause(ref self: ContractState) {
+            self._assert_only_owner();
+            self.paused.write(true);
+        }
+        
+        fn unpause(ref self: ContractState) {
+            self._assert_only_owner();
+            self.paused.write(false);
+        }
+        
+        fn is_paused(self: @ContractState) -> bool {
+            self.paused.read()
+        }
     }
 
     #[generate_trait]
@@ -214,6 +335,10 @@ pub mod kliver_registry {
             let caller = get_caller_address();
             let owner = self.owner.read();
             assert(caller == owner, 'Not owner');
+        }
+        
+        fn _assert_not_paused(self: @ContractState) {
+            assert(!self.paused.read(), 'Contract is paused');
         }
     }
 }
