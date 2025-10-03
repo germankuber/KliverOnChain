@@ -360,7 +360,7 @@ class ContractDeployer:
             
         print(f"{Colors.SUCCESS}✓ Deployment info saved to: {filename}{Colors.RESET}")
     
-    def deploy_full_flow(self, owner_address: Optional[str] = None) -> bool:
+    def deploy_full_flow(self, owner_address: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Execute the complete deployment flow"""
         contract_config = self.contracts[self.contract_type]
         contract_name = contract_config["name"]
@@ -371,12 +371,12 @@ class ContractDeployer:
         
         # Check prerequisites
         if not self.check_prerequisites():
-            return False
+            return None
             
         # Get account info
         account_address = self.get_account_info()
         if not account_address:
-            return False
+            return None
             
         # Use account address as owner if not specified
         if not owner_address:
@@ -386,31 +386,40 @@ class ContractDeployer:
         # Compile contract
         if not self.compile_contract():
             print(f"{Colors.ERROR}✗ Compilation failed{Colors.RESET}")
-            return False
+            return None
             
         # Declare contract
         class_hash = self.declare_contract()
         if not class_hash:
             print(f"{Colors.ERROR}Declaration failed. Deployment aborted.{Colors.RESET}")
-            return False
+            return None
             
         # Deploy contract
         contract_address = self.deploy_contract(class_hash, owner_address)
         if not contract_address:
             print(f"{Colors.ERROR}Deployment failed.{Colors.RESET}")
-            return False
+            return None
             
         # Save deployment info
         self.save_deployment_info(class_hash, contract_address, owner_address)
         
         # Print success summary
         print(f"\n{Colors.SUCCESS}🎉 DEPLOYMENT SUCCESSFUL!{Colors.RESET}")
-        print(f"{Colors.BOLD}Contract: {contract_address}{Colors.RESET}")
-        print(f"{Colors.BOLD}Explorer: https://sepolia.starkscan.co/contract/{contract_address}{Colors.RESET}")
+        print(f"{Colors.BOLD}Contract: {Colors.SUCCESS}{contract_address}{Colors.RESET}")
+        print(f"{Colors.BOLD}Explorer: {Colors.INFO}https://sepolia.starkscan.co/contract/{contract_address}{Colors.RESET}")
         print(f"Class Hash: {class_hash}")
         print(f"Network: {self.network} | Owner: {owner_address[:10]}...{owner_address[-4:]}")
         
-        return True
+        # Return deployment info for summary
+        return {
+            "contract_name": self.contracts[self.contract_type]["name"],
+            "contract_address": contract_address,
+            "class_hash": class_hash,
+            "network": self.network,
+            "owner": owner_address
+        }
+        
+        return deployment_info
 
 @click.command()
 @click.option('--environment', '-e', required=True, help='Environment to deploy to: dev, qa, or prod')
@@ -459,23 +468,37 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
             click.echo(f"{Colors.ERROR}❌ Invalid contract type. Use: registry, nft, or all{Colors.RESET}")
             exit(1)
             
+        deployments = []
         success = True
         
         if contract == 'all':
             # Deploy registry first
             deployer_registry = ContractDeployer(account, network, 'registry', rpc_url)
-            registry_success = deployer_registry.deploy_full_flow(owner)
+            registry_result = deployer_registry.deploy_full_flow(owner)
+            if registry_result:
+                deployments.append(registry_result)
+            else:
+                success = False
             
             # Deploy NFT second
-            deployer_nft = ContractDeployer(account, network, 'nft', rpc_url)
-            nft_success = deployer_nft.deploy_full_flow(owner)
-            
-            success = registry_success and nft_success
+            if success:  # Only proceed if registry succeeded
+                deployer_nft = ContractDeployer(account, network, 'nft', rpc_url)
+                nft_result = deployer_nft.deploy_full_flow(owner)
+                if nft_result:
+                    deployments.append(nft_result)
+                else:
+                    success = False
         else:
             deployer = ContractDeployer(account, network, contract, rpc_url)
-            success = deployer.deploy_full_flow(owner)
+            result = deployer.deploy_full_flow(owner)
+            if result:
+                deployments.append(result)
+            else:
+                success = False
         
-        if success:
+        # Show final summary
+        if success and deployments:
+            print_deployment_summary(deployments, network)
             click.echo(f"\n{Colors.SUCCESS}✅ Deployment completed successfully!{Colors.RESET}")
             exit(0)
         else:
@@ -488,6 +511,27 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
     except Exception as e:
         click.echo(f"\n{Colors.ERROR}❌ Unexpected error: {str(e)}{Colors.RESET}")
         exit(1)
+
+def print_deployment_summary(deployments: list, network: str):
+    """Print a clean summary of all deployments"""
+    if not deployments:
+        return
+        
+    print(f"\n{Colors.BOLD}{'='*60}{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.SUCCESS}🎉 DEPLOYMENT SUMMARY{Colors.RESET}")
+    print(f"{Colors.BOLD}{'='*60}{Colors.RESET}")
+    
+    for i, deployment in enumerate(deployments, 1):
+        contract_name = deployment['contract_name']
+        contract_address = deployment['contract_address']
+        
+        print(f"\n{Colors.BOLD}{i}. {contract_name.upper()}{Colors.RESET}")
+        print(f"   Address: {Colors.SUCCESS}{Colors.BOLD}{contract_address}{Colors.RESET}")
+        print(f"   Explorer: {Colors.INFO}https://sepolia.starkscan.co/contract/{contract_address}{Colors.RESET}")
+        print(f"   Class Hash: {deployment['class_hash']}")
+    
+    print(f"\n{Colors.BOLD}Network: {network.upper()} | Owner: {deployments[0]['owner'][:10]}...{deployments[0]['owner'][-4:]}{Colors.RESET}")
+    print(f"{Colors.BOLD}{'='*60}{Colors.RESET}")
 
 if __name__ == '__main__':
     deploy()
