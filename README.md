@@ -153,40 +153,115 @@ fn transfer_ownership(new_owner: ContractAddress)  // Owner only
 fn upgrade(new_class_hash: ClassHash)  // Owner only, upgradeable pattern
 ```
 
-## Deployment
+## Deployment by Environment
 
-The project includes automated deployment scripts for both contracts:
+The project supports deployment to multiple environments with specific configurations:
 
-### Deploy Registry Only
+### 🏗️ Development Environment 
+**Network**: Automatically uses Sepolia Testnet  
+**Use for**: Local development, feature testing, experimentation
+
 ```bash
-python deploy_contract.py --contract registry
+# Registry only
+python deploy_contract.py --environment dev --contract registry
+
+# NFT only  
+python deploy_contract.py --environment dev --contract nft --owner 0x1234567890abcdef
+
+# Both contracts
+python deploy_contract.py --environment dev --contract all --owner 0x1234567890abcdef
+
+# Quick deploy (development)
+python quick_deploy.py
 ```
 
-### Deploy NFT Only  
+### 🧪 QA Environment
+**Network**: Automatically uses Sepolia Testnet  
+**Use for**: QA testing, integration testing, pre-production validation
+
 ```bash
-python deploy_contract.py --contract nft
+# Registry only
+python deploy_contract.py --environment qa --contract registry
+
+# NFT only
+python deploy_contract.py --environment qa --contract nft --owner 0x1234567890abcdef
+
+# Both contracts
+python deploy_contract.py --environment qa --contract all --owner 0x1234567890abcdef
 ```
 
-### Deploy Both Contracts
+### 🏭 Production Environment ⚠️
+**Network**: Automatically uses Mainnet  
+**Use for**: Live production deployment - **USE WITH EXTREME CAUTION**
+
 ```bash
-python deploy_contract.py --contract registry
-python deploy_contract.py --contract nft
+# Registry only
+python deploy_contract.py --environment prod --contract registry
+
+# NFT only
+python deploy_contract.py --environment prod --contract nft --owner 0x1234567890abcdef
+
+# Both contracts (CAUTION!)
+python deploy_contract.py --environment prod --contract all --owner 0x1234567890abcdef
 ```
 
-### Configuration
+### Environment Configuration
 
-Update `deployment_config.yml` to configure deployment parameters:
+Each environment automatically configures the appropriate network and settings:
 
-```yaml
-contracts:
-  registry:
-    name: "kliver_on_chain_KliverRegistry" 
-    constructor_args: []
-  nft:
-    name: "kliver_on_chain_KliverNFT"
-    constructor_args:
-      - "0x1234..."  # Owner address
+| Environment | Auto Network | Account | Purpose | Build Target |
+|-------------|-------------|---------|---------|-------------|
+| **`dev`** | Sepolia | `dev-kliver` | Development & testing | `target/dev/` |
+| **`qa`** | Sepolia | `qa-kliver` | QA & integration | `target/dev/` |
+| **`prod`** | Mainnet | `prod-kliver` | Live deployment | `target/release/` |
+
+### Command Options
+
+| Option | Description | Example |
+|--------|-------------|----------|
+| `--environment` | Environment (auto-configures network & account) | `dev`, `qa`, `prod` |
+| `--contract` | Contract to deploy | `registry`, `nft`, `all` |
+| `--owner` | Owner address (required for NFT) | `0x1234567890abcdef` |
+| `--verbose` | Detailed output | Add `-v` flag |
+| `--rpc-url` | Custom RPC URL (optional override) | `https://custom-rpc.com` |
+
+> **Note**: No need to specify `--account` or `--network` - they are automatically selected based on `--environment`
+
+### Interactive Deployment Menu
+
+Run the environment-aware interactive script:
+```bash
+./deployment_examples.sh
 ```
+
+This provides a comprehensive menu with:
+- ✅ Environment-specific options (Dev/Test/Prod)
+- ✅ Contract-specific choices (Registry/NFT/Both)
+- ✅ Safety confirmations for production
+- ✅ Account and network validation
+
+### Account Setup by Environment
+
+Before deploying, ensure you have accounts configured for each environment:
+
+```bash
+# Development account (will deploy to Sepolia)
+starkli account fetch <dev-address> --output ~/.starkli-wallets/deployer/dev-kliver.json
+
+# QA account (will deploy to Sepolia)  
+starkli account fetch <qa-address> --output ~/.starkli-wallets/deployer/qa-kliver.json
+
+# Production account (will deploy to Mainnet) 
+starkli account fetch <prod-address> --output ~/.starkli-wallets/deployer/prod-kliver.json
+```
+
+### Environment Auto-Configuration
+
+When you use `--environment`, the system automatically:
+- ✅ **Selects the correct network** (dev/qa → Sepolia, prod → Mainnet)
+- ✅ **Uses the right account** (dev-kliver, qa-kliver, prod-kliver)
+- ✅ **Chooses build target** (dev/qa → target/dev/, prod → target/release/)
+- ✅ **Sets timeout values** (dev: 120s, qa: 180s, prod: 300s)
 
 ## Development Setup
 
