@@ -243,73 +243,100 @@ The project includes comprehensive tests covering:
 
 ## Usage Examples
 
-### Basic Interaction Flow
+### Registry Operations
 
 ```cairo
-// 1. Register interactions
-contract.register_interaction(user_id, challenge_id, session_id, step_id, 1, hash1, 85);
-contract.register_interaction(user_id, challenge_id, session_id, step_id, 2, hash2, 92);
+// 1. Register a character version (owner only)
+registry.register_character_version('char_v1', 'hash123');
 
-// 2. Complete step successfully
-let interaction_hash = contract.complete_step_success(user_id, challenge_id, session_id, step_id);
+// 2. Verify character version  
+let result = registry.verify_character_version('char_v1', 'hash123');
+// Returns: VerificationResult::Valid
 
-// 3. Check completion status
-let is_completed = contract.is_step_completed(user_id, challenge_id, session_id, step_id);
-let has_failures = contract.session_has_failed_step(user_id, challenge_id, session_id);
+// 3. Batch verification
+let versions = array![('char_v1', 'hash123'), ('char_v2', 'hash456')];
+let results = registry.batch_verify_character_versions(versions);
 ```
 
-### Failure Handling
+### NFT Operations
 
-```cairo
-// 1. Complete a step as failed
-contract.complete_step_failed(user_id, challenge_id, session_id, step1);
+```cairo  
+// 1. Mint NFT to new user (owner only)
+nft.mint_to_user(user_address, token_id);
 
-// 2. This will now fail - session has a failed step
-contract.complete_step_success(user_id, challenge_id, session_id, step2); // ❌ Reverts
+// 2. Check NFT ownership
+let owner = nft.owner_of(token_id);
+let balance = nft.balance_of(user_address);
 
-// 3. But this will work - can still fail additional steps
-contract.complete_step_failed(user_id, challenge_id, session_id, step2); // ✅ Works
+// 3. Transfer NFT
+nft.transfer_from(from_address, to_address, token_id);
+
+// 4. Get token metadata
+let metadata_uri = nft.token_uri(token_id);
 ```
 
-## Constants & Limits
+## Contract Specifications
 
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| `MAX_SCORE` | 100 | Maximum scoring value |
-| `MIN_SCORE` | 0 | Minimum scoring value |
-| `MAX_INTERACTIONS_PER_STEP` | 15 | Maximum interactions per step |
-| `MAX_PAGINATION_LIMIT` | 100 | Maximum items per page |
+### Kliver Registry
+| Feature | Implementation |
+|---------|---------------|
+| **Architecture** | Modular registry system |
+| **Verification** | Cryptographic hash validation |
+| **Access Control** | Owner-based permissions |
+| **Batch Operations** | Gas-optimized bulk processing |
+
+### Kliver NFT  
+| Feature | Implementation |
+|---------|---------------|
+| **Standard** | ERC721 (OpenZeppelin) |
+| **Upgradeable** | Yes (proxy pattern) |
+| **Metadata** | Base URI + token ID |
+| **Supply** | Unlimited (owner-controlled) |
 
 ## Events
 
-The contract emits the following events:
+### Registry Events
 
-### `InteractionRegistered`
 ```cairo
-struct InteractionRegistered {
-    user_id: felt252,
-    challenge_id: felt252,
-    session_id: felt252,
-    step_id: felt252,
-    interaction_pos: u32,
-    message_hash: felt252,
-    scoring: u32,
-    timestamp: u64,
+struct CharacterVersionRegistered {
+    character_version_id: felt252,
+    character_version_hash: felt252,
+    registered_by: ContractAddress,
+}
+
+struct ScenarioVersionRegistered {
+    scenario_version_id: felt252, 
+    scenario_version_hash: felt252,
+    registered_by: ContractAddress,
+}
+
+struct SimulationVersionRegistered {
+    simulation_version_id: felt252,
+    simulation_version_hash: felt252, 
+    registered_by: ContractAddress,
 }
 ```
 
-### `StepCompleted`
+### NFT Events
+
 ```cairo
-struct StepCompleted {
-    user_id: felt252,
-    challenge_id: felt252,
-    session_id: felt252,
-    step_id: felt252,
-    interactions_hash: felt252,
-    max_score: u32,
-    total_interactions: u32,
-    player: ContractAddress,
+struct UserNFTMinted {
+    token_id: u256,
+    to: ContractAddress,
     timestamp: u64,
+}
+
+// Standard ERC721 Events (via OpenZeppelin)
+struct Transfer {
+    from: ContractAddress,
+    to: ContractAddress, 
+    token_id: u256,
+}
+
+struct Approval {
+    owner: ContractAddress,
+    approved: ContractAddress,
+    token_id: u256, 
 }
 ```
 
@@ -317,27 +344,32 @@ struct StepCompleted {
 
 ### Input Validation
 - All function parameters are validated for zero values
-- Scoring is bounded between 0-100
-- Interaction positions must be sequential
-- Pagination limits are enforced
+- Hash integrity validation through cryptographic checks
+- Access control on all administrative functions
 
 ### Access Control
-- Owner-only functions for administration
-- Pause mechanism for emergency stops
-- Ownership transfer capability
+- Owner-only functions for registry management and NFT minting
+- Ownership transfer capability for both contracts
+- Upgradeable architecture with controlled access
 
-### State Protection
-- Steps cannot be completed twice
-- Session failure state is immutable
-- Interaction sequence integrity is enforced
+### Data Protection
+- Immutable hash storage once registered
+- Protection against hash collision attacks
+- Event-driven transparency for all operations
 
 ## Gas Optimization
 
-The contract implements several gas optimization strategies:
+Both contracts implement gas optimization strategies:
+
+### Registry Optimizations
 - Efficient storage layout using Cairo's `Map` type
-- Minimal state reads through careful function design
-- Optimized loops using `!= condition + 1` pattern
-- Event emission only for state changes
+- Batch operations for multiple verifications
+- Minimal state reads in verification functions
+
+### NFT Optimizations  
+- OpenZeppelin's battle-tested implementations
+- Efficient token enumeration patterns
+- Optimized transfer mechanics
 
 ## Contributing
 
