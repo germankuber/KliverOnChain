@@ -5,8 +5,15 @@ Kliver Contracts Deployment Script
 This script automates the complete deployment process for Kliver contracts
 including KliverRegistry and KliverNFT contracts to StarkNet.
 
-Usage:
-    python deploy_contract.py --account kliver --network sepolia --contract registry
+Usag        print(f"{Colors.INFO}📤 Declaring {contract_name}...{Colors.RESET}")
+        
+        command = [
+            "sncast", "--account", self.account, "declare",
+            "--contract-name", contract_name,
+            "--url", self.rpc_url
+        ]
+        
+        result = self._run_command(command, f"Declaring {contract_name}")thon deploy_contract.py --account kliver --network sepolia --contract registry
     python deploy_contract.py --account kliver --network sepolia --contract nft --owner 0x123...
     python deploy_contract.py --account kliver --network sepolia --contract all
     python deploy_contract.py --help
@@ -111,11 +118,8 @@ class ContractDeployer:
         }
         return rpc_urls.get(network, rpc_urls["sepolia"])
     
-    def _run_command(self, command: list, description: str) -> Dict[str, Any]:
+    def _run_command(self, command: list, description: str, show_output: bool = False) -> Dict[str, Any]:
         """Execute a shell command and return the result"""
-        print(f"{Colors.INFO}➤ {description}...{Colors.RESET}")
-        print(f"{Colors.BOLD}Command: {' '.join(command)}{Colors.RESET}")
-        
         try:
             result = subprocess.run(
                 command,
@@ -125,9 +129,9 @@ class ContractDeployer:
                 cwd=Path.cwd()
             )
             
-            print(f"{Colors.SUCCESS}✓ {description} completed successfully{Colors.RESET}")
-            if result.stdout.strip():
-                print(f"Output:\n{result.stdout}")
+            if show_output and result.stdout.strip():
+                print(f"{Colors.INFO}➤ {description}...{Colors.RESET}")
+                print(f"{result.stdout.strip()}")
                 
             return {
                 "success": True,
@@ -138,40 +142,38 @@ class ContractDeployer:
             
         except subprocess.CalledProcessError as e:
             print(f"{Colors.ERROR}✗ {description} failed{Colors.RESET}")
-            print(f"Error: {e.stderr}")
+            if e.stderr:
+                print(f"{Colors.ERROR}Error: {e.stderr.strip()}{Colors.RESET}")
             return {
                 "success": False,
-                "stdout": e.stdout,
-                "stderr": e.stderr,
+                "stdout": e.stdout or "",
+                "stderr": e.stderr or "",
                 "returncode": e.returncode
             }
     
     def check_prerequisites(self) -> bool:
         """Check if all required tools and configurations are available"""
-        print(f"{Colors.BOLD}🔍 Checking prerequisites...{Colors.RESET}")
+        print(f"{Colors.INFO}🔍 Checking prerequisites...{Colors.RESET}")
         
-        # Check if scarb is installed
-        scarb_check = self._run_command(["scarb", "--version"], "Checking Scarb installation")
-        if not scarb_check["success"]:
-            print(f"{Colors.ERROR}Scarb is not installed. Please install Scarb first.{Colors.RESET}")
+        # Check Scarb
+        result = self._run_command(["scarb", "--version"], "Checking Scarb")
+        if not result["success"]:
+            print(f"{Colors.ERROR}✗ Scarb not found. Please install Scarb first.{Colors.RESET}")
+            return False
+        
+        # Check Starknet Foundry
+        result = self._run_command(["sncast", "--version"], "Checking Starknet Foundry")
+        if not result["success"]:
+            print(f"{Colors.ERROR}✗ Starknet Foundry not found. Please install Starknet Foundry first.{Colors.RESET}")
+            return False
+        
+        # Check available accounts (silently)
+        result = self._run_command(["sncast", "account", "list"], "Checking accounts")
+        if not result["success"]:
+            print(f"{Colors.ERROR}✗ Could not access accounts. Please check your Starknet configuration.{Colors.RESET}")
             return False
             
-        # Check if sncast is installed
-        sncast_check = self._run_command(["sncast", "--version"], "Checking Starknet Foundry installation")
-        if not sncast_check["success"]:
-            print(f"{Colors.ERROR}Starknet Foundry (sncast) is not installed. Please install it first.{Colors.RESET}")
-            return False
-            
-        # Check if account exists
-        account_check = self._run_command(["sncast", "account", "list"], "Checking available accounts")
-        if not account_check["success"]:
-            return False
-            
-        if self.account not in account_check["stdout"]:
-            print(f"{Colors.ERROR}Account '{self.account}' not found in available accounts{Colors.RESET}")
-            return False
-            
-        print(f"{Colors.SUCCESS}✓ All prerequisites checked{Colors.RESET}")
+        print(f"{Colors.SUCCESS}✓ Prerequisites OK{Colors.RESET}")
         return True
     
     def get_account_info(self) -> Optional[str]:
@@ -196,9 +198,11 @@ class ContractDeployer:
     
     def compile_contract(self) -> bool:
         """Compile the contract using Scarb"""
-        print(f"\n{Colors.BOLD}🔨 Compiling contract...{Colors.RESET}")
+        print(f"{Colors.INFO}🔨 Compiling contracts...{Colors.RESET}")
         
-        result = self._run_command(["scarb", "build"], "Compiling KliverRegistry contract")
+        result = self._run_command(["scarb", "build"], "Compiling contracts")
+        if result["success"]:
+            print(f"{Colors.SUCCESS}✓ Compilation successful{Colors.RESET}")
         return result["success"]
     
     def declare_contract(self) -> Optional[str]:
@@ -294,7 +298,10 @@ class ContractDeployer:
     
     def deploy_contract(self, class_hash: str, owner_address: str) -> Optional[str]:
         """Deploy the contract and return the contract address"""
-        print(f"\n{Colors.BOLD}🚀 Deploying contract...{Colors.RESET}")
+        contract_config = self.contracts[self.contract_type]
+        contract_name = contract_config["name"]
+        
+        print(f"{Colors.INFO}🚀 Deploying {contract_name}...{Colors.RESET}")
         
         # Build constructor calldata based on contract type
         if self.contract_type == "nft":
@@ -310,9 +317,7 @@ class ContractDeployer:
             "--constructor-calldata"
         ] + constructor_calldata + ["--url", self.rpc_url]
         
-        contract_config = self.contracts[self.contract_type]
-        contract_name = contract_config["name"]
-        result = self._run_command(command, f"Deploying {contract_name} with owner {owner_address}")
+        result = self._run_command(command, f"Deploying {contract_name}")
         
         if not result["success"]:
             return None
@@ -360,11 +365,9 @@ class ContractDeployer:
         contract_config = self.contracts[self.contract_type]
         contract_name = contract_config["name"]
         
-        print(f"{Colors.BOLD}🎯 Starting {contract_name} deployment to {self.network}{Colors.RESET}")
-        print(f"Account: {self.account}")
-        print(f"Contract Type: {self.contract_type}")
-        print(f"RPC URL: {self.rpc_url}")
-        print("-" * 60)
+        print(f"{Colors.BOLD}🎯 Deploying {contract_name} to {self.network}{Colors.RESET}")
+        print(f"{Colors.INFO}Account: {self.account} | Network: {self.network}{Colors.RESET}")
+        print("-" * 50)
         
         # Check prerequisites
         if not self.check_prerequisites():
@@ -378,11 +381,11 @@ class ContractDeployer:
         # Use account address as owner if not specified
         if not owner_address:
             owner_address = account_address
-            print(f"{Colors.INFO}Using account address as contract owner: {owner_address}{Colors.RESET}")
+            print(f"{Colors.INFO}Owner: {owner_address[:10]}...{owner_address[-4:]}{Colors.RESET}")
             
         # Compile contract
         if not self.compile_contract():
-            print(f"{Colors.ERROR}Compilation failed. Deployment aborted.{Colors.RESET}")
+            print(f"{Colors.ERROR}✗ Compilation failed{Colors.RESET}")
             return False
             
         # Declare contract
@@ -401,16 +404,11 @@ class ContractDeployer:
         self.save_deployment_info(class_hash, contract_address, owner_address)
         
         # Print success summary
-        print(f"\n{Colors.BOLD}{Colors.SUCCESS}🎉 DEPLOYMENT SUCCESSFUL! 🎉{Colors.RESET}")
-        print("-" * 60)
-        print(f"Network: {self.network}")
-        print(f"Contract Type: {self.contract_type}")
-        print(f"Contract Name: {contract_name}")
+        print(f"\n{Colors.SUCCESS}🎉 DEPLOYMENT SUCCESSFUL!{Colors.RESET}")
+        print(f"{Colors.BOLD}Contract: {contract_address}{Colors.RESET}")
+        print(f"{Colors.BOLD}Explorer: https://sepolia.starkscan.co/contract/{contract_address}{Colors.RESET}")
         print(f"Class Hash: {class_hash}")
-        print(f"Contract Address: {contract_address}")
-        print(f"Owner Address: {owner_address}")
-        print(f"Explorer: https://sepolia.starkscan.co/contract/{contract_address}")
-        print("-" * 60)
+        print(f"Network: {self.network} | Owner: {owner_address[:10]}...{owner_address[-4:]}")
         
         return True
 

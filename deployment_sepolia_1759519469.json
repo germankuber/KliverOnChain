@@ -1,0 +1,15 @@
+{
+  "network": "sepolia",
+  "account": "qa",
+  "rpc_url": "https://starknet-sepolia.public.blastapi.io/rpc/v0_8",
+  "contract_name": "kliver_registry",
+  "class_hash": "0x07c96f4fd2878fb6298c4754749e897f26d08d98f056305ff7bea596c7cbecf9",
+  "contract_address": "0x07c4815ef629823a8ac87dfa8bc6675e059c780e8041b923cc9f9fe6d4d77da6",
+  "owner_address": "0x517f65712402ac858d81728cc2976a3c720f8d05534e2bc335ab6938eceec0c",
+  "deployment_timestamp": 1759519469.968711,
+  "deployment_date": "2025-10-03 19:24:29 UTC",
+  "explorer_links": {
+    "contract": "https://sepolia.starkscan.co/contract/0x07c4815ef629823a8ac87dfa8bc6675e059c780e8041b923cc9f9fe6d4d77da6",
+    "class": "https://sepolia.starkscan.co/class/0x07c96f4fd2878fb6298c4754749e897f26d08d98f056305ff7bea596c7cbecf9"
+  }
+}

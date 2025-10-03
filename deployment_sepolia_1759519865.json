@@ -1,0 +1,15 @@
+{
+  "network": "sepolia",
+  "account": "qa",
+  "rpc_url": "https://starknet-sepolia.public.blastapi.io/rpc/v0_8",
+  "contract_name": "KliverNFT",
+  "class_hash": "0x07f149b039565173ac1192a330dd3069e9af35602facc31dae27dcd14662cd45",
+  "contract_address": "0x05bcc41866bf2c5090a09340263200da2e799f7fe6fe612de1cdc844c001133f",
+  "owner_address": "0x517f65712402ac858d81728cc2976a3c720f8d05534e2bc335ab6938eceec0c",
+  "deployment_timestamp": 1759519865.22728,
+  "deployment_date": "2025-10-03 19:31:05 UTC",
+  "explorer_links": {
+    "contract": "https://sepolia.starkscan.co/contract/0x05bcc41866bf2c5090a09340263200da2e799f7fe6fe612de1cdc844c001133f",
+    "class": "https://sepolia.starkscan.co/class/0x07f149b039565173ac1192a330dd3069e9af35602facc31dae27dcd14662cd45"
+  }
+}

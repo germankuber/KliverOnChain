@@ -163,16 +163,17 @@ The project supports deployment to multiple environments with specific configura
 
 ```bash
 # Registry only
-python deploy_contract.py --environment dev --contract registry
+poetry run python deploy_contract.py --environment dev --contract registry
 
 # NFT only  
-python deploy_contract.py --environment dev --contract nft --owner 0x1234567890abcdef
+poetry run python deploy_contract.py --environment dev --contract nft
 
-# Both contracts
-python deploy_contract.py --environment dev --contract all --owner 0x1234567890abcdef
+# Both contracts (deploy individually)
+poetry run python deploy_contract.py --environment dev --contract registry
+poetry run python deploy_contract.py --environment dev --contract nft
 
 # Quick deploy (development)
-python quick_deploy.py
+poetry run python quick_deploy.py
 ```
 
 ### 🧪 QA Environment
@@ -181,13 +182,14 @@ python quick_deploy.py
 
 ```bash
 # Registry only
-python deploy_contract.py --environment qa --contract registry
+poetry run python deploy_contract.py --environment qa --contract registry
 
 # NFT only
-python deploy_contract.py --environment qa --contract nft --owner 0x1234567890abcdef
+poetry run python deploy_contract.py --environment qa --contract nft
 
-# Both contracts
-python deploy_contract.py --environment qa --contract all --owner 0x1234567890abcdef
+# Both contracts (deploy individually)
+poetry run python deploy_contract.py --environment qa --contract registry
+poetry run python deploy_contract.py --environment qa --contract nft
 ```
 
 ### 🏭 Production Environment ⚠️
@@ -196,13 +198,14 @@ python deploy_contract.py --environment qa --contract all --owner 0x1234567890ab
 
 ```bash
 # Registry only
-python deploy_contract.py --environment prod --contract registry
+poetry run python deploy_contract.py --environment prod --contract registry
 
 # NFT only
-python deploy_contract.py --environment prod --contract nft --owner 0x1234567890abcdef
+poetry run python deploy_contract.py --environment prod --contract nft
 
-# Both contracts (CAUTION!)
-python deploy_contract.py --environment prod --contract all --owner 0x1234567890abcdef
+# Both contracts (CAUTION! Deploy individually)
+poetry run python deploy_contract.py --environment prod --contract registry
+poetry run python deploy_contract.py --environment prod --contract nft
 ```
 
 ### Environment Configuration
@@ -220,12 +223,15 @@ Each environment automatically configures the appropriate network and settings:
 | Option | Description | Example |
 |--------|-------------|----------|
 | `--environment` | Environment (auto-configures network & account) | `dev`, `qa`, `prod` |
-| `--contract` | Contract to deploy | `registry`, `nft`, `all` |
-| `--owner` | Owner address (required for NFT) | `0x1234567890abcdef` |
+| `--contract` | Contract to deploy | `registry`, `nft` |
+| `--owner` | Owner address (optional, uses account if not specified) | `0x1234567890abcdef` |
 | `--verbose` | Detailed output | Add `-v` flag |
 | `--rpc-url` | Custom RPC URL (optional override) | `https://custom-rpc.com` |
 
-> **Note**: No need to specify `--account` or `--network` - they are automatically selected based on `--environment`
+> **Notes**: 
+> - No need to specify `--account` or `--network` - they are automatically selected based on `--environment`
+> - The `--owner` parameter is optional; if not provided, the script uses the account address as owner
+> - Use `poetry run` to execute the script with proper dependencies
 
 ### Interactive Deployment Menu
 
@@ -262,6 +268,64 @@ When you use `--environment`, the system automatically:
 - ✅ **Uses the right account** (dev-kliver, qa-kliver, prod-kliver)
 - ✅ **Chooses build target** (dev/qa → target/dev/, prod → target/release/)
 - ✅ **Sets timeout values** (dev: 120s, qa: 180s, prod: 300s)
+
+## 🚀 Smart Deployment Features
+
+The deployment script includes intelligent features for a smooth experience:
+
+### ⏳ Automatic Transaction Waiting
+- **Smart Declaration**: Automatically waits for declaration transactions to be confirmed (every 5 seconds)
+- **Prevents Failures**: Ensures class is available before attempting deployment  
+- **Timeout Protection**: Maximum 5 minutes wait time with clear progress updates
+
+### 🔄 Duplicate Declaration Handling
+- **Already Declared**: Detects when contracts are already declared and extracts the existing class hash
+- **No Re-declaration**: Skips unnecessary declarations to save time and gas
+- **Seamless Continuation**: Proceeds directly to deployment with existing class hash
+
+### 🎯 Contract-Specific Parameters
+- **Registry**: Requires only owner address (automatically uses account if not specified)
+- **NFT**: Automatically includes required base URI parameter (empty ByteArray: `0 0 0`)
+- **Smart Detection**: Handles different constructor requirements automatically
+
+### 📊 Clean Output & Logging
+- **Concise Logs**: Shows only essential information, eliminates verbose command output
+- **Progress Indicators**: Clear progress updates with emojis and status messages
+- **Smart Formatting**: Truncated addresses for readability (`0x517f65712...eec0c`)
+- **Success Summary**: Clean final summary with contract address and explorer links
+
+### 🛡️ Error Handling & Recovery
+- **Multiple Patterns**: Tries different regex patterns to parse contract addresses
+- **Clear Error Messages**: Detailed error information when something fails
+- **Graceful Degradation**: Continues deployment even with minor parsing issues
+
+### 📝 Example Deployment Output
+
+```bash
+$ poetry run python deploy_contract.py --environment qa --contract registry
+
+🎯 Deploying kliver_registry to sepolia
+Account: qa | Network: sepolia
+--------------------------------------------------
+🔍 Checking prerequisites...
+✓ Prerequisites OK
+✓ Using account 'qa': 0x517f65712...eec0c
+Owner: 0x517f65712...eec0c
+🔨 Compiling contracts...
+✓ Compilation successful
+📤 Declaring kliver_registry...
+✓ Contract already declared with class hash: 0x07c96f4fd...cbecf9
+ℹ️  Skipping declaration, proceeding with deployment...
+🚀 Deploying kliver_registry...
+✓ Contract deployed at address: 0x07c4815ef6...77da6
+✓ Deployment info saved to: deployment_sepolia_1759519469.json
+
+🎉 DEPLOYMENT SUCCESSFUL!
+Contract: 0x07c4815ef629823a8ac87dfa8bc6675e059c780e8041b923cc9f9fe6d4d77da6
+Explorer: https://sepolia.starkscan.co/contract/0x07c4815ef629823a8ac87dfa8bc6675e059c780e8041b923cc9f9fe6d4d77da6
+Class Hash: 0x07c96f4fd2878fb6298c4754749e897f26d08d98f056305ff7bea596c7cbecf9
+Network: sepolia | Owner: 0x517f65712...eec0c
+```
 
 ## Development Setup
 
