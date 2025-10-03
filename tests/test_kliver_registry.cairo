@@ -350,3 +350,353 @@ fn test_get_simulation_hash_success() {
     let retrieved_hash = dispatcher.get_simulation_hash(simulation_id);
     assert_eq!(retrieved_hash, simulation_hash);
 }
+
+// ===== BATCH CHARACTER VERSION TESTS =====
+
+#[test]
+fn test_batch_verify_character_versions_all_valid() {
+    let (dispatcher, contract_address, owner) = deploy_for_characters();
+
+    // Register multiple character versions
+    let char_id_1: felt252 = 100;
+    let char_hash_1: felt252 = 200;
+    let char_id_2: felt252 = 101;
+    let char_hash_2: felt252 = 201;
+    let char_id_3: felt252 = 102;
+    let char_hash_3: felt252 = 202;
+
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_character_version(char_id_1, char_hash_1);
+    dispatcher.register_character_version(char_id_2, char_hash_2);
+    dispatcher.register_character_version(char_id_3, char_hash_3);
+    stop_cheat_caller_address(contract_address);
+
+    // Prepare batch verification array
+    let mut batch_array = ArrayTrait::new();
+    batch_array.append((char_id_1, char_hash_1));
+    batch_array.append((char_id_2, char_hash_2));
+    batch_array.append((char_id_3, char_hash_3));
+
+    // Batch verify
+    let results = dispatcher.batch_verify_character_versions(batch_array);
+
+    // Check results
+    assert_eq!(results.len(), 3);
+    let (result_id_1, result_valid_1) = *results.at(0);
+    let (result_id_2, result_valid_2) = *results.at(1);
+    let (result_id_3, result_valid_3) = *results.at(2);
+
+    assert_eq!(result_id_1, char_id_1);
+    assert!(result_valid_1);
+    assert_eq!(result_id_2, char_id_2);
+    assert!(result_valid_2);
+    assert_eq!(result_id_3, char_id_3);
+    assert!(result_valid_3);
+}
+
+#[test]
+fn test_batch_verify_character_versions_mixed_results() {
+    let (dispatcher, contract_address, owner) = deploy_for_characters();
+
+    // Register only some character versions
+    let char_id_1: felt252 = 100;
+    let char_hash_1: felt252 = 200;
+    let char_id_2: felt252 = 101;
+    let wrong_hash_2: felt252 = 999; // Wrong hash
+    let char_id_3: felt252 = 102; // Not registered
+
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_character_version(char_id_1, char_hash_1);
+    dispatcher.register_character_version(char_id_2, 201); // Register with different hash
+    stop_cheat_caller_address(contract_address);
+
+    // Prepare batch verification array
+    let mut batch_array = ArrayTrait::new();
+    batch_array.append((char_id_1, char_hash_1));    // Should be valid
+    batch_array.append((char_id_2, wrong_hash_2));   // Should be invalid (wrong hash)
+    batch_array.append((char_id_3, 202));            // Should be invalid (not registered)
+
+    // Batch verify
+    let results = dispatcher.batch_verify_character_versions(batch_array);
+
+    // Check results
+    assert_eq!(results.len(), 3);
+    let (result_id_1, result_valid_1) = *results.at(0);
+    let (result_id_2, result_valid_2) = *results.at(1);
+    let (result_id_3, result_valid_3) = *results.at(2);
+
+    assert_eq!(result_id_1, char_id_1);
+    assert!(result_valid_1);      // Should be true
+    assert_eq!(result_id_2, char_id_2);
+    assert!(!result_valid_2);     // Should be false (wrong hash)
+    assert_eq!(result_id_3, char_id_3);
+    assert!(!result_valid_3);     // Should be false (not registered)
+}
+
+#[test]
+fn test_batch_verify_character_versions_with_zero_values() {
+    let (dispatcher, _, _) = deploy_for_characters();
+
+    // Prepare batch verification array with zero values
+    let mut batch_array = ArrayTrait::new();
+    batch_array.append((0, 200));        // Zero ID
+    batch_array.append((100, 0));        // Zero hash
+    batch_array.append((0, 0));          // Both zero
+
+    // Batch verify
+    let results = dispatcher.batch_verify_character_versions(batch_array);
+
+    // Check results - all should be false due to zero values
+    assert_eq!(results.len(), 3);
+    let (result_id_1, result_valid_1) = *results.at(0);
+    let (result_id_2, result_valid_2) = *results.at(1);
+    let (result_id_3, result_valid_3) = *results.at(2);
+
+    assert_eq!(result_id_1, 0);
+    assert!(!result_valid_1);     // Should be false (zero ID)
+    assert_eq!(result_id_2, 100);
+    assert!(!result_valid_2);     // Should be false (zero hash)
+    assert_eq!(result_id_3, 0);
+    assert!(!result_valid_3);     // Should be false (both zero)
+}
+
+#[test]
+fn test_batch_verify_character_versions_empty_array() {
+    let (dispatcher, _, _) = deploy_for_characters();
+
+    // Prepare empty batch verification array
+    let batch_array = ArrayTrait::new();
+
+    // Batch verify
+    let results = dispatcher.batch_verify_character_versions(batch_array);
+
+    // Check results - should be empty
+    assert_eq!(results.len(), 0);
+}
+
+#[test]
+fn test_batch_verify_character_versions_large_batch() {
+    let (dispatcher, contract_address, owner) = deploy_for_characters();
+
+    // Register multiple character versions
+    start_cheat_caller_address(contract_address, owner);
+    let mut i = 1;
+    while i != 11 {
+        dispatcher.register_character_version(i.into(), (i + 100).into());
+        i += 1;
+    };
+    stop_cheat_caller_address(contract_address);
+
+    // Prepare batch verification array with 10 items
+    let mut batch_array = ArrayTrait::new();
+    let mut j = 1;
+    while j != 11 {
+        batch_array.append((j.into(), (j + 100).into()));
+        j += 1;
+    };
+
+    // Batch verify
+    let results = dispatcher.batch_verify_character_versions(batch_array);
+
+    // Check results - all should be valid
+    assert_eq!(results.len(), 10);
+    let mut k = 0;
+    while k != 10 {
+        let (result_id, result_valid) = *results.at(k);
+        assert_eq!(result_id, (k + 1).into());
+        assert!(result_valid);
+        k += 1;
+    };
+}
+
+// ===== BATCH SCENARIO TESTS =====
+
+#[test]
+fn test_batch_verify_scenarios_all_valid() {
+    let (dispatcher, contract_address, owner) = deploy_for_scenarios();
+
+    // Register multiple scenarios
+    let scenario_id_1: felt252 = 100;
+    let scenario_hash_1: felt252 = 200;
+    let scenario_id_2: felt252 = 101;
+    let scenario_hash_2: felt252 = 201;
+    let scenario_id_3: felt252 = 102;
+    let scenario_hash_3: felt252 = 202;
+
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_scenario(scenario_id_1, scenario_hash_1);
+    dispatcher.register_scenario(scenario_id_2, scenario_hash_2);
+    dispatcher.register_scenario(scenario_id_3, scenario_hash_3);
+    stop_cheat_caller_address(contract_address);
+
+    // Prepare batch verification array
+    let mut batch_array = ArrayTrait::new();
+    batch_array.append((scenario_id_1, scenario_hash_1));
+    batch_array.append((scenario_id_2, scenario_hash_2));
+    batch_array.append((scenario_id_3, scenario_hash_3));
+
+    // Batch verify
+    let results = dispatcher.batch_verify_scenarios(batch_array);
+
+    // Check results
+    assert_eq!(results.len(), 3);
+    let (result_id_1, result_valid_1) = *results.at(0);
+    let (result_id_2, result_valid_2) = *results.at(1);
+    let (result_id_3, result_valid_3) = *results.at(2);
+
+    assert_eq!(result_id_1, scenario_id_1);
+    assert!(result_valid_1);
+    assert_eq!(result_id_2, scenario_id_2);
+    assert!(result_valid_2);
+    assert_eq!(result_id_3, scenario_id_3);
+    assert!(result_valid_3);
+}
+
+#[test]
+fn test_batch_verify_scenarios_mixed_results() {
+    let (dispatcher, contract_address, owner) = deploy_for_scenarios();
+
+    // Register only some scenarios
+    let scenario_id_1: felt252 = 100;
+    let scenario_hash_1: felt252 = 200;
+    let scenario_id_2: felt252 = 101;
+    let wrong_hash_2: felt252 = 999; // Wrong hash
+    let scenario_id_3: felt252 = 102; // Not registered
+
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_scenario(scenario_id_1, scenario_hash_1);
+    dispatcher.register_scenario(scenario_id_2, 201); // Register with different hash
+    stop_cheat_caller_address(contract_address);
+
+    // Prepare batch verification array
+    let mut batch_array = ArrayTrait::new();
+    batch_array.append((scenario_id_1, scenario_hash_1));    // Should be valid
+    batch_array.append((scenario_id_2, wrong_hash_2));       // Should be invalid (wrong hash)
+    batch_array.append((scenario_id_3, 202));                // Should be invalid (not registered)
+
+    // Batch verify
+    let results = dispatcher.batch_verify_scenarios(batch_array);
+
+    // Check results
+    assert_eq!(results.len(), 3);
+    let (result_id_1, result_valid_1) = *results.at(0);
+    let (result_id_2, result_valid_2) = *results.at(1);
+    let (result_id_3, result_valid_3) = *results.at(2);
+
+    assert_eq!(result_id_1, scenario_id_1);
+    assert!(result_valid_1);      // Should be true
+    assert_eq!(result_id_2, scenario_id_2);
+    assert!(!result_valid_2);     // Should be false (wrong hash)
+    assert_eq!(result_id_3, scenario_id_3);
+    assert!(!result_valid_3);     // Should be false (not registered)
+}
+
+#[test]
+fn test_batch_verify_scenarios_empty_array() {
+    let (dispatcher, _, _) = deploy_for_scenarios();
+
+    // Prepare empty batch verification array
+    let batch_array = ArrayTrait::new();
+
+    // Batch verify
+    let results = dispatcher.batch_verify_scenarios(batch_array);
+
+    // Check results - should be empty
+    assert_eq!(results.len(), 0);
+}
+
+// ===== BATCH SIMULATION TESTS =====
+
+#[test]
+fn test_batch_verify_simulations_all_valid() {
+    let (dispatcher, contract_address, owner) = deploy_for_simulations();
+
+    // Register multiple simulations
+    let sim_id_1: felt252 = 100;
+    let sim_hash_1: felt252 = 200;
+    let sim_id_2: felt252 = 101;
+    let sim_hash_2: felt252 = 201;
+    let sim_id_3: felt252 = 102;
+    let sim_hash_3: felt252 = 202;
+
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_simulation(sim_id_1, sim_hash_1);
+    dispatcher.register_simulation(sim_id_2, sim_hash_2);
+    dispatcher.register_simulation(sim_id_3, sim_hash_3);
+    stop_cheat_caller_address(contract_address);
+
+    // Prepare batch verification array
+    let mut batch_array = ArrayTrait::new();
+    batch_array.append((sim_id_1, sim_hash_1));
+    batch_array.append((sim_id_2, sim_hash_2));
+    batch_array.append((sim_id_3, sim_hash_3));
+
+    // Batch verify
+    let results = dispatcher.batch_verify_simulations(batch_array);
+
+    // Check results
+    assert_eq!(results.len(), 3);
+    let (result_id_1, result_valid_1) = *results.at(0);
+    let (result_id_2, result_valid_2) = *results.at(1);
+    let (result_id_3, result_valid_3) = *results.at(2);
+
+    assert_eq!(result_id_1, sim_id_1);
+    assert!(result_valid_1);
+    assert_eq!(result_id_2, sim_id_2);
+    assert!(result_valid_2);
+    assert_eq!(result_id_3, sim_id_3);
+    assert!(result_valid_3);
+}
+
+#[test]
+fn test_batch_verify_simulations_mixed_results() {
+    let (dispatcher, contract_address, owner) = deploy_for_simulations();
+
+    // Register only some simulations
+    let sim_id_1: felt252 = 100;
+    let sim_hash_1: felt252 = 200;
+    let sim_id_2: felt252 = 101;
+    let wrong_hash_2: felt252 = 999; // Wrong hash
+    let sim_id_3: felt252 = 102; // Not registered
+
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_simulation(sim_id_1, sim_hash_1);
+    dispatcher.register_simulation(sim_id_2, 201); // Register with different hash
+    stop_cheat_caller_address(contract_address);
+
+    // Prepare batch verification array
+    let mut batch_array = ArrayTrait::new();
+    batch_array.append((sim_id_1, sim_hash_1));      // Should be valid
+    batch_array.append((sim_id_2, wrong_hash_2));    // Should be invalid (wrong hash)
+    batch_array.append((sim_id_3, 202));             // Should be invalid (not registered)
+
+    // Batch verify
+    let results = dispatcher.batch_verify_simulations(batch_array);
+
+    // Check results
+    assert_eq!(results.len(), 3);
+    let (result_id_1, result_valid_1) = *results.at(0);
+    let (result_id_2, result_valid_2) = *results.at(1);
+    let (result_id_3, result_valid_3) = *results.at(2);
+
+    assert_eq!(result_id_1, sim_id_1);
+    assert!(result_valid_1);      // Should be true
+    assert_eq!(result_id_2, sim_id_2);
+    assert!(!result_valid_2);     // Should be false (wrong hash)
+    assert_eq!(result_id_3, sim_id_3);
+    assert!(!result_valid_3);     // Should be false (not registered)
+}
+
+#[test]
+fn test_batch_verify_simulations_empty_array() {
+    let (dispatcher, _, _) = deploy_for_simulations();
+
+    // Prepare empty batch verification array
+    let batch_array = ArrayTrait::new();
+
+    // Batch verify
+    let results = dispatcher.batch_verify_simulations(batch_array);
+
+    // Check results - should be empty
+    assert_eq!(results.len(), 0);
+}

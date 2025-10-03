@@ -1,30 +1,5 @@
 use starknet::ContractAddress;
 
-// ============= EVENTS =============
-#[derive(Drop, starknet::Event)]
-pub struct CharacterVersionRegistered {
-    #[key]
-    pub character_version_id: felt252,
-    pub character_version_hash: felt252,
-    pub registered_by: ContractAddress,
-}
-
-#[derive(Drop, starknet::Event)]
-pub struct ScenarioRegistered {
-    #[key]
-    pub scenario_id: felt252,
-    pub scenario_hash: felt252,
-    pub registered_by: ContractAddress,
-}
-
-#[derive(Drop, starknet::Event)]
-pub struct SimulationRegistered {
-    #[key]
-    pub simulation_id: felt252,
-    pub simulation_hash: felt252,
-    pub registered_by: ContractAddress,
-}
-
 /// Character Registry Interface
 #[starknet::interface]
 pub trait ICharacterRegistry<TContractState> {
@@ -32,6 +7,8 @@ pub trait ICharacterRegistry<TContractState> {
     fn register_character_version(ref self: TContractState, character_version_id: felt252, character_version_hash: felt252);
     /// Verify if a character version ID matches its expected hash
     fn verify_character_version(self: @TContractState, character_version_id: felt252, character_version_hash: felt252) -> bool;
+    /// Verify multiple character versions at once
+    fn batch_verify_character_versions(self: @TContractState, character_versions: Array<(felt252, felt252)>) -> Array<(felt252, bool)>;
     /// Get the hash for a character version ID
     fn get_character_version_hash(self: @TContractState, character_version_id: felt252) -> felt252;
 }
@@ -43,6 +20,8 @@ pub trait IScenarioRegistry<TContractState> {
     fn register_scenario(ref self: TContractState, scenario_id: felt252, scenario_hash: felt252);
     /// Verify if a scenario ID matches its expected hash
     fn verify_scenario(self: @TContractState, scenario_id: felt252, scenario_hash: felt252) -> bool;
+    /// Verify multiple scenarios at once
+    fn batch_verify_scenarios(self: @TContractState, scenarios: Array<(felt252, felt252)>) -> Array<(felt252, bool)>;
     /// Get the hash for a scenario ID
     fn get_scenario_hash(self: @TContractState, scenario_id: felt252) -> felt252;
 }
@@ -54,6 +33,8 @@ pub trait ISimulationRegistry<TContractState> {
     fn register_simulation(ref self: TContractState, simulation_id: felt252, simulation_hash: felt252);
     /// Verify if a simulation ID matches its expected hash
     fn verify_simulation(self: @TContractState, simulation_id: felt252, simulation_hash: felt252) -> bool;
+    /// Verify multiple simulations at once
+    fn batch_verify_simulations(self: @TContractState, simulations: Array<(felt252, felt252)>) -> Array<(felt252, bool)>;
     /// Get the hash for a simulation ID
     fn get_simulation_hash(self: @TContractState, simulation_id: felt252) -> felt252;
 }
@@ -76,17 +57,11 @@ pub trait IOwnerRegistry<TContractState> {
 /// Kliver Registry Contract
 #[starknet::contract]
 pub mod kliver_registry {
-    use super::{
-        ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry,
-        CharacterVersionRegistered, ScenarioRegistered, SimulationRegistered
-    };
+    use super::{ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry};
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{get_caller_address, ContractAddress};
     use core::num::traits::Zero;
     
-    // OpenZeppelin imports
-    use openzeppelin::access::ownable::OwnableComponent;
-    use openzeppelin::security::pausable::PausableComponent;
 
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -178,6 +153,30 @@ pub mod kliver_registry {
             // Return true if the provided hash matches the stored hash
             stored_hash != 0 && stored_hash == character_version_hash
         }
+
+        fn batch_verify_character_versions(self: @ContractState, character_versions: Array<(felt252, felt252)>) -> Array<(felt252, bool)> {
+            let mut results: Array<(felt252, bool)> = ArrayTrait::new();
+            let mut i = 0;
+            let len = character_versions.len();
+            
+            while i != len {
+                let (character_version_id, character_version_hash) = *character_versions.at(i);
+                
+                // Skip validation here to avoid panics in batch operations
+                // Instead, return false for invalid inputs
+                let is_valid = if character_version_id == 0 || character_version_hash == 0 {
+                    false
+                } else {
+                    let stored_hash = self.character_versions.read(character_version_id);
+                    stored_hash != 0 && stored_hash == character_version_hash
+                };
+                
+                results.append((character_version_id, is_valid));
+                i += 1;
+            };
+            
+            results
+        }
         
         fn get_character_version_hash(self: @ContractState, character_version_id: felt252) -> felt252 {
             // Validate input
@@ -232,6 +231,30 @@ pub mod kliver_registry {
             // Return true if the provided hash matches the stored hash
             stored_hash != 0 && stored_hash == scenario_hash
         }
+
+        fn batch_verify_scenarios(self: @ContractState, scenarios: Array<(felt252, felt252)>) -> Array<(felt252, bool)> {
+            let mut results: Array<(felt252, bool)> = ArrayTrait::new();
+            let mut i = 0;
+            let len = scenarios.len();
+            
+            while i != len {
+                let (scenario_id, scenario_hash) = *scenarios.at(i);
+                
+                // Skip validation here to avoid panics in batch operations
+                // Instead, return false for invalid inputs
+                let is_valid = if scenario_id == 0 || scenario_hash == 0 {
+                    false
+                } else {
+                    let stored_hash = self.scenarios.read(scenario_id);
+                    stored_hash != 0 && stored_hash == scenario_hash
+                };
+                
+                results.append((scenario_id, is_valid));
+                i += 1;
+            };
+            
+            results
+        }
         
         fn get_scenario_hash(self: @ContractState, scenario_id: felt252) -> felt252 {
             // Validate input
@@ -285,6 +308,30 @@ pub mod kliver_registry {
             
             // Return true if the provided hash matches the stored hash
             stored_hash != 0 && stored_hash == simulation_hash
+        }
+
+        fn batch_verify_simulations(self: @ContractState, simulations: Array<(felt252, felt252)>) -> Array<(felt252, bool)> {
+            let mut results: Array<(felt252, bool)> = ArrayTrait::new();
+            let mut i = 0;
+            let len = simulations.len();
+            
+            while i != len {
+                let (simulation_id, simulation_hash) = *simulations.at(i);
+                
+                // Skip validation here to avoid panics in batch operations
+                // Instead, return false for invalid inputs
+                let is_valid = if simulation_id == 0 || simulation_hash == 0 {
+                    false
+                } else {
+                    let stored_hash = self.simulations.read(simulation_id);
+                    stored_hash != 0 && stored_hash == simulation_hash
+                };
+                
+                results.append((simulation_id, is_valid));
+                i += 1;
+            };
+            
+            results
         }
         
         fn get_simulation_hash(self: @ContractState, simulation_id: felt252) -> felt252 {
