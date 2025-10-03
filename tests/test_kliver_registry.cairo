@@ -2,13 +2,11 @@ use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_c
 use starknet::ContractAddress;
 use core::array::ArrayTrait;
 
-// Import contract interfaces
-use kliver_on_chain::{
-    ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait,
-    IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait,
-    ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait,
-    IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait,
-};
+// Import contract interfaces from modular structure
+use kliver_on_chain::character_registry::{ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait};
+use kliver_on_chain::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait};
+use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait};
+use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
 
 /// Helper function to deploy the contract and return all dispatchers
 fn deploy_contract() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ISimulationRegistryDispatcher, IOwnerRegistryDispatcher, ContractAddress) {

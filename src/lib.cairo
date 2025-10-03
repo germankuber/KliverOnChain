@@ -1,27 +1,11 @@
 // Kliver Registry - Main Library Entry Point
+// This modular structure separates concerns by registry type for better maintainability
 
-// Declare the main contract module
+// Registry interface modules - separated by functionality
+pub mod character_registry;
+pub mod scenario_registry;
+pub mod simulation_registry;
+pub mod owner_registry;
+
+// Main contract module
 pub mod kliver_registry;
-
-// Re-export all the interfaces
-pub use kliver_registry::{
-    // Character Registry
-    ICharacterRegistry,
-    ICharacterRegistryDispatcher,
-    ICharacterRegistryDispatcherTrait,
-    
-    // Scenario Registry
-    IScenarioRegistry,
-    IScenarioRegistryDispatcher,
-    IScenarioRegistryDispatcherTrait,
-    
-    // Simulation Registry
-    ISimulationRegistry,
-    ISimulationRegistryDispatcher,
-    ISimulationRegistryDispatcherTrait,
-    
-    // Owner Registry
-    IOwnerRegistry,
-    IOwnerRegistryDispatcher,
-    IOwnerRegistryDispatcherTrait,
-};

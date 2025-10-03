@@ -1,58 +1,8 @@
-use starknet::ContractAddress;
-
-/// Character Registry Interface
-#[starknet::interface]
-pub trait ICharacterRegistry<TContractState> {
-    /// Register a character version with its ID and hash (only owner)
-    fn register_character_version(ref self: TContractState, character_version_id: felt252, character_version_hash: felt252);
-    /// Verify if a character version ID matches its expected hash
-    fn verify_character_version(self: @TContractState, character_version_id: felt252, character_version_hash: felt252) -> bool;
-    /// Verify multiple character versions at once
-    fn batch_verify_character_versions(self: @TContractState, character_versions: Array<(felt252, felt252)>) -> Array<(felt252, bool)>;
-    /// Get the hash for a character version ID
-    fn get_character_version_hash(self: @TContractState, character_version_id: felt252) -> felt252;
-}
-
-/// Scenario Registry Interface
-#[starknet::interface]
-pub trait IScenarioRegistry<TContractState> {
-    /// Register a scenario with its ID and hash (only owner)
-    fn register_scenario(ref self: TContractState, scenario_id: felt252, scenario_hash: felt252);
-    /// Verify if a scenario ID matches its expected hash
-    fn verify_scenario(self: @TContractState, scenario_id: felt252, scenario_hash: felt252) -> bool;
-    /// Verify multiple scenarios at once
-    fn batch_verify_scenarios(self: @TContractState, scenarios: Array<(felt252, felt252)>) -> Array<(felt252, bool)>;
-    /// Get the hash for a scenario ID
-    fn get_scenario_hash(self: @TContractState, scenario_id: felt252) -> felt252;
-}
-
-/// Simulation Registry Interface
-#[starknet::interface]
-pub trait ISimulationRegistry<TContractState> {
-    /// Register a simulation with its ID and hash (only owner)
-    fn register_simulation(ref self: TContractState, simulation_id: felt252, simulation_hash: felt252);
-    /// Verify if a simulation ID matches its expected hash
-    fn verify_simulation(self: @TContractState, simulation_id: felt252, simulation_hash: felt252) -> bool;
-    /// Verify multiple simulations at once
-    fn batch_verify_simulations(self: @TContractState, simulations: Array<(felt252, felt252)>) -> Array<(felt252, bool)>;
-    /// Get the hash for a simulation ID
-    fn get_simulation_hash(self: @TContractState, simulation_id: felt252) -> felt252;
-}
-
-/// Owner Registry Interface
-#[starknet::interface]
-pub trait IOwnerRegistry<TContractState> {
-    /// Get the owner of the contract
-    fn get_owner(self: @TContractState) -> ContractAddress;
-    /// Transfer ownership to a new address (only current owner)
-    fn transfer_ownership(ref self: TContractState, new_owner: ContractAddress);
-    /// Pause the contract (only owner)
-    fn pause(ref self: TContractState);
-    /// Unpause the contract (only owner)
-    fn unpause(ref self: TContractState);
-    /// Check if the contract is paused
-    fn is_paused(self: @TContractState) -> bool;
-}
+// Import interfaces from separate modules
+use crate::character_registry::ICharacterRegistry;
+use crate::scenario_registry::IScenarioRegistry;
+use crate::simulation_registry::ISimulationRegistry;
+use crate::owner_registry::IOwnerRegistry;
 
 /// Kliver Registry Contract
 #[starknet::contract]
