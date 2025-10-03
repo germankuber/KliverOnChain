@@ -48,7 +48,8 @@ pub mod KliverNFT {
     use openzeppelin::token::erc721::{ERC721Component};
     use openzeppelin::upgrades::UpgradeableComponent;
     use openzeppelin::upgrades::interface::IUpgradeable;
-    use starknet::{ContractAddress, ClassHash, get_caller_address, get_block_timestamp};
+    use starknet::{ContractAddress, ClassHash, get_block_timestamp};
+    use starknet::storage::{Map, StoragePointerReadAccess, StoragePointerWriteAccess, StorageMapReadAccess, StorageMapWriteAccess};
     use core::num::traits::Zero;
 
     component!(path: ERC721Component, storage: erc721, event: ERC721Event);
@@ -82,8 +83,8 @@ pub mod KliverNFT {
         
         // Kliver NFT specific storage
         total_supply: u256,
-        user_to_token: LegacyMap<ContractAddress, u256>,
-        minted_at: LegacyMap<u256, u64>,
+        user_to_token: Map<ContractAddress, u256>,
+        minted_at: Map<u256, u64>,
     }
 
     #[event]
