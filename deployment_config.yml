@@ -1,0 +1,42 @@
+# KliverRegistry Deployment Configuration
+
+# Network configurations
+networks:
+  sepolia:
+    rpc_url: "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
+    explorer: "https://sepolia.starkscan.co"
+    chain_id: "SN_SEPOLIA"
+    
+  alpha-sepolia:
+    rpc_url: "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
+    explorer: "https://sepolia.starkscan.co"
+    chain_id: "SN_SEPOLIA"
+    
+  mainnet:
+    rpc_url: "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
+    explorer: "https://starkscan.co"
+    chain_id: "SN_MAIN"
+
+# Contract configuration
+contract:
+  name: "kliver_registry"
+  constructor_params:
+    - name: "owner"
+      type: "felt252"
+      description: "Address of the contract owner"
+
+# Deployment settings
+deployment:
+  wait_timeout: 300  # seconds
+  retry_interval: 2  # seconds
+  max_retries: 30
+  
+# Account settings (you can add your commonly used accounts here)
+accounts:
+  kliver:
+    description: "Main Kliver account"
+    network: "alpha-sepolia"
+  
+  dev:
+    description: "Development account"
+    network: "alpha-sepolia"
