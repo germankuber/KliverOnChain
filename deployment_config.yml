@@ -36,7 +36,11 @@ accounts:
   kliver:
     description: "Main Kliver account"
     network: "alpha-sepolia"
-  
+
   dev:
     description: "Development account"
+    network: "alpha-sepolia"
+
+  qa:
+    description: "Quality Assurance account"
     network: "alpha-sepolia"

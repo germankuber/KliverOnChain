@@ -13,5 +13,8 @@ pub mod owner_registry;
 // Main contract module
 pub mod kliver_registry;
 
+// NFT module
+pub mod kliver_nft;
+
 // Re-export key types for easier access
 pub use types::VerificationResult;

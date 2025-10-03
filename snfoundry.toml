@@ -1,3 +1,7 @@
 [sncast.sepolia]
 url = "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
 account = "kliver"
+
+[sncast.qa]
+url = "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
+account = "qa"
