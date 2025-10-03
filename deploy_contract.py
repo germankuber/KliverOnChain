@@ -97,7 +97,7 @@ class ContractDeployer:
                 "class_name": "KliverRegistry"
             },
             "nft": {
-                "name": "kliver_nft", 
+                "name": "KliverNFT", 
                 "class_name": "KliverNFT"
             }
         }
