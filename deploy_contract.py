@@ -217,22 +217,21 @@ class ContractDeployer:
         result = self._run_command(command, f"Declaring {contract_name} to {self.network}")
         
         # Handle both success and "already declared" cases
-        if result["success"]:
-            # Case 1: New declaration successful
-            class_hash_pattern = r"class_hash: (0x[a-fA-F0-9]+)"
-            tx_hash_pattern = r"transaction_hash: (0x[a-fA-F0-9]+)"
-            
-            class_hash_match = re.search(class_hash_pattern, result["stdout"])
-            tx_hash_match = re.search(tx_hash_pattern, result["stdout"])
-            
-            if not class_hash_match:
-                print(f"{Colors.ERROR}Could not parse class hash from declaration output{Colors.RESET}")
-                return None
-                
+        all_output = result.get("stdout", "") + result.get("stderr", "")
+        
+        # First check if we have a successful new declaration
+        class_hash_pattern = r"class_hash: (0x[a-fA-F0-9]+)"
+        tx_hash_pattern = r"transaction_hash: (0x[a-fA-F0-9]+)"
+        
+        class_hash_match = re.search(class_hash_pattern, all_output)
+        
+        if class_hash_match:
+            # Case 1: New declaration successful - we found class_hash in output
             class_hash = class_hash_match.group(1)
             print(f"{Colors.SUCCESS}✓ Contract declared with class hash: {class_hash}{Colors.RESET}")
             
-            # Wait for transaction confirmation if we have the transaction hash
+            # Check for transaction hash and wait for confirmation
+            tx_hash_match = re.search(tx_hash_pattern, all_output)
             if tx_hash_match:
                 tx_hash = tx_hash_match.group(1)
                 print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
@@ -240,25 +239,31 @@ class ContractDeployer:
                 if not self.wait_for_transaction(tx_hash):
                     print(f"{Colors.ERROR}Declaration transaction not confirmed. Deployment may fail.{Colors.RESET}")
                     return None
-            else:
-                print(f"{Colors.WARNING}Could not parse transaction hash. Proceeding without confirmation...{Colors.RESET}")
-                
+            
             return class_hash
             
         else:
-            # Case 2: Check if it's "already declared" error
+            # Case 2: No class_hash found - check if it's "already declared" error
             already_declared_pattern = r"Class with hash (0x[a-fA-F0-9]+) is already declared"
-            error_output = result.get("stderr", "") + result.get("stdout", "")
             
-            match = re.search(already_declared_pattern, error_output)
+            match = re.search(already_declared_pattern, all_output)
             if match:
                 class_hash = match.group(1)
                 print(f"{Colors.SUCCESS}✓ Contract already declared with class hash: {class_hash}{Colors.RESET}")
                 print(f"{Colors.INFO}ℹ️  Skipping declaration, proceeding with deployment...{Colors.RESET}")
                 return class_hash
+            
+            # Case 3: Command succeeded but no class_hash found (probably already declared but different message format)
+            elif result["success"]:
+                print(f"{Colors.WARNING}⚠️  Declaration command succeeded but no class hash found in output{Colors.RESET}")
+                print(f"{Colors.WARNING}This usually means the contract was already declared. Please check manually or use --force{Colors.RESET}")
+                print(f"{Colors.ERROR}Full output: {all_output}{Colors.RESET}")
+                return None
+            
             else:
-                print(f"{Colors.ERROR}Declaration failed with unknown error{Colors.RESET}")
-                print(f"{Colors.ERROR}Error: {error_output}{Colors.RESET}")
+                # Case 4: Actual failure
+                print(f"{Colors.ERROR}Declaration failed{Colors.RESET}")
+                print(f"{Colors.ERROR}Error: {all_output}{Colors.RESET}")
                 return None
     
     def wait_for_transaction(self, tx_hash: str, max_attempts: int = 60) -> bool:
