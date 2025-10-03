@@ -3,11 +3,12 @@ use crate::character_registry::ICharacterRegistry;
 use crate::scenario_registry::IScenarioRegistry;
 use crate::simulation_registry::ISimulationRegistry;
 use crate::owner_registry::IOwnerRegistry;
+use crate::types::VerificationResult;
 
 /// Kliver Registry Contract
 #[starknet::contract]
 pub mod kliver_registry {
-    use super::{ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry};
+    use super::{ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry, VerificationResult};
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{get_caller_address, ContractAddress};
     use core::num::traits::Zero;
@@ -92,7 +93,7 @@ pub mod kliver_registry {
             });
         }
         
-        fn verify_character_version(self: @ContractState, character_version_id: felt252, character_version_hash: felt252) -> bool {
+        fn verify_character_version(self: @ContractState, character_version_id: felt252, character_version_hash: felt252) -> VerificationResult {
             // Validate inputs
             assert(character_version_id != 0, 'Version ID cannot be zero');
             assert(character_version_hash != 0, 'Version hash cannot be zero');
@@ -100,28 +101,40 @@ pub mod kliver_registry {
             // Get the stored hash for this character version ID
             let stored_hash = self.character_versions.read(character_version_id);
             
-            // Return true if the provided hash matches the stored hash
-            stored_hash != 0 && stored_hash == character_version_hash
+            // Determine verification result based on stored data
+            if stored_hash == 0 {
+                VerificationResult::NotFound  // ID no existe
+            } else if stored_hash == character_version_hash {
+                VerificationResult::Match     // ID existe y hash coincide
+            } else {
+                VerificationResult::Mismatch  // ID existe pero hash no coincide
+            }
         }
 
-        fn batch_verify_character_versions(self: @ContractState, character_versions: Array<(felt252, felt252)>) -> Array<(felt252, bool)> {
-            let mut results: Array<(felt252, bool)> = ArrayTrait::new();
+        fn batch_verify_character_versions(self: @ContractState, character_versions: Array<(felt252, felt252)>) -> Array<(felt252, VerificationResult)> {
+            let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
             let len = character_versions.len();
             
             while i != len {
                 let (character_version_id, character_version_hash) = *character_versions.at(i);
                 
-                // Skip validation here to avoid panics in batch operations
-                // Instead, return false for invalid inputs
-                let is_valid = if character_version_id == 0 || character_version_hash == 0 {
-                    false
+                // For batch operations, handle zero values gracefully instead of panicking
+                let verification_result = if character_version_id == 0 || character_version_hash == 0 {
+                    VerificationResult::NotFound  // Treat invalid inputs as NotFound
                 } else {
                     let stored_hash = self.character_versions.read(character_version_id);
-                    stored_hash != 0 && stored_hash == character_version_hash
+                    
+                    if stored_hash == 0 {
+                        VerificationResult::NotFound  // ID no existe
+                    } else if stored_hash == character_version_hash {
+                        VerificationResult::Match     // ID existe y hash coincide
+                    } else {
+                        VerificationResult::Mismatch  // ID existe pero hash no coincide
+                    }
                 };
                 
-                results.append((character_version_id, is_valid));
+                results.append((character_version_id, verification_result));
                 i += 1;
             };
             
@@ -170,39 +183,51 @@ pub mod kliver_registry {
             });
         }
         
-        fn verify_scenario(self: @ContractState, scenario_id: felt252, scenario_hash: felt252) -> bool {
+        fn verify_scenario(self: @ContractState, scenario_id: felt252, scenario_hash: felt252) -> VerificationResult {
             // Validate inputs
             assert(scenario_id != 0, 'Scenario ID cannot be zero');
             assert(scenario_hash != 0, 'Scenario hash cannot be zero');
-            
+
             // Get the stored hash for this scenario ID
             let stored_hash = self.scenarios.read(scenario_id);
-            
-            // Return true if the provided hash matches the stored hash
-            stored_hash != 0 && stored_hash == scenario_hash
+
+            // Determine verification result based on stored data
+            if stored_hash == 0 {
+                VerificationResult::NotFound  // ID no existe
+            } else if stored_hash == scenario_hash {
+                VerificationResult::Match     // ID existe y hash coincide
+            } else {
+                VerificationResult::Mismatch  // ID existe pero hash no coincide
+            }
         }
 
-        fn batch_verify_scenarios(self: @ContractState, scenarios: Array<(felt252, felt252)>) -> Array<(felt252, bool)> {
-            let mut results: Array<(felt252, bool)> = ArrayTrait::new();
+        fn batch_verify_scenarios(self: @ContractState, scenarios: Array<(felt252, felt252)>) -> Array<(felt252, VerificationResult)> {
+            let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
             let len = scenarios.len();
-            
+
             while i != len {
                 let (scenario_id, scenario_hash) = *scenarios.at(i);
-                
-                // Skip validation here to avoid panics in batch operations
-                // Instead, return false for invalid inputs
-                let is_valid = if scenario_id == 0 || scenario_hash == 0 {
-                    false
+
+                // For batch operations, handle zero values gracefully instead of panicking
+                let verification_result = if scenario_id == 0 || scenario_hash == 0 {
+                    VerificationResult::NotFound  // Treat invalid inputs as NotFound
                 } else {
                     let stored_hash = self.scenarios.read(scenario_id);
-                    stored_hash != 0 && stored_hash == scenario_hash
+
+                    if stored_hash == 0 {
+                        VerificationResult::NotFound  // ID no existe
+                    } else if stored_hash == scenario_hash {
+                        VerificationResult::Match     // ID existe y hash coincide
+                    } else {
+                        VerificationResult::Mismatch  // ID existe pero hash no coincide
+                    }
                 };
-                
-                results.append((scenario_id, is_valid));
+
+                results.append((scenario_id, verification_result));
                 i += 1;
             };
-            
+
             results
         }
         
@@ -248,39 +273,51 @@ pub mod kliver_registry {
             });
         }
         
-        fn verify_simulation(self: @ContractState, simulation_id: felt252, simulation_hash: felt252) -> bool {
+        fn verify_simulation(self: @ContractState, simulation_id: felt252, simulation_hash: felt252) -> VerificationResult {
             // Validate inputs
             assert(simulation_id != 0, 'Simulation ID cannot be zero');
             assert(simulation_hash != 0, 'Simulation hash cannot be zero');
-            
+
             // Get the stored hash for this simulation ID
             let stored_hash = self.simulations.read(simulation_id);
-            
-            // Return true if the provided hash matches the stored hash
-            stored_hash != 0 && stored_hash == simulation_hash
+
+            // Determine verification result based on stored data
+            if stored_hash == 0 {
+                VerificationResult::NotFound  // ID no existe
+            } else if stored_hash == simulation_hash {
+                VerificationResult::Match     // ID existe y hash coincide
+            } else {
+                VerificationResult::Mismatch  // ID existe pero hash no coincide
+            }
         }
 
-        fn batch_verify_simulations(self: @ContractState, simulations: Array<(felt252, felt252)>) -> Array<(felt252, bool)> {
-            let mut results: Array<(felt252, bool)> = ArrayTrait::new();
+        fn batch_verify_simulations(self: @ContractState, simulations: Array<(felt252, felt252)>) -> Array<(felt252, VerificationResult)> {
+            let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
             let len = simulations.len();
-            
+
             while i != len {
                 let (simulation_id, simulation_hash) = *simulations.at(i);
-                
-                // Skip validation here to avoid panics in batch operations
-                // Instead, return false for invalid inputs
-                let is_valid = if simulation_id == 0 || simulation_hash == 0 {
-                    false
+
+                // For batch operations, handle zero values gracefully instead of panicking
+                let verification_result = if simulation_id == 0 || simulation_hash == 0 {
+                    VerificationResult::NotFound  // Treat invalid inputs as NotFound
                 } else {
                     let stored_hash = self.simulations.read(simulation_id);
-                    stored_hash != 0 && stored_hash == simulation_hash
+
+                    if stored_hash == 0 {
+                        VerificationResult::NotFound  // ID no existe
+                    } else if stored_hash == simulation_hash {
+                        VerificationResult::Match     // ID existe y hash coincide
+                    } else {
+                        VerificationResult::Mismatch  // ID existe pero hash no coincide
+                    }
                 };
-                
-                results.append((simulation_id, is_valid));
+
+                results.append((simulation_id, verification_result));
                 i += 1;
             };
-            
+
             results
         }
         

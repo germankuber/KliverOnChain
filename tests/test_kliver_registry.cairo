@@ -7,6 +7,7 @@ use kliver_on_chain::character_registry::{ICharacterRegistryDispatcher, ICharact
 use kliver_on_chain::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait};
 use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait};
 use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
+use kliver_on_chain::types::VerificationResult;
 
 /// Helper function to deploy the contract and return all dispatchers
 fn deploy_contract() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ISimulationRegistryDispatcher, IOwnerRegistryDispatcher, ContractAddress) {
@@ -79,8 +80,8 @@ fn test_constructor_zero_owner() {
         stop_cheat_caller_address(contract_address);
 
         // Then verify it
-        let is_valid = dispatcher.verify_character_version(character_version_id, character_version_hash);
-        assert!(is_valid);
+        let result = dispatcher.verify_character_version(character_version_id, character_version_hash);
+        assert!(result == VerificationResult::Match);
     }
 
     #[test]
@@ -97,8 +98,8 @@ fn test_constructor_zero_owner() {
         stop_cheat_caller_address(contract_address);
 
         // Then verify with wrong hash
-        let is_valid = dispatcher.verify_character_version(character_version_id, wrong_hash);
-        assert!(!is_valid);
+        let result = dispatcher.verify_character_version(character_version_id, wrong_hash);
+        assert!(result == VerificationResult::Mismatch);
     }
 
     #[test]
@@ -108,9 +109,9 @@ fn test_constructor_zero_owner() {
         let non_existent_id: felt252 = 999;
         let some_hash: felt252 = 456;
 
-        // Try to verify a character version that doesn't exist
-        let is_valid = dispatcher.verify_character_version(non_existent_id, some_hash);
-        assert!(!is_valid);
+                // Try to verify non-existent character version
+        let result = dispatcher.verify_character_version(non_existent_id, some_hash);
+        assert!(result == VerificationResult::NotFound);
     }
 
     #[test]
@@ -269,8 +270,8 @@ fn test_verify_scenario_valid() {
     stop_cheat_caller_address(contract_address);
 
     // Then verify it
-    let is_valid = dispatcher.verify_scenario(scenario_id, scenario_hash);
-    assert!(is_valid);
+    let result = dispatcher.verify_scenario(scenario_id, scenario_hash);
+    assert!(result == VerificationResult::Match);
 }
 
 #[test]
@@ -328,8 +329,8 @@ fn test_verify_simulation_valid() {
     stop_cheat_caller_address(contract_address);
 
     // Then verify it
-    let is_valid = dispatcher.verify_simulation(simulation_id, simulation_hash);
-    assert!(is_valid);
+    let result = dispatcher.verify_simulation(simulation_id, simulation_hash);
+    assert!(result == VerificationResult::Match);
 }
 
 #[test]
@@ -380,16 +381,16 @@ fn test_batch_verify_character_versions_all_valid() {
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let (result_id_1, result_1) = *results.at(0);
+    let (result_id_2, result_2) = *results.at(1);
+    let (result_id_3, result_3) = *results.at(2);
 
     assert_eq!(result_id_1, char_id_1);
-    assert!(result_valid_1);
+    assert!(result_1 == VerificationResult::Match);
     assert_eq!(result_id_2, char_id_2);
-    assert!(result_valid_2);
+    assert!(result_2 == VerificationResult::Match);
     assert_eq!(result_id_3, char_id_3);
-    assert!(result_valid_3);
+    assert!(result_3 == VerificationResult::Match);
 }
 
 #[test]
@@ -419,16 +420,16 @@ fn test_batch_verify_character_versions_mixed_results() {
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let (result_id_1, result_1) = *results.at(0);
+    let (result_id_2, result_2) = *results.at(1);
+    let (result_id_3, result_3) = *results.at(2);
 
     assert_eq!(result_id_1, char_id_1);
-    assert!(result_valid_1);      // Should be true
+    assert!(result_1 == VerificationResult::Match);      // Should be Match
     assert_eq!(result_id_2, char_id_2);
-    assert!(!result_valid_2);     // Should be false (wrong hash)
+    assert!(result_2 == VerificationResult::Mismatch);   // Should be Mismatch (wrong hash)
     assert_eq!(result_id_3, char_id_3);
-    assert!(!result_valid_3);     // Should be false (not registered)
+    assert!(result_3 == VerificationResult::NotFound);   // Should be NotFound (not registered)
 }
 
 #[test]
@@ -444,18 +445,18 @@ fn test_batch_verify_character_versions_with_zero_values() {
     // Batch verify
     let results = dispatcher.batch_verify_character_versions(batch_array);
 
-    // Check results - all should be false due to zero values
+    // Check results - all should be NotFound due to zero values
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let (result_id_1, result_1) = *results.at(0);
+    let (result_id_2, result_2) = *results.at(1);
+    let (result_id_3, result_3) = *results.at(2);
 
     assert_eq!(result_id_1, 0);
-    assert!(!result_valid_1);     // Should be false (zero ID)
+    assert!(result_1 == VerificationResult::NotFound);     // Should be NotFound (zero ID)
     assert_eq!(result_id_2, 100);
-    assert!(!result_valid_2);     // Should be false (zero hash)
+    assert!(result_2 == VerificationResult::NotFound);     // Should be NotFound (zero hash)
     assert_eq!(result_id_3, 0);
-    assert!(!result_valid_3);     // Should be false (both zero)
+    assert!(result_3 == VerificationResult::NotFound);     // Should be NotFound (both zero)
 }
 
 #[test]
@@ -496,13 +497,13 @@ fn test_batch_verify_character_versions_large_batch() {
     // Batch verify
     let results = dispatcher.batch_verify_character_versions(batch_array);
 
-    // Check results - all should be valid
+    // Check results - all should be Match
     assert_eq!(results.len(), 10);
     let mut k = 0;
     while k != 10 {
-        let (result_id, result_valid) = *results.at(k);
+        let (result_id, result) = *results.at(k);
         assert_eq!(result_id, (k + 1).into());
-        assert!(result_valid);
+        assert!(result == VerificationResult::Match);
         k += 1;
     };
 }
@@ -543,11 +544,11 @@ fn test_batch_verify_scenarios_all_valid() {
     let (result_id_3, result_valid_3) = *results.at(2);
 
     assert_eq!(result_id_1, scenario_id_1);
-    assert!(result_valid_1);
+    assert!(result_valid_1 == VerificationResult::Match);
     assert_eq!(result_id_2, scenario_id_2);
-    assert!(result_valid_2);
+    assert!(result_valid_2 == VerificationResult::Match);
     assert_eq!(result_id_3, scenario_id_3);
-    assert!(result_valid_3);
+    assert!(result_valid_3 == VerificationResult::Match);
 }
 
 #[test]
@@ -582,11 +583,11 @@ fn test_batch_verify_scenarios_mixed_results() {
     let (result_id_3, result_valid_3) = *results.at(2);
 
     assert_eq!(result_id_1, scenario_id_1);
-    assert!(result_valid_1);      // Should be true
+    assert!(result_valid_1 == VerificationResult::Match);      // Should be Match
     assert_eq!(result_id_2, scenario_id_2);
-    assert!(!result_valid_2);     // Should be false (wrong hash)
+    assert!(result_valid_2 == VerificationResult::Mismatch);   // Should be Mismatch (wrong hash)
     assert_eq!(result_id_3, scenario_id_3);
-    assert!(!result_valid_3);     // Should be false (not registered)
+    assert!(result_valid_3 == VerificationResult::NotFound);   // Should be NotFound (not registered)
 }
 
 #[test]
@@ -639,11 +640,11 @@ fn test_batch_verify_simulations_all_valid() {
     let (result_id_3, result_valid_3) = *results.at(2);
 
     assert_eq!(result_id_1, sim_id_1);
-    assert!(result_valid_1);
+    assert!(result_valid_1 == VerificationResult::Match);
     assert_eq!(result_id_2, sim_id_2);
-    assert!(result_valid_2);
+    assert!(result_valid_2 == VerificationResult::Match);
     assert_eq!(result_id_3, sim_id_3);
-    assert!(result_valid_3);
+    assert!(result_valid_3 == VerificationResult::Match);
 }
 
 #[test]
@@ -678,11 +679,11 @@ fn test_batch_verify_simulations_mixed_results() {
     let (result_id_3, result_valid_3) = *results.at(2);
 
     assert_eq!(result_id_1, sim_id_1);
-    assert!(result_valid_1);      // Should be true
+    assert!(result_valid_1 == VerificationResult::Match);      // Should be Match
     assert_eq!(result_id_2, sim_id_2);
-    assert!(!result_valid_2);     // Should be false (wrong hash)
+    assert!(result_valid_2 == VerificationResult::Mismatch);   // Should be Mismatch (wrong hash)
     assert_eq!(result_id_3, sim_id_3);
-    assert!(!result_valid_3);     // Should be false (not registered)
+    assert!(result_valid_3 == VerificationResult::NotFound);   // Should be NotFound (not registered)
 }
 
 #[test]
