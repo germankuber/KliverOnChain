@@ -17,12 +17,60 @@ import subprocess
 import json
 import time
 import re
+import yaml
 from pathlib import Path
 from colorama import Fore, Style, init
 from typing import Optional, Dict, Any
 
 # Initialize colorama for cross-platform colored output
 init()
+
+def load_environment_config(environment: str) -> Dict[str, Any]:
+    """Load environment configuration from deployment_config.yml"""
+    config_path = Path.cwd() / "deployment_config.yml"
+    
+    if not config_path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+    except ImportError:
+        # Fallback if yaml is not available - create a simple parser
+        import re
+        with open(config_path, 'r') as f:
+            content = f.read()
+        
+        # Simple YAML-like parsing for our specific structure
+        config = {"environments": {}}
+        lines = content.split('\n')
+        current_env = None
+        
+        for line in lines:
+            line = line.strip()
+            if line.startswith('  dev:') or line.startswith('  qa:') or line.startswith('  prod:'):
+                current_env = line.split(':')[0].strip()
+                config["environments"][current_env] = {}
+            elif current_env and ':' in line and not line.startswith('#'):
+                key, value = line.split(':', 1)
+                key = key.strip()
+                value = value.strip().strip('"')
+                if value.startswith('"') and value.endswith('"'):
+                    value = value[1:-1]
+                config["environments"][current_env][key] = value
+    
+    if environment not in config.get("environments", {}):
+        raise ValueError(f"Environment '{environment}' not found in configuration. Available: {list(config.get('environments', {}).keys())}")
+    
+    env_config = config["environments"][environment]
+    
+    # Ensure all required fields are present
+    required_fields = ['network', 'rpc_url', 'account', 'name']
+    for field in required_fields:
+        if field not in env_config:
+            raise ValueError(f"Missing required field '{field}' in environment '{environment}' configuration")
+    
+    return env_config
 
 class Colors:
     """Color constants for terminal output"""
@@ -322,30 +370,48 @@ class ContractDeployer:
         return True
 
 @click.command()
-@click.option('--account', '-a', required=True, help='Account name to use for deployment')
-@click.option('--network', '-n', default='sepolia', help='Network to deploy to (sepolia, alpha-sepolia, mainnet)')
+@click.option('--environment', '-e', required=True, help='Environment to deploy to: dev, qa, or prod')
 @click.option('--contract', '-c', default='registry', help='Contract to deploy: registry, nft, or all')
-@click.option('--rpc-url', '-r', help='Custom RPC URL (optional)')
+@click.option('--rpc-url', '-r', help='Custom RPC URL (optional - overrides environment config)')
 @click.option('--owner', '-o', help='Owner address for the contract (uses account address if not specified)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
-def deploy(account: str, network: str, contract: str, rpc_url: Optional[str], owner: Optional[str], verbose: bool):
+def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optional[str], verbose: bool):
     """
-    Deploy Kliver contracts to StarkNet
+    Deploy Kliver contracts to StarkNet using environment-based configuration
     
     This script handles the complete deployment process:
-    1. Checks prerequisites (Scarb, Starknet Foundry)
-    2. Compiles the contracts
-    3. Declares the contracts to get class hashes
-    4. Deploys the contract instances
-    5. Saves deployment information
+    1. Loads environment configuration (auto-selects network, account, etc.)
+    2. Checks prerequisites (Scarb, Starknet Foundry)
+    3. Compiles the contracts
+    4. Declares the contracts to get class hashes
+    5. Deploys the contract instances
+    6. Saves deployment information
     
     Example usage:
-        python deploy_contract.py --account kliver --network sepolia --contract registry
-        python deploy_contract.py --account kliver --network sepolia --contract nft --owner 0x123...
-        python deploy_contract.py --account kliver --network sepolia --contract all
+        python deploy_contract.py --environment dev --contract registry
+        python deploy_contract.py --environment qa --contract nft --owner 0x123...
+        python deploy_contract.py --environment prod --contract all --owner 0x123...
     """
     
     try:
+        # Load environment configuration
+        try:
+            env_config = load_environment_config(environment)
+            account = env_config['account']
+            network = env_config['network']
+            if not rpc_url:
+                rpc_url = env_config['rpc_url']
+            
+            click.echo(f"{Colors.SUCCESS}✓ Environment '{environment}' loaded:{Colors.RESET}")
+            click.echo(f"  Environment: {env_config['name']}")
+            click.echo(f"  Network: {network}")
+            click.echo(f"  Account: {account}")
+            click.echo(f"  RPC URL: {rpc_url}")
+            
+        except Exception as e:
+            click.echo(f"{Colors.ERROR}❌ Failed to load environment config: {str(e)}{Colors.RESET}")
+            exit(1)
+        
         if contract not in ['registry', 'nft', 'all']:
             click.echo(f"{Colors.ERROR}❌ Invalid contract type. Use: registry, nft, or all{Colors.RESET}")
             exit(1)

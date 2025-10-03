@@ -16,13 +16,9 @@ def quick_deploy():
     print("-" * 40)
     
     # Default settings
-    account = "kliver"
-    network = "sepolia" 
-    rpc_url = "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
+    environment = "dev"
     
-    print(f"Account: {account}")
-    print(f"Network: {network}")
-    print(f"RPC: {rpc_url}")
+    print(f"Environment: {environment} (auto-configured)")
     print("-" * 40)
     
     try:
@@ -30,9 +26,8 @@ def quick_deploy():
         cmd = [
             sys.executable, 
             "deploy_contract.py",
-            "--account", account,
-            "--network", network,
-            "--rpc-url", rpc_url,
+            "--environment", environment,
+            "--contract", "registry",
             "--verbose"
         ]
         
