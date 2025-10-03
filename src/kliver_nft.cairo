@@ -116,8 +116,8 @@ pub mod KliverNFT {
         owner: ContractAddress,
         base_uri: ByteArray  // ← Ahora es parametrizable
     ) {
-        let name = "Kliver Registry ";
-        let symbol = "KLIVER";
+        let name = "Kliver  Registry ";
+        let symbol = "Kliver AI";
 
         self.erc721.initializer(name, symbol, base_uri);
         self.ownable.initializer(owner);

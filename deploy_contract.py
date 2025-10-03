@@ -216,22 +216,52 @@ class ContractDeployer:
         
         result = self._run_command(command, f"Declaring {contract_name} to {self.network}")
         
-        if not result["success"]:
-            return None
+        # Handle both success and "already declared" cases
+        if result["success"]:
+            # Case 1: New declaration successful
+            class_hash_pattern = r"class_hash: (0x[a-fA-F0-9]+)"
+            tx_hash_pattern = r"transaction_hash: (0x[a-fA-F0-9]+)"
             
-        # Parse class hash from output
-        class_hash_pattern = r"class_hash: (0x[a-fA-F0-9]+)"
-        match = re.search(class_hash_pattern, result["stdout"])
-        
-        if match:
-            class_hash = match.group(1)
+            class_hash_match = re.search(class_hash_pattern, result["stdout"])
+            tx_hash_match = re.search(tx_hash_pattern, result["stdout"])
+            
+            if not class_hash_match:
+                print(f"{Colors.ERROR}Could not parse class hash from declaration output{Colors.RESET}")
+                return None
+                
+            class_hash = class_hash_match.group(1)
             print(f"{Colors.SUCCESS}✓ Contract declared with class hash: {class_hash}{Colors.RESET}")
+            
+            # Wait for transaction confirmation if we have the transaction hash
+            if tx_hash_match:
+                tx_hash = tx_hash_match.group(1)
+                print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
+                
+                if not self.wait_for_transaction(tx_hash):
+                    print(f"{Colors.ERROR}Declaration transaction not confirmed. Deployment may fail.{Colors.RESET}")
+                    return None
+            else:
+                print(f"{Colors.WARNING}Could not parse transaction hash. Proceeding without confirmation...{Colors.RESET}")
+                
             return class_hash
+            
         else:
-            print(f"{Colors.ERROR}Could not parse class hash from declaration output{Colors.RESET}")
-            return None
+            # Case 2: Check if it's "already declared" error
+            already_declared_pattern = r"Class with hash (0x[a-fA-F0-9]+) is already declared"
+            error_output = result.get("stderr", "") + result.get("stdout", "")
+            
+            match = re.search(already_declared_pattern, error_output)
+            if match:
+                class_hash = match.group(1)
+                print(f"{Colors.SUCCESS}✓ Contract already declared with class hash: {class_hash}{Colors.RESET}")
+                print(f"{Colors.INFO}ℹ️  Skipping declaration, proceeding with deployment...{Colors.RESET}")
+                return class_hash
+            else:
+                print(f"{Colors.ERROR}Declaration failed with unknown error{Colors.RESET}")
+                print(f"{Colors.ERROR}Error: {error_output}{Colors.RESET}")
+                return None
     
-    def wait_for_transaction(self, tx_hash: str, max_attempts: int = 30) -> bool:
+    def wait_for_transaction(self, tx_hash: str, max_attempts: int = 60) -> bool:
         """Wait for transaction confirmation"""
         print(f"{Colors.INFO}⏳ Waiting for transaction confirmation: {tx_hash}{Colors.RESET}")
         
@@ -250,22 +280,30 @@ class ContractDeployer:
                 print(f"{Colors.SUCCESS}✓ Transaction execution succeeded{Colors.RESET}")
                 return True
                 
-            print(f"{Colors.WARNING}⏳ Transaction still pending... (attempt {attempt + 1}/{max_attempts}){Colors.RESET}")
-            time.sleep(2)
+            if attempt < max_attempts - 1:  # Don't sleep on the last attempt
+                print(f"{Colors.WARNING}⏳ Transaction still pending... waiting 5 seconds (attempt {attempt + 1}/{max_attempts}){Colors.RESET}")
+                time.sleep(5)
             
-        print(f"{Colors.ERROR}✗ Transaction confirmation timeout{Colors.RESET}")
+        print(f"{Colors.ERROR}✗ Transaction confirmation timeout after {max_attempts * 5} seconds{Colors.RESET}")
         return False
     
     def deploy_contract(self, class_hash: str, owner_address: str) -> Optional[str]:
         """Deploy the contract and return the contract address"""
         print(f"\n{Colors.BOLD}🚀 Deploying contract...{Colors.RESET}")
         
+        # Build constructor calldata based on contract type
+        if self.contract_type == "nft":
+            # NFT requires: owner + base_uri (ByteArray empty = "0 0 0")
+            constructor_calldata = [owner_address, "0", "0", "0"]
+        else:
+            # Registry and other contracts require only owner
+            constructor_calldata = [owner_address]
+        
         command = [
             "sncast", "--account", self.account, "deploy",
             "--class-hash", class_hash,
-            "--constructor-calldata", owner_address,
-            "--url", self.rpc_url
-        ]
+            "--constructor-calldata"
+        ] + constructor_calldata + ["--url", self.rpc_url]
         
         contract_config = self.contracts[self.contract_type]
         contract_name = contract_config["name"]
@@ -284,6 +322,8 @@ class ContractDeployer:
             return contract_address
         else:
             print(f"{Colors.ERROR}Could not parse contract address from deployment output{Colors.RESET}")
+            print(f"{Colors.ERROR}Full output for debugging:{Colors.RESET}")
+            print(f"{result['stdout']}")
             return None
     
     def save_deployment_info(self, class_hash: str, contract_address: str, owner_address: str):
