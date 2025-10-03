@@ -9,7 +9,7 @@ environments:
     explorer: "https://sepolia.starkscan.co"
     chain_id: "SN_SEPOLIA"
     description: "Development environment - Safe for experimentation"
-    account: "dev-kliver"
+    account: "dev"
     build_target: "dev"
     contracts:
       registry:
@@ -30,7 +30,7 @@ environments:
     explorer: "https://sepolia.starkscan.co"
     chain_id: "SN_SEPOLIA"
     description: "QA environment - Integration testing"
-    account: "qa-kliver"
+    account: "qa"
     build_target: "dev"
     contracts:
       registry:
@@ -51,7 +51,7 @@ environments:
     explorer: "https://starkscan.co"
     chain_id: "SN_MAIN"
     description: "Production environment - LIVE DEPLOYMENT ⚠️"
-    account: "prod-kliver"
+    account: "kliver"
     build_target: "release"
     contracts:
       registry:
