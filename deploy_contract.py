@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-KliverRegistry Contract Deployment Script
+Kliver Contracts Deployment Script
 
-This script automates the complete deployment process for the KliverRegistry contract
-including compilation, declaration, and deployment to StarkNet.
+This script automates the complete deployment process for Kliver contracts
+including KliverRegistry and KliverNFT contracts to StarkNet.
 
 Usage:
-    python deploy_contract.py --account kliver --network sepolia
-    python deploy_contract.py --account kliver --network sepolia --owner 0x123...
+    python deploy_contract.py --account kliver --network sepolia --contract registry
+    python deploy_contract.py --account kliver --network sepolia --contract nft --owner 0x123...
+    python deploy_contract.py --account kliver --network sepolia --contract all
     python deploy_contract.py --help
 """
 
@@ -35,11 +36,23 @@ class Colors:
 class ContractDeployer:
     """Main class for handling contract deployment operations"""
     
-    def __init__(self, account: str, network: str, rpc_url: Optional[str] = None):
+    def __init__(self, account: str, network: str, contract_type: str, rpc_url: Optional[str] = None):
         self.account = account
         self.network = network
+        self.contract_type = contract_type
         self.rpc_url = rpc_url or self._get_default_rpc_url(network)
-        self.contract_name = "kliver_registry"
+        
+        # Define contract configurations
+        self.contracts = {
+            "registry": {
+                "name": "kliver_registry",
+                "class_name": "KliverRegistry"
+            },
+            "nft": {
+                "name": "kliver_nft", 
+                "class_name": "KliverNFT"
+            }
+        }
         
     def _get_default_rpc_url(self, network: str) -> str:
         """Get default RPC URL for the specified network"""
@@ -142,15 +155,18 @@ class ContractDeployer:
     
     def declare_contract(self) -> Optional[str]:
         """Declare the contract and return the class hash"""
+        contract_config = self.contracts[self.contract_type]
+        contract_name = contract_config["name"]
+        
         print(f"\n{Colors.BOLD}📤 Declaring contract...{Colors.RESET}")
         
         command = [
             "sncast", "--account", self.account, "declare",
-            "--contract-name", self.contract_name,
+            "--contract-name", contract_name,
             "--url", self.rpc_url
         ]
         
-        result = self._run_command(command, f"Declaring {self.contract_name} to {self.network}")
+        result = self._run_command(command, f"Declaring {contract_name} to {self.network}")
         
         if not result["success"]:
             return None
@@ -203,7 +219,9 @@ class ContractDeployer:
             "--url", self.rpc_url
         ]
         
-        result = self._run_command(command, f"Deploying {self.contract_name} with owner {owner_address}")
+        contract_config = self.contracts[self.contract_type]
+        contract_name = contract_config["name"]
+        result = self._run_command(command, f"Deploying {contract_name} with owner {owner_address}")
         
         if not result["success"]:
             return None
@@ -226,7 +244,7 @@ class ContractDeployer:
             "network": self.network,
             "account": self.account,
             "rpc_url": self.rpc_url,
-            "contract_name": self.contract_name,
+            "contract_name": self.contracts[self.contract_type]["name"],
             "class_hash": class_hash,
             "contract_address": contract_address,
             "owner_address": owner_address,
@@ -246,8 +264,12 @@ class ContractDeployer:
     
     def deploy_full_flow(self, owner_address: Optional[str] = None) -> bool:
         """Execute the complete deployment flow"""
-        print(f"{Colors.BOLD}🎯 Starting KliverRegistry deployment to {self.network}{Colors.RESET}")
+        contract_config = self.contracts[self.contract_type]
+        contract_name = contract_config["name"]
+        
+        print(f"{Colors.BOLD}🎯 Starting {contract_name} deployment to {self.network}{Colors.RESET}")
         print(f"Account: {self.account}")
+        print(f"Contract Type: {self.contract_type}")
         print(f"RPC URL: {self.rpc_url}")
         print("-" * 60)
         
@@ -289,7 +311,8 @@ class ContractDeployer:
         print(f"\n{Colors.BOLD}{Colors.SUCCESS}🎉 DEPLOYMENT SUCCESSFUL! 🎉{Colors.RESET}")
         print("-" * 60)
         print(f"Network: {self.network}")
-        print(f"Contract: {self.contract_name}")
+        print(f"Contract Type: {self.contract_type}")
+        print(f"Contract Name: {contract_name}")
         print(f"Class Hash: {class_hash}")
         print(f"Contract Address: {contract_address}")
         print(f"Owner Address: {owner_address}")
@@ -301,28 +324,47 @@ class ContractDeployer:
 @click.command()
 @click.option('--account', '-a', required=True, help='Account name to use for deployment')
 @click.option('--network', '-n', default='sepolia', help='Network to deploy to (sepolia, alpha-sepolia, mainnet)')
+@click.option('--contract', '-c', default='registry', help='Contract to deploy: registry, nft, or all')
 @click.option('--rpc-url', '-r', help='Custom RPC URL (optional)')
 @click.option('--owner', '-o', help='Owner address for the contract (uses account address if not specified)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
-def deploy(account: str, network: str, rpc_url: Optional[str], owner: Optional[str], verbose: bool):
+def deploy(account: str, network: str, contract: str, rpc_url: Optional[str], owner: Optional[str], verbose: bool):
     """
-    Deploy KliverRegistry contract to StarkNet
+    Deploy Kliver contracts to StarkNet
     
     This script handles the complete deployment process:
     1. Checks prerequisites (Scarb, Starknet Foundry)
-    2. Compiles the contract
-    3. Declares the contract to get class hash
-    4. Deploys the contract instance
+    2. Compiles the contracts
+    3. Declares the contracts to get class hashes
+    4. Deploys the contract instances
     5. Saves deployment information
     
     Example usage:
-        python deploy_contract.py --account kliver --network sepolia
-        python deploy_contract.py -a kliver -n sepolia --owner 0x123...
+        python deploy_contract.py --account kliver --network sepolia --contract registry
+        python deploy_contract.py --account kliver --network sepolia --contract nft --owner 0x123...
+        python deploy_contract.py --account kliver --network sepolia --contract all
     """
     
     try:
-        deployer = ContractDeployer(account, network, rpc_url)
-        success = deployer.deploy_full_flow(owner)
+        if contract not in ['registry', 'nft', 'all']:
+            click.echo(f"{Colors.ERROR}❌ Invalid contract type. Use: registry, nft, or all{Colors.RESET}")
+            exit(1)
+            
+        success = True
+        
+        if contract == 'all':
+            # Deploy registry first
+            deployer_registry = ContractDeployer(account, network, 'registry', rpc_url)
+            registry_success = deployer_registry.deploy_full_flow(owner)
+            
+            # Deploy NFT second
+            deployer_nft = ContractDeployer(account, network, 'nft', rpc_url)
+            nft_success = deployer_nft.deploy_full_flow(owner)
+            
+            success = registry_success and nft_success
+        else:
+            deployer = ContractDeployer(account, network, contract, rpc_url)
+            success = deployer.deploy_full_flow(owner)
         
         if success:
             click.echo(f"\n{Colors.SUCCESS}✅ Deployment completed successfully!{Colors.RESET}")
