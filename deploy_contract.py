@@ -90,13 +90,14 @@ class Colors:
 
 class ContractDeployer:
     """Main class for handling contract deployment operations"""
-    
-    def __init__(self, account: str, network: str, contract_type: str, rpc_url: Optional[str] = None):
+
+    def __init__(self, account: str, network: str, contract_type: str, rpc_url: Optional[str] = None, env_config: Optional[Dict[str, Any]] = None):
         self.account = account
         self.network = network
         self.contract_type = contract_type
         self.rpc_url = rpc_url or self._get_default_rpc_url(network)
-        
+        self.env_config = env_config
+
         # Define contract configurations
         self.contracts = {
             "registry": {
@@ -104,7 +105,7 @@ class ContractDeployer:
                 "class_name": "KliverRegistry"
             },
             "nft": {
-                "name": "KliverNFT", 
+                "name": "KliverNFT",
                 "class_name": "KliverNFT"
             }
         }
@@ -117,6 +118,40 @@ class ContractDeployer:
             "mainnet": "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
         }
         return rpc_urls.get(network, rpc_urls["sepolia"])
+
+    def _string_to_bytearray_calldata(self, text: str) -> list:
+        """Convert a string to Cairo ByteArray calldata format [data_len, word1, word2, ..., pending_word, pending_word_len]"""
+        if not text:
+            return ["0", "0", "0"]
+
+        # Encode string to bytes
+        text_bytes = text.encode('utf-8')
+
+        # Split into 31-byte chunks (Cairo felts can hold 31 bytes max)
+        chunk_size = 31
+        chunks = []
+
+        for i in range(0, len(text_bytes), chunk_size):
+            chunk = text_bytes[i:i + chunk_size]
+            # Convert chunk to integer (big-endian)
+            chunk_int = int.from_bytes(chunk, byteorder='big')
+            chunks.append(str(chunk_int))
+
+        # Last chunk becomes pending_word
+        if chunks:
+            pending_word = chunks[-1]
+            full_words = chunks[:-1] if len(chunks) > 1 else []
+            last_chunk_len = len(text_bytes) % chunk_size
+            if last_chunk_len == 0 and len(text_bytes) > 0:
+                last_chunk_len = chunk_size
+        else:
+            pending_word = "0"
+            full_words = []
+            last_chunk_len = 0
+
+        # Format: [data_len, word1, word2, ..., pending_word, pending_word_len]
+        result = [str(len(full_words))] + full_words + [pending_word, str(last_chunk_len)]
+        return result
     
     def _run_command(self, command: list, description: str, show_output: bool = False) -> Dict[str, Any]:
         """Execute a shell command and return the result"""
@@ -300,17 +335,30 @@ class ContractDeployer:
         """Deploy the contract and return the contract address"""
         contract_config = self.contracts[self.contract_type]
         contract_name = contract_config["name"]
-        
+
         print(f"{Colors.INFO}🚀 Deploying {contract_name}...{Colors.RESET}")
-        
+
         # Build constructor calldata based on contract type
         if self.contract_type == "nft":
-            # NFT requires: owner + base_uri (ByteArray empty = "0 0 0")
-            constructor_calldata = [owner_address, "0", "0", "0"]
+            # NFT requires: owner + base_uri (ByteArray)
+            # Get base_uri from environment config
+            base_uri = ""
+            if self.env_config and "contracts" in self.env_config:
+                nft_config = self.env_config["contracts"].get("nft", {})
+                base_uri = nft_config.get("base_uri", "")
+
+            if base_uri:
+                print(f"{Colors.INFO}📋 Using base URI: {base_uri}{Colors.RESET}")
+                base_uri_calldata = self._string_to_bytearray_calldata(base_uri)
+            else:
+                print(f"{Colors.WARNING}⚠️  No base_uri configured, using empty ByteArray{Colors.RESET}")
+                base_uri_calldata = ["0", "0", "0"]
+
+            constructor_calldata = [owner_address] + base_uri_calldata
         else:
             # Registry and other contracts require only owner
             constructor_calldata = [owner_address]
-        
+
         command = [
             "sncast", "--account", self.account, "deploy",
             "--class-hash", class_hash,
@@ -473,23 +521,23 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
         
         if contract == 'all':
             # Deploy registry first
-            deployer_registry = ContractDeployer(account, network, 'registry', rpc_url)
+            deployer_registry = ContractDeployer(account, network, 'registry', rpc_url, env_config)
             registry_result = deployer_registry.deploy_full_flow(owner)
             if registry_result:
                 deployments.append(registry_result)
             else:
                 success = False
-            
+
             # Deploy NFT second
             if success:  # Only proceed if registry succeeded
-                deployer_nft = ContractDeployer(account, network, 'nft', rpc_url)
+                deployer_nft = ContractDeployer(account, network, 'nft', rpc_url, env_config)
                 nft_result = deployer_nft.deploy_full_flow(owner)
                 if nft_result:
                     deployments.append(nft_result)
                 else:
                     success = False
         else:
-            deployer = ContractDeployer(account, network, contract, rpc_url)
+            deployer = ContractDeployer(account, network, contract, rpc_url, env_config)
             result = deployer.deploy_full_flow(owner)
             if result:
                 deployments.append(result)

@@ -16,8 +16,9 @@ environments:
         name: "kliver_on_chain_KliverRegistry"
         sierra_file: "target/dev/kliver_on_chain_KliverRegistry.contract_class.json"
       nft:
-        name: "kliver_on_chain_KliverNFT" 
+        name: "kliver_on_chain_KliverNFT"
         sierra_file: "target/dev/kliver_on_chain_KliverNFT.contract_class.json"
+        base_uri: "https://api-dev.kliver.ai/api/nft/metadata"
     deployment_settings:
       wait_timeout: 120
       retry_interval: 2
@@ -39,6 +40,7 @@ environments:
       nft:
         name: "kliver_on_chain_KliverNFT"
         sierra_file: "target/dev/kliver_on_chain_KliverNFT.contract_class.json"
+        base_uri: "https://83df86aa2352.ngrok-free.app/api/nft/metadata"
     deployment_settings:
       wait_timeout: 180
       retry_interval: 3
@@ -60,6 +62,7 @@ environments:
       nft:
         name: "kliver_on_chain_KliverNFT"
         sierra_file: "target/release/kliver_on_chain_KliverNFT.contract_class.json"
+        base_uri: "https://api.kliver.ai/api/nft/metadata"
     deployment_settings:
       wait_timeout: 300
       retry_interval: 5
