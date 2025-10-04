@@ -139,9 +139,7 @@ pub mod KliverNFT {
 
             // Block ONLY transfers (from != 0 && to != 0)
             // Allow minting (from == 0) and burning (to == 0)
-            if from.is_non_zero() && to.is_non_zero() {
-                panic!("{}", Errors::NON_TRANSFERABLE);
-            }
+            assert(from.is_zero() || to.is_zero(), Errors::NON_TRANSFERABLE);
         }
 
         fn after_update(
@@ -228,7 +226,9 @@ pub mod KliverNFT {
         }
 
         fn get_minted_at(self: @ContractState, token_id: u256) -> u64 {
-            self.minted_at.read(token_id)
+            let timestamp = self.minted_at.read(token_id);
+            assert(timestamp != 0, 'Token does not exist');
+            timestamp
         }
     }
 }

@@ -9,6 +9,7 @@ pub mod character_registry;
 pub mod scenario_registry;
 pub mod simulation_registry;
 pub mod owner_registry;
+pub mod session_registry;
 
 // Main contract module
 pub mod kliver_registry;

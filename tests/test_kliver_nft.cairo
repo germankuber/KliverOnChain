@@ -1,13 +1,14 @@
-use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address, stop_cheat_caller_address};
+use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address, stop_cheat_caller_address, start_cheat_block_timestamp_global, stop_cheat_block_timestamp_global};
 use starknet::ContractAddress;
 
 // Import NFT interface
 use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+use openzeppelin::token::erc721::interface::{IERC721Dispatcher, IERC721DispatcherTrait};
 
 /// Helper function to deploy the NFT contract
 fn deploy_nft_contract() -> (IKliverNFTDispatcher, ContractAddress) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
-    let contract = declare("kliver_nft").unwrap().contract_class();
+    let contract = declare("KliverNFT").unwrap().contract_class();
 
     // Base URI as ByteArray - empty for now
     let mut constructor_calldata = ArrayTrait::new();
@@ -131,9 +132,9 @@ fn test_get_user_token_id() {
     let token_id_2 = dispatcher.get_user_token_id(user2);
     let token_id_none = dispatcher.get_user_token_id('no_nft'.try_into().unwrap());
 
-    assert(token_id_1 == 1, 'User1 should have token ID 1');
-    assert(token_id_2 == 2, 'User2 should have token ID 2');
-    assert(token_id_none == 0, 'User without NFT should have token ID 0');
+    assert(token_id_1 == 1, 'User1 token ID wrong');
+    assert(token_id_2 == 2, 'User2 token ID wrong');
+    assert(token_id_none == 0, 'No NFT token ID wrong');
 }
 
 #[test]
@@ -161,17 +162,23 @@ fn test_get_minted_at() {
     let (dispatcher, owner) = deploy_nft_contract();
     let user: ContractAddress = 'user'.try_into().unwrap();
 
+    // Set block timestamp to a known value
+    let expected_timestamp: u64 = 1000000;
+    start_cheat_block_timestamp_global(expected_timestamp);
+
     // Mint NFT
     start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.mint_to_user(user);
     stop_cheat_caller_address(dispatcher.contract_address);
 
+    stop_cheat_block_timestamp_global();
+
     // Get token ID and check minted timestamp
     let token_id = dispatcher.get_user_token_id(user);
     let minted_at = dispatcher.get_minted_at(token_id);
 
-    // Timestamp should be greater than 0 (block timestamp)
-    assert(minted_at > 0, 'Minted timestamp should be set');
+    // Timestamp should match what we set
+    assert(minted_at == expected_timestamp, 'Wrong timestamp');
 }
 
 #[test]
@@ -195,7 +202,7 @@ fn test_burn_user_nft_success() {
 
     // Verify NFT exists
     let has_nft_before = dispatcher.user_has_nft(user);
-    assert(has_nft_before, 'User should have NFT before burn');
+    assert(has_nft_before, 'NFT should exist');
 
     // Burn NFT
     start_cheat_caller_address(dispatcher.contract_address, owner);
@@ -204,7 +211,7 @@ fn test_burn_user_nft_success() {
 
     // Verify NFT was burned
     let has_nft_after = dispatcher.user_has_nft(user);
-    assert(!has_nft_after, 'User should not have NFT after burn');
+    assert(!has_nft_after, 'NFT not burned');
 
     let token_id = dispatcher.get_user_token_id(user);
     assert(token_id == 0, 'Token ID should be 0 after burn');
@@ -252,11 +259,18 @@ fn test_nft_transfer_blocked() {
     dispatcher.mint_to_user(user1);
     stop_cheat_caller_address(dispatcher.contract_address);
 
-    // Try to transfer NFT from user1 to user2 - should be blocked
+    // Get the token ID
+    let token_id = dispatcher.get_user_token_id(user1);
+
+    // Create ERC721 dispatcher
+    let erc721_dispatcher = IERC721Dispatcher { contract_address: dispatcher.contract_address };
+
+    // Approve user1 to transfer (as owner of the token)
     start_cheat_caller_address(dispatcher.contract_address, user1);
-    // This would call the ERC721 transfer function which triggers before_update
-    // Since both from and to are non-zero, it should panic
-    dispatcher.contract_address; // Just to use the variable
+    erc721_dispatcher.approve(user1, token_id);
+
+    // Try to transfer NFT from user1 to user2 - should be blocked
+    erc721_dispatcher.transfer_from(user1, user2, token_id);
     stop_cheat_caller_address(dispatcher.contract_address);
 }
 

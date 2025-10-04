@@ -3,26 +3,18 @@ use crate::character_registry::ICharacterRegistry;
 use crate::scenario_registry::IScenarioRegistry;
 use crate::simulation_registry::ISimulationRegistry;
 use crate::owner_registry::IOwnerRegistry;
+use crate::session_registry::ISessionRegistry;
 use crate::types::VerificationResult;
 
 /// Kliver Registry Contract
 #[starknet::contract]
 pub mod kliver_registry {
-    use super::{ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry, VerificationResult};
-    // NUEVO: interfaz de sesiones
-    #[starknet::interface]
-    pub trait ISessionRegistry<TState> {
-        fn register_session(ref self: TState, session_id: felt252, root_hash: felt252, author: ContractAddress);
-        fn verify_session(self: @TState, session_id: felt252, root_hash: felt252) -> VerificationResult;
-        fn get_session_info(self: @TState, session_id: felt252) -> (felt252, ContractAddress);
-
-        // Opcional: trazabilidad de ventas/permiso de acceso (no habilita pruebas oficiales)
-        fn grant_access(ref self: TState, session_id: felt252, addr: ContractAddress);
-        fn has_access(self: @TState, session_id: felt252, addr: ContractAddress) -> bool;
-    }
+    use super::{ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry, ISessionRegistry, VerificationResult};
     use starknet::storage::{Map, StoragePointerReadAccess, StoragePointerWriteAccess, StorageMapReadAccess, StorageMapWriteAccess};
     use starknet::{ContractAddress, get_caller_address};
     use core::num::traits::Zero;
+
+    use crate::session_registry::{SessionRegistered, SessionAccessGranted};
 
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -56,23 +48,6 @@ pub mod kliver_registry {
         pub simulation_id: felt252,
         pub simulation_hash: felt252,
         pub registered_by: ContractAddress,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    pub struct SessionRegistered {
-        #[key]
-        pub session_id: felt252,
-        pub root_hash: felt252,
-        pub author: ContractAddress,
-        pub registered_by: ContractAddress,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    pub struct SessionAccessGranted {
-        #[key]
-        pub session_id: felt252,
-        pub grantee: ContractAddress,
-        pub granted_by: ContractAddress,
     }
 
     #[storage]

@@ -7,44 +7,51 @@ use kliver_on_chain::character_registry::{ICharacterRegistryDispatcher, ICharact
 use kliver_on_chain::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait};
 use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait};
 use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
+use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
 use kliver_on_chain::types::VerificationResult;
 
 /// Helper function to deploy the contract and return all dispatchers
-fn deploy_contract() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ISimulationRegistryDispatcher, IOwnerRegistryDispatcher, ContractAddress) {
+fn deploy_contract() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ISimulationRegistryDispatcher, IOwnerRegistryDispatcher, ISessionRegistryDispatcher, ContractAddress) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
     (
-        ICharacterRegistryDispatcher { contract_address }, 
+        ICharacterRegistryDispatcher { contract_address },
         IScenarioRegistryDispatcher { contract_address },
         ISimulationRegistryDispatcher { contract_address },
         IOwnerRegistryDispatcher { contract_address },
+        ISessionRegistryDispatcher { contract_address },
         owner
     )
 }
 
 /// Helper for character registry tests
 fn deploy_for_characters() -> (ICharacterRegistryDispatcher, ContractAddress, ContractAddress) {
-    let (char_dispatcher, _, _, _, owner) = deploy_contract();
+    let (char_dispatcher, _, _, _, _, owner) = deploy_contract();
     (char_dispatcher, char_dispatcher.contract_address, owner)
 }
 
-/// Helper for scenario registry tests  
+/// Helper for scenario registry tests
 fn deploy_for_scenarios() -> (IScenarioRegistryDispatcher, ContractAddress, ContractAddress) {
-    let (_, scenario_dispatcher, _, _, owner) = deploy_contract();
+    let (_, scenario_dispatcher, _, _, _, owner) = deploy_contract();
     (scenario_dispatcher, scenario_dispatcher.contract_address, owner)
 }
 
 fn deploy_for_simulations() -> (ISimulationRegistryDispatcher, ContractAddress, ContractAddress) {
-    let (_, _, sim_dispatcher, _, owner) = deploy_contract();
+    let (_, _, sim_dispatcher, _, _, owner) = deploy_contract();
     (sim_dispatcher, sim_dispatcher.contract_address, owner)
+}
+
+fn deploy_for_sessions() -> (ISessionRegistryDispatcher, ContractAddress, ContractAddress) {
+    let (_, _, _, _, session_dispatcher, owner) = deploy_contract();
+    (session_dispatcher, session_dispatcher.contract_address, owner)
 }
 
 #[test]
 fn test_constructor() {
-    let (_, _, _, owner_dispatcher, expected_owner) = deploy_contract();
+    let (_, _, _, owner_dispatcher, _, expected_owner) = deploy_contract();
     let actual_owner = owner_dispatcher.get_owner();
     assert(actual_owner == expected_owner, 'Wrong owner');
 }
@@ -61,7 +68,7 @@ fn test_constructor_zero_owner() {
 
     #[test]
     fn test_get_owner_returns_correct_owner() {
-        let (_, _, _, owner_dispatcher, expected_owner) = deploy_contract();
+        let (_, _, _, owner_dispatcher, _, expected_owner) = deploy_contract();
         let owner = owner_dispatcher.get_owner();
         assert_eq!(owner, expected_owner);
     }
@@ -699,97 +706,206 @@ fn test_batch_verify_simulations_empty_array() {
     assert_eq!(results.len(), 0);
 }
 
-// ===== REGISTRAR TESTS =====
+// ===== SESSION REGISTRY TESTS =====
 
 #[test]
-fn test_get_character_version_registrar_success() {
-    let (dispatcher, contract_address, owner) = deploy_for_characters();
+fn test_register_session_success() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let session_id: felt252 = 'session123';
+    let root_hash: felt252 = 'hash456';
+    let author: ContractAddress = 'author'.try_into().unwrap();
 
-    let character_version_id: felt252 = 123;
-    let character_version_hash: felt252 = 456;
-
-    // First register the character version
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_character_version(character_version_id, character_version_hash);
+    // Should not panic - first registration
+    dispatcher.register_session(session_id, root_hash, author);
     stop_cheat_caller_address(contract_address);
-
-    // Then get the registrar
-    let registrar = dispatcher.get_character_version_registrar(character_version_id);
-    assert_eq!(registrar, owner);
 }
 
 #[test]
-#[should_panic(expected: ('Character version not found', ))]
-fn test_get_character_version_registrar_not_found() {
-    let (dispatcher, _, _) = deploy_for_characters();
+#[should_panic(expected: ('Session already registered', ))]
+fn test_register_session_duplicate() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let session_id: felt252 = 'session123';
+    let hash1: felt252 = 'hash456';
+    let hash2: felt252 = 'hash789';
+    let author: ContractAddress = 'author'.try_into().unwrap();
+
+    start_cheat_caller_address(contract_address, owner);
+    // First registration should succeed
+    dispatcher.register_session(session_id, hash1, author);
+
+    // Second registration with same session ID should fail
+    dispatcher.register_session(session_id, hash2, author);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Session ID cannot be zero', ))]
+fn test_register_session_zero_id() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let session_id: felt252 = 0;
+    let root_hash: felt252 = 'hash456';
+    let author: ContractAddress = 'author'.try_into().unwrap();
+
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_session(session_id, root_hash, author);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Root hash cannot be zero', ))]
+fn test_register_session_zero_hash() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let session_id: felt252 = 'session123';
+    let root_hash: felt252 = 0;
+    let author: ContractAddress = 'author'.try_into().unwrap();
+
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_session(session_id, root_hash, author);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Author cannot be zero', ))]
+fn test_register_session_zero_author() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let session_id: felt252 = 'session123';
+    let root_hash: felt252 = 'hash456';
+    let author: ContractAddress = 0.try_into().unwrap();
+
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_session(session_id, root_hash, author);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+fn test_verify_session_valid() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+
+    let session_id: felt252 = 123;
+    let root_hash: felt252 = 456;
+    let author: ContractAddress = 'author'.try_into().unwrap();
+
+    // First register the session
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_session(session_id, root_hash, author);
+    stop_cheat_caller_address(contract_address);
+
+    // Then verify it
+    let result = dispatcher.verify_session(session_id, root_hash);
+    assert!(result == VerificationResult::Match);
+}
+
+#[test]
+fn test_verify_session_invalid_hash() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+
+    let session_id: felt252 = 123;
+    let root_hash: felt252 = 456;
+    let wrong_hash: felt252 = 789;
+    let author: ContractAddress = 'author'.try_into().unwrap();
+
+    // First register the session
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_session(session_id, root_hash, author);
+    stop_cheat_caller_address(contract_address);
+
+    // Then verify with wrong hash
+    let result = dispatcher.verify_session(session_id, wrong_hash);
+    assert!(result == VerificationResult::Mismatch);
+}
+
+#[test]
+fn test_verify_session_non_existent() {
+    let (dispatcher, _, _) = deploy_for_sessions();
+
+    let non_existent_id: felt252 = 999;
+    let some_hash: felt252 = 456;
+
+    // Try to verify non-existent session
+    let result = dispatcher.verify_session(non_existent_id, some_hash);
+    assert!(result == VerificationResult::NotFound);
+}
+
+#[test]
+fn test_get_session_info_success() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+
+    let session_id: felt252 = 123;
+    let root_hash: felt252 = 456;
+    let author: ContractAddress = 'author'.try_into().unwrap();
+
+    // First register the session
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_session(session_id, root_hash, author);
+    stop_cheat_caller_address(contract_address);
+
+    // Then get the session info
+    let (retrieved_hash, retrieved_author) = dispatcher.get_session_info(session_id);
+    assert_eq!(retrieved_hash, root_hash);
+    assert_eq!(retrieved_author, author);
+}
+
+#[test]
+#[should_panic(expected: ('Session not found', ))]
+fn test_get_session_info_not_found() {
+    let (dispatcher, _, _) = deploy_for_sessions();
 
     let non_existent_id: felt252 = 999;
 
-    // Try to get registrar for non-existent character version
-    dispatcher.get_character_version_registrar(non_existent_id);
+    // Try to get info for non-existent session
+    dispatcher.get_session_info(non_existent_id);
 }
 
 #[test]
-#[should_panic(expected: ('Version ID cannot be zero', ))]
-fn test_get_character_version_registrar_zero_id() {
-    let (dispatcher, _, _) = deploy_for_characters();
+fn test_grant_access_success() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
 
-    // Try to get registrar with zero ID
-    dispatcher.get_character_version_registrar(0);
-}
+    let session_id: felt252 = 123;
+    let root_hash: felt252 = 456;
+    let author: ContractAddress = 'author'.try_into().unwrap();
+    let grantee: ContractAddress = 'grantee'.try_into().unwrap();
 
-#[test]
-fn test_get_scenario_registrar_success() {
-    let (dispatcher, contract_address, owner) = deploy_for_scenarios();
-
-    let scenario_id: felt252 = 123;
-    let scenario_hash: felt252 = 456;
-
-    // First register the scenario
+    // First register the session
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_scenario(scenario_id, scenario_hash);
+    dispatcher.register_session(session_id, root_hash, author);
+
+    // Grant access
+    dispatcher.grant_access(session_id, grantee);
     stop_cheat_caller_address(contract_address);
 
-    // Then get the registrar
-    let registrar = dispatcher.get_scenario_registrar(scenario_id);
-    assert_eq!(registrar, owner);
+    // Verify access was granted
+    assert!(dispatcher.has_access(session_id, grantee));
 }
 
 #[test]
-#[should_panic(expected: ('Scenario not found', ))]
-fn test_get_scenario_registrar_not_found() {
-    let (dispatcher, _, _) = deploy_for_scenarios();
+fn test_has_access_returns_false_for_no_access() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
 
-    let non_existent_id: felt252 = 999;
+    let session_id: felt252 = 123;
+    let root_hash: felt252 = 456;
+    let author: ContractAddress = 'author'.try_into().unwrap();
+    let random_addr: ContractAddress = 'random'.try_into().unwrap();
 
-    // Try to get registrar for non-existent scenario
-    dispatcher.get_scenario_registrar(non_existent_id);
-}
-
-#[test]
-fn test_get_simulation_registrar_success() {
-    let (dispatcher, contract_address, owner) = deploy_for_simulations();
-
-    let simulation_id: felt252 = 123;
-    let simulation_hash: felt252 = 456;
-
-    // First register the simulation
+    // Register the session but don't grant access
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash);
+    dispatcher.register_session(session_id, root_hash, author);
     stop_cheat_caller_address(contract_address);
 
-    // Then get the registrar
-    let registrar = dispatcher.get_simulation_registrar(simulation_id);
-    assert_eq!(registrar, owner);
+    // Check access (should be false)
+    assert!(!dispatcher.has_access(session_id, random_addr));
 }
 
 #[test]
-#[should_panic(expected: ('Simulation not found', ))]
-fn test_get_simulation_registrar_not_found() {
-    let (dispatcher, _, _) = deploy_for_simulations();
+#[should_panic(expected: ('Session not found', ))]
+fn test_grant_access_nonexistent_session() {
+    let (dispatcher, contract_address, owner) = deploy_for_sessions();
 
-    let non_existent_id: felt252 = 999;
+    let non_existent_session: felt252 = 999;
+    let grantee: ContractAddress = 'grantee'.try_into().unwrap();
 
-    // Try to get registrar for non-existent simulation
-    dispatcher.get_simulation_registrar(non_existent_id);
+    start_cheat_caller_address(contract_address, owner);
+    // Try to grant access to non-existent session
+    dispatcher.grant_access(non_existent_session, grantee);
+    stop_cheat_caller_address(contract_address);
 }
