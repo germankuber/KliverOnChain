@@ -37,7 +37,6 @@ fn deploy_for_scenarios() -> (IScenarioRegistryDispatcher, ContractAddress, Cont
     (scenario_dispatcher, scenario_dispatcher.contract_address, owner)
 }
 
-/// Helper for simulation registry tests
 fn deploy_for_simulations() -> (ISimulationRegistryDispatcher, ContractAddress, ContractAddress) {
     let (_, _, sim_dispatcher, _, owner) = deploy_contract();
     (sim_dispatcher, sim_dispatcher.contract_address, owner)
@@ -698,4 +697,99 @@ fn test_batch_verify_simulations_empty_array() {
 
     // Check results - should be empty
     assert_eq!(results.len(), 0);
+}
+
+// ===== REGISTRAR TESTS =====
+
+#[test]
+fn test_get_character_version_registrar_success() {
+    let (dispatcher, contract_address, owner) = deploy_for_characters();
+
+    let character_version_id: felt252 = 123;
+    let character_version_hash: felt252 = 456;
+
+    // First register the character version
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_character_version(character_version_id, character_version_hash);
+    stop_cheat_caller_address(contract_address);
+
+    // Then get the registrar
+    let registrar = dispatcher.get_character_version_registrar(character_version_id);
+    assert_eq!(registrar, owner);
+}
+
+#[test]
+#[should_panic(expected: ('Character version not found', ))]
+fn test_get_character_version_registrar_not_found() {
+    let (dispatcher, _, _) = deploy_for_characters();
+
+    let non_existent_id: felt252 = 999;
+
+    // Try to get registrar for non-existent character version
+    dispatcher.get_character_version_registrar(non_existent_id);
+}
+
+#[test]
+#[should_panic(expected: ('Version ID cannot be zero', ))]
+fn test_get_character_version_registrar_zero_id() {
+    let (dispatcher, _, _) = deploy_for_characters();
+
+    // Try to get registrar with zero ID
+    dispatcher.get_character_version_registrar(0);
+}
+
+#[test]
+fn test_get_scenario_registrar_success() {
+    let (dispatcher, contract_address, owner) = deploy_for_scenarios();
+
+    let scenario_id: felt252 = 123;
+    let scenario_hash: felt252 = 456;
+
+    // First register the scenario
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_scenario(scenario_id, scenario_hash);
+    stop_cheat_caller_address(contract_address);
+
+    // Then get the registrar
+    let registrar = dispatcher.get_scenario_registrar(scenario_id);
+    assert_eq!(registrar, owner);
+}
+
+#[test]
+#[should_panic(expected: ('Scenario not found', ))]
+fn test_get_scenario_registrar_not_found() {
+    let (dispatcher, _, _) = deploy_for_scenarios();
+
+    let non_existent_id: felt252 = 999;
+
+    // Try to get registrar for non-existent scenario
+    dispatcher.get_scenario_registrar(non_existent_id);
+}
+
+#[test]
+fn test_get_simulation_registrar_success() {
+    let (dispatcher, contract_address, owner) = deploy_for_simulations();
+
+    let simulation_id: felt252 = 123;
+    let simulation_hash: felt252 = 456;
+
+    // First register the simulation
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_simulation(simulation_id, simulation_hash);
+    stop_cheat_caller_address(contract_address);
+
+    // Then get the registrar
+    let registrar = dispatcher.get_simulation_registrar(simulation_id);
+    assert_eq!(registrar, owner);
+}
+
+#[test]
+#[should_panic(expected: ('Simulation not found', ))]
+fn test_get_simulation_registrar_not_found() {
+    let (dispatcher, _, _) = deploy_for_simulations();
+
+    let non_existent_id: felt252 = 999;
+
+    // Try to get registrar for non-existent simulation
+    dispatcher.get_simulation_registrar(non_existent_id);
 }

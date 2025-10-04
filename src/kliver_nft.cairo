@@ -5,19 +5,19 @@ use starknet::ContractAddress;
 pub trait IKliverNFT<TContractState> {
     /// Mint NFT to a user when they login to Kliver platform (only owner)
     fn mint_to_user(ref self: TContractState, to: ContractAddress);
-    
+
     /// Check if a user already has a Kliver NFT
     fn user_has_nft(self: @TContractState, user: ContractAddress) -> bool;
-    
+
     /// Get total number of minted tokens
     fn total_supply(self: @TContractState) -> u256;
-    
+
     /// Get the token ID owned by a user (returns 0 if no NFT)
     fn get_user_token_id(self: @TContractState, user: ContractAddress) -> u256;
-    
+
     /// Get when a token was minted
     fn get_minted_at(self: @TContractState, token_id: u256) -> u64;
-    
+
     /// Burn a user's NFT (only owner, for account deletion)
     fn burn_user_nft(ref self: TContractState, user: ContractAddress);
 }
@@ -43,14 +43,17 @@ pub struct KliverUserBurned {
 
 #[starknet::contract]
 pub mod KliverNFT {
+    use core::num::traits::Zero;
     use openzeppelin::access::ownable::OwnableComponent;
     use openzeppelin::introspection::src5::SRC5Component;
-    use openzeppelin::token::erc721::{ERC721Component};
+    use openzeppelin::token::erc721::ERC721Component;
     use openzeppelin::upgrades::UpgradeableComponent;
     use openzeppelin::upgrades::interface::IUpgradeable;
-    use starknet::{ContractAddress, ClassHash, get_block_timestamp};
-    use starknet::storage::{Map, StoragePointerReadAccess, StoragePointerWriteAccess, StorageMapReadAccess, StorageMapWriteAccess};
-    use core::num::traits::Zero;
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::{ClassHash, ContractAddress, get_block_timestamp};
 
     component!(path: ERC721Component, storage: erc721, event: ERC721Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -80,7 +83,6 @@ pub mod KliverNFT {
         ownable: OwnableComponent::Storage,
         #[substorage(v0)]
         upgradeable: UpgradeableComponent::Storage,
-        
         // Kliver NFT specific storage
         total_supply: u256,
         user_to_token: Map<ContractAddress, u256>,
@@ -114,7 +116,7 @@ pub mod KliverNFT {
     fn constructor(
         ref self: ContractState,
         owner: ContractAddress,
-        base_uri: ByteArray  // ← Ahora es parametrizable
+        base_uri: ByteArray // ← Ahora es parametrizable
     ) {
         let name = "Kliver  Registry ";
         let symbol = "Kliver AI";
@@ -130,12 +132,13 @@ pub mod KliverNFT {
             ref self: ERC721Component::ComponentState<ContractState>,
             to: ContractAddress,
             token_id: u256,
-            auth: ContractAddress
+            auth: ContractAddress,
         ) {
-            let from = self.owner_of(token_id);
-            
+            // Check if token exists in the _owners mapping
+            let from = self.ERC721_owners.read(token_id);
+
+            // Block ONLY transfers (from != 0 && to != 0)
             // Allow minting (from == 0) and burning (to == 0)
-            // Block all transfers (from != 0 && to != 0)
             if from.is_non_zero() && to.is_non_zero() {
                 panic!("{}", Errors::NON_TRANSFERABLE);
             }
@@ -145,9 +148,8 @@ pub mod KliverNFT {
             ref self: ERC721Component::ComponentState<ContractState>,
             to: ContractAddress,
             token_id: u256,
-            auth: ContractAddress
-        ) {
-            // No additional logic needed after update
+            auth: ContractAddress,
+        ) {// No additional logic needed after update
         }
     }
 
@@ -163,56 +165,53 @@ pub mod KliverNFT {
     impl KliverNFTImpl of super::IKliverNFT<ContractState> {
         fn mint_to_user(ref self: ContractState, to: ContractAddress) {
             self.ownable.assert_only_owner();
-            
+
             // Validate address is not zero
             assert(to.is_non_zero(), Errors::INVALID_ADDRESS);
-            
+
             // Check if user already has an NFT
             assert(!self.user_has_nft(to), Errors::USER_ALREADY_HAS_NFT);
-            
+
             // Generate token ID (starting from 1)
             let current_supply = self.total_supply.read();
             let token_id = current_supply + 1;
-            
+
             // Mint the NFT
             self.erc721.mint(to, token_id);
-            
+
             // Update mappings
             self.user_to_token.write(to, token_id);
             let timestamp = get_block_timestamp();
             self.minted_at.write(token_id, timestamp);
-            
+
             // Update total supply
             self.total_supply.write(token_id);
-            
+
             // Emit event
-            self.emit(super::KliverUserMinted {
-                token_id,
-                to,
-                minted_at: timestamp
-            });
+            self.emit(super::KliverUserMinted { token_id, to, minted_at: timestamp });
         }
 
         fn burn_user_nft(ref self: ContractState, user: ContractAddress) {
             self.ownable.assert_only_owner();
-            
+
             // Get user's token ID
             let token_id = self.user_to_token.read(user);
             assert(token_id != 0, Errors::USER_HAS_NO_NFT);
-            
+
             // Burn the NFT
             self.erc721.burn(token_id);
-            
+
             // Clean up mappings
             self.user_to_token.write(user, 0);
             self.minted_at.write(token_id, 0);
-            
+
             // Emit event
-            self.emit(super::KliverUserBurned {
-                token_id,
-                from: user,
-                burned_at: get_block_timestamp()
-            });
+            self
+                .emit(
+                    super::KliverUserBurned {
+                        token_id, from: user, burned_at: get_block_timestamp(),
+                    },
+                );
         }
 
         fn user_has_nft(self: @ContractState, user: ContractAddress) -> bool {
