@@ -301,7 +301,7 @@ fn test_burn_exceeds_balance() {
 
 /// Test soulbound tokens cannot be transferred
 #[test]
-#[should_panic(expected: ('Token is soulbound',))]
+#[should_panic(expected: ('Soulbound token transfer',))]
 fn test_soulbound_transfer_blocked() {
     let (kliver_dispatcher, erc1155_dispatcher, _, owner) = deploy_nft_1155_contract();
     
@@ -441,4 +441,242 @@ fn test_with_timestamp() {
     
     stop_cheat_caller_address(kliver_dispatcher.contract_address);
     stop_cheat_block_timestamp_global();
+}
+
+/// Test total_supply function
+#[test]
+fn test_total_supply() {
+    let (kliver_dispatcher, _, _, owner) = deploy_nft_1155_contract();
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type
+    kliver_dispatcher.add_token_type(200, 1000, false, "supply.json");
+    
+    // Initially should be zero
+    assert_eq!(kliver_dispatcher.total_supply(200), 0);
+    
+    // Mint to users
+    let user1: ContractAddress = 'user1'.try_into().unwrap();
+    let user2: ContractAddress = 'user2'.try_into().unwrap();
+    
+    kliver_dispatcher.mint_to_user_unsafe(user1, 200, 10);
+    assert_eq!(kliver_dispatcher.total_supply(200), 10);
+    
+    kliver_dispatcher.mint_to_user_unsafe(user2, 200, 15);
+    assert_eq!(kliver_dispatcher.total_supply(200), 25);
+    
+    // Burn some tokens
+    kliver_dispatcher.burn_user_tokens(user1, 200, 3);
+    assert_eq!(kliver_dispatcher.total_supply(200), 22);
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
+}
+
+/// Test get_token_metadata function
+#[test]
+fn test_get_token_metadata() {
+    let (kliver_dispatcher, _, _, owner) = deploy_nft_1155_contract();
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type with metadata
+    let metadata = "https://example.com/metadata/201.json";
+    kliver_dispatcher.add_token_type(201, 1000, false, metadata);
+    
+    // Get metadata
+    let retrieved_metadata = kliver_dispatcher.get_token_metadata(201);
+    assert_eq!(retrieved_metadata, "https://example.com/metadata/201.json");
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
+}
+
+/// Test get_user_balance function
+#[test]
+fn test_get_user_balance() {
+    let (kliver_dispatcher, _, _, owner) = deploy_nft_1155_contract();
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type
+    kliver_dispatcher.add_token_type(202, 1000, false, "balance.json");
+    
+    let user: ContractAddress = 'user'.try_into().unwrap();
+    
+    // Initially should be zero
+    assert_eq!(kliver_dispatcher.get_user_balance(user, 202), 0);
+    
+    // Mint tokens
+    kliver_dispatcher.mint_to_user_unsafe(user, 202, 25);
+    assert_eq!(kliver_dispatcher.get_user_balance(user, 202), 25);
+    
+    // Burn some tokens
+    kliver_dispatcher.burn_user_tokens(user, 202, 5);
+    assert_eq!(kliver_dispatcher.get_user_balance(user, 202), 20);
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
+}
+
+/// Test add_token_type with duplicate token_id should fail
+#[test]
+#[should_panic(expected: ('Token type already exists', ))]
+fn test_add_token_type_duplicate() {
+    let (kliver_dispatcher, _, _, owner) = deploy_nft_1155_contract();
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type
+    kliver_dispatcher.add_token_type(203, 1000, false, "first.json");
+    
+    // Try to add same token_id again (should fail)
+    kliver_dispatcher.add_token_type(203, 500, true, "second.json");
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
+}
+
+/// Test add_token_type with zero max_supply
+#[test]
+fn test_add_token_type_zero_max_supply() {
+    let (kliver_dispatcher, _, _, owner) = deploy_nft_1155_contract();
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type with zero max supply (should be allowed)
+    kliver_dispatcher.add_token_type(204, 0, false, "zero_supply.json");
+    
+    // Verify it was added
+    let metadata = kliver_dispatcher.get_token_metadata(204);
+    assert_eq!(metadata, "zero_supply.json");
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
+}
+
+/// Test mint_to_user with max_supply (currently not enforced - TODO in contract)
+#[test]
+fn test_mint_with_max_supply_todo() {
+    let (kliver_dispatcher, _, _, owner) = deploy_nft_1155_contract();
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type with limited supply
+    kliver_dispatcher.add_token_type(205, 10, false, "limited.json");
+    
+    let user: ContractAddress = 'user'.try_into().unwrap();
+    
+    // Currently this passes because max_supply validation is TODO in contract
+    kliver_dispatcher.mint_to_user_unsafe(user, 205, 15);
+    
+    // Verify tokens were minted (contract doesn't enforce max_supply yet)
+    assert_eq!(kliver_dispatcher.get_user_balance(user, 205), 15);
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
+}
+
+/// Test burn_user_tokens with insufficient balance
+#[test]
+#[should_panic(expected: ('Insufficient balance', ))]
+fn test_burn_insufficient_balance() {
+    let (kliver_dispatcher, _, _, owner) = deploy_nft_1155_contract();
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type
+    kliver_dispatcher.add_token_type(206, 1000, false, "burn_test.json");
+    
+    let user: ContractAddress = 'user'.try_into().unwrap();
+    
+    // Mint some tokens
+    kliver_dispatcher.mint_to_user_unsafe(user, 206, 5);
+    
+    // Try to burn more than user has (should fail)
+    kliver_dispatcher.burn_user_tokens(user, 206, 10);
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
+}
+
+/// Test individual balance_of function from ERC1155
+#[test]
+fn test_balance_of_individual() {
+    let (_, erc1155_dispatcher, _, owner) = deploy_nft_1155_contract();
+    let kliver_dispatcher = IKliverNFT1155Dispatcher { contract_address: erc1155_dispatcher.contract_address };
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type
+    kliver_dispatcher.add_token_type(207, 1000, false, "individual.json");
+    
+    let user: ContractAddress = 'user'.try_into().unwrap();
+    
+    // Initially should be zero
+    assert_eq!(erc1155_dispatcher.balance_of(user, 207), 0);
+    
+    // Mint tokens
+    kliver_dispatcher.mint_to_user_unsafe(user, 207, 30);
+    assert_eq!(erc1155_dispatcher.balance_of(user, 207), 30);
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
+}
+
+/// Test approval functions are disabled
+#[test]
+#[should_panic(expected: ('Approvals disabled', ))]
+fn test_approval_functions_disabled() {
+    let (_, erc1155_dispatcher, _, _) = deploy_nft_1155_contract();
+    
+    let user: ContractAddress = 'user'.try_into().unwrap();
+    let operator: ContractAddress = 'operator'.try_into().unwrap();
+    
+    start_cheat_caller_address(erc1155_dispatcher.contract_address, user);
+    
+    // Try to set approval (should fail - approvals are disabled)
+    erc1155_dispatcher.set_approval_for_all(operator, true);
+    
+    stop_cheat_caller_address(erc1155_dispatcher.contract_address);
+}
+
+/// Test safe_transfer_from_unsafe allows transfers (it's unsafe for testing)
+#[test]
+fn test_safe_transfer_unsafe_works() {
+    let (kliver_dispatcher, _, _, owner) = deploy_nft_1155_contract();
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type
+    kliver_dispatcher.add_token_type(208, 1000, false, "transfer_test.json");
+    
+    let user1: ContractAddress = 'user1'.try_into().unwrap();
+    let user2: ContractAddress = 'user2'.try_into().unwrap();
+    
+    // Mint tokens to user1
+    kliver_dispatcher.mint_to_user_unsafe(user1, 208, 10);
+    
+    // Verify user1 has tokens
+    assert_eq!(kliver_dispatcher.get_user_balance(user1, 208), 10);
+    assert_eq!(kliver_dispatcher.get_user_balance(user2, 208), 0);
+    
+    // Use unsafe transfer (should work - it's designed for testing)
+    kliver_dispatcher.safe_transfer_from_unsafe(user1, user2, 208, 5);
+    
+    // Verify transfer worked
+    assert_eq!(kliver_dispatcher.get_user_balance(user1, 208), 5);
+    assert_eq!(kliver_dispatcher.get_user_balance(user2, 208), 5);
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
+}
+
+/// Test URI function through get_token_metadata
+#[test]
+fn test_uri_function() {
+    let (kliver_dispatcher, _, _, owner) = deploy_nft_1155_contract();
+    
+    start_cheat_caller_address(kliver_dispatcher.contract_address, owner);
+    
+    // Add token type with metadata URI
+    kliver_dispatcher.add_token_type(209, 1000, false, "https://api.kliver.io/metadata/209.json");
+    
+    // Get URI through Kliver interface
+    let uri = kliver_dispatcher.get_token_metadata(209);
+    assert_eq!(uri, "https://api.kliver.io/metadata/209.json");
+    
+    stop_cheat_caller_address(kliver_dispatcher.contract_address);
 }

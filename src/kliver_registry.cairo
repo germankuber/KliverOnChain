@@ -15,6 +15,7 @@ pub mod kliver_registry {
     use core::num::traits::Zero;
 
     use crate::session_registry::{SessionRegistered, SessionAccessGranted, SessionMetadata, SessionInfo};
+    use crate::simulation_registry::{SimulationMetadata, SimulationInfo};
 
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -47,7 +48,9 @@ pub mod kliver_registry {
         #[key]
         pub simulation_id: felt252,
         pub simulation_hash: felt252,
-        pub registered_by: ContractAddress,
+        pub author: ContractAddress,
+        pub character_id: felt252,
+        pub scenario_id: felt252,
     }
 
     #[storage]
@@ -60,12 +63,16 @@ pub mod kliver_registry {
         scenarios: Map<felt252, felt252>,
         /// Maps simulation ID to its hash
         simulations: Map<felt252, felt252>,
+        // Simulations metadata:
+        simulation_authors: Map<felt252, ContractAddress>,        // simulation_id -> author
+        simulation_characters: Map<felt252, felt252>,            // simulation_id -> character_id
+        simulation_scenarios: Map<felt252, felt252>,             // simulation_id -> scenario_id
         // Sessions:
-        session_roots: Map<felt252, felt252>,                  // session_id -> root_hash
-        session_simulations: Map<felt252, felt252>,            // session_id -> simulation_id
-        session_authors: Map<felt252, ContractAddress>,        // session_id -> author (seller original)
-        session_scores: Map<felt252, u32>,                     // session_id -> score
-        session_access: Map<(felt252, ContractAddress), bool>, // (session_id, addr) -> true
+        session_roots: Map<felt252, felt252>,                     // session_id -> root_hash
+        session_simulations: Map<felt252, felt252>,              // session_id -> simulation_id
+        session_authors: Map<felt252, ContractAddress>,          // session_id -> author (seller original)
+        session_scores: Map<felt252, u32>,                       // session_id -> score
+        session_access: Map<(felt252, ContractAddress), bool>,   // (session_id, addr) -> true
     }
 
     pub mod Errors {
@@ -74,6 +81,8 @@ pub mod kliver_registry {
         pub const AUTHOR_CANNOT_BE_ZERO: felt252 = 'Author cannot be zero';
         pub const SIMULATION_ID_CANNOT_BE_ZERO: felt252 = 'Simulation ID cannot be zero';
         pub const SIMULATION_NOT_FOUND: felt252 = 'Simulation not found';
+        pub const CHARACTER_NOT_FOUND: felt252 = 'Character not found';
+        pub const SCENARIO_NOT_FOUND: felt252 = 'Scenario not found';
         pub const SESSION_ALREADY_REGISTERED: felt252 = 'Session already registered';
         pub const SESSION_NOT_FOUND: felt252 = 'Session not found';
         pub const GRANTEE_CANNOT_BE_ZERO: felt252 = 'Grantee cannot be zero';
@@ -272,7 +281,7 @@ pub mod kliver_registry {
     // Simulation Registry Implementation
     #[abi(embed_v0)]
     impl SimulationRegistryImpl of ISimulationRegistry<ContractState> {
-        fn register_simulation(ref self: ContractState, simulation_id: felt252, simulation_hash: felt252) {
+        fn register_simulation(ref self: ContractState, simulation_id: felt252, simulation_hash: felt252, metadata: SimulationMetadata) {
             // Check if contract is paused
             self._assert_not_paused();
             // Only owner can register simulations
@@ -281,19 +290,35 @@ pub mod kliver_registry {
             // Validate inputs
             assert(simulation_id != 0, 'Simulation ID cannot be zero');
             assert(simulation_hash != 0, 'Simulation hash cannot be zero');
+            assert(!metadata.author.is_zero(), 'Author cannot be zero');
+            assert(metadata.character_id != 0, 'Character ID cannot be zero');
+            assert(metadata.scenario_id != 0, 'Scenario ID cannot be zero');
+
+            // Validate that character exists
+            let character_hash = self.character_versions.read(metadata.character_id);
+            assert(character_hash != 0, Errors::CHARACTER_NOT_FOUND);
+
+            // Validate that scenario exists
+            let scenario_hash = self.scenarios.read(metadata.scenario_id);
+            assert(scenario_hash != 0, Errors::SCENARIO_NOT_FOUND);
 
             // Check if simulation is already registered
             let existing_hash = self.simulations.read(simulation_id);
             assert(existing_hash == 0, 'Simulation already registered');
 
-            // Save the simulation
+            // Save the simulation and metadata
             self.simulations.write(simulation_id, simulation_hash);
+            self.simulation_authors.write(simulation_id, metadata.author);
+            self.simulation_characters.write(simulation_id, metadata.character_id);
+            self.simulation_scenarios.write(simulation_id, metadata.scenario_id);
 
             // Emit event
             self.emit(SimulationRegistered {
                 simulation_id,
                 simulation_hash,
-                registered_by: get_caller_address()
+                author: metadata.author,
+                character_id: metadata.character_id,
+                scenario_id: metadata.scenario_id,
             });
         }
 
@@ -356,6 +381,26 @@ pub mod kliver_registry {
             assert(stored_hash != 0, 'Simulation not found');
 
             stored_hash
+        }
+
+        fn get_simulation_info(self: @ContractState, simulation_id: felt252) -> SimulationInfo {
+            // Validate input
+            assert(simulation_id != 0, 'Simulation ID cannot be zero');
+
+            // Get the stored data for this simulation ID
+            let simulation_hash = self.simulations.read(simulation_id);
+            assert(simulation_hash != 0, 'Simulation not found');
+
+            let author = self.simulation_authors.read(simulation_id);
+            let character_id = self.simulation_characters.read(simulation_id);
+            let scenario_id = self.simulation_scenarios.read(simulation_id);
+
+            SimulationInfo {
+                simulation_hash,
+                author,
+                character_id,
+                scenario_id,
+            }
         }
     }
 

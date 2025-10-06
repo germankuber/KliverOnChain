@@ -5,7 +5,7 @@ use core::array::ArrayTrait;
 // Import contract interfaces from modular structure
 use kliver_on_chain::character_registry::{ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait};
 use kliver_on_chain::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait};
-use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait};
+use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata, SimulationInfo};
 use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
 use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait, SessionMetadata, SessionInfo};
 use kliver_on_chain::types::VerificationResult;
@@ -39,23 +39,62 @@ fn deploy_for_scenarios() -> (IScenarioRegistryDispatcher, ContractAddress, Cont
     (scenario_dispatcher, scenario_dispatcher.contract_address, owner)
 }
 
-fn deploy_for_simulations() -> (ISimulationRegistryDispatcher, ContractAddress, ContractAddress) {
-    let (_, _, sim_dispatcher, _, _, owner) = deploy_contract();
-    (sim_dispatcher, sim_dispatcher.contract_address, owner)
+fn deploy_for_simulations() -> (ISimulationRegistryDispatcher, ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ContractAddress, ContractAddress) {
+    let (char_dispatcher, scenario_dispatcher, sim_dispatcher, _, _, owner) = deploy_contract();
+    (sim_dispatcher, char_dispatcher, scenario_dispatcher, sim_dispatcher.contract_address, owner)
 }
 
-fn deploy_for_sessions() -> (ISessionRegistryDispatcher, ISimulationRegistryDispatcher, ContractAddress, ContractAddress) {
-    let (_, _, sim_dispatcher, _, session_dispatcher, owner) = deploy_contract();
-    (session_dispatcher, sim_dispatcher, session_dispatcher.contract_address, owner)
+fn deploy_for_sessions() -> (ISessionRegistryDispatcher, ISimulationRegistryDispatcher, ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ContractAddress, ContractAddress) {
+    let (char_dispatcher, scenario_dispatcher, sim_dispatcher, _, session_dispatcher, owner) = deploy_contract();
+    (session_dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, session_dispatcher.contract_address, owner)
 }
 
-/// Helper function to register a test simulation and return its ID
-fn register_test_simulation(sim_dispatcher: ISimulationRegistryDispatcher, contract_address: ContractAddress, owner: ContractAddress) -> felt252 {
-    let simulation_id: felt252 = 'test_sim_123';
-    let simulation_hash: felt252 = 'sim_hash_456';
+/// Helper function to register a test character and return its ID
+fn register_test_character(char_dispatcher: ICharacterRegistryDispatcher, contract_address: ContractAddress, owner: ContractAddress) -> felt252 {
+    let character_id: felt252 = 'test_char_123';
+    let character_hash: felt252 = 'char_hash_456';
     
     start_cheat_caller_address(contract_address, owner);
-    sim_dispatcher.register_simulation(simulation_id, simulation_hash);
+    char_dispatcher.register_character_version(character_id, character_hash);
+    stop_cheat_caller_address(contract_address);
+    
+    character_id
+}
+
+/// Helper function to register a test scenario and return its ID
+fn register_test_scenario(scenario_dispatcher: IScenarioRegistryDispatcher, contract_address: ContractAddress, owner: ContractAddress) -> felt252 {
+    let scenario_id: felt252 = 'test_scen_123';
+    let scenario_hash: felt252 = 'scen_hash_456';
+    
+    start_cheat_caller_address(contract_address, owner);
+    scenario_dispatcher.register_scenario(scenario_id, scenario_hash);
+    stop_cheat_caller_address(contract_address);
+    
+    scenario_id
+}
+
+/// Helper function to register a test simulation with metadata and return its ID
+fn register_test_simulation(
+    sim_dispatcher: ISimulationRegistryDispatcher, 
+    char_dispatcher: ICharacterRegistryDispatcher,
+    scenario_dispatcher: IScenarioRegistryDispatcher,
+    contract_address: ContractAddress, 
+    owner: ContractAddress
+) -> felt252 {
+    // First register character and scenario
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 'test_sim_123';
+    let simulation_hash: felt252 = 'sim_hash_456';
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
+    
+    start_cheat_caller_address(contract_address, owner);
+    sim_dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
     stop_cheat_caller_address(contract_address);
     
     simulation_id
@@ -320,30 +359,173 @@ fn test_get_scenario_hash_not_found() {
     dispatcher.get_scenario_hash(non_existent_id);
 }
 
-// ===== SIMULATION TESTS =====
+#[test]
+fn test_verify_scenario_invalid_hash() {
+    let (dispatcher, contract_address, owner) = deploy_for_scenarios();
+
+    let scenario_id: felt252 = 123;
+    let scenario_hash: felt252 = 456;
+    let wrong_hash: felt252 = 789;
+
+    // First register the scenario
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_scenario(scenario_id, scenario_hash);
+    stop_cheat_caller_address(contract_address);
+
+    // Then verify with wrong hash
+    let result = dispatcher.verify_scenario(scenario_id, wrong_hash);
+    assert!(result == VerificationResult::Mismatch);
+}
 
 #[test]
-fn test_register_simulation_success() {
-    let (dispatcher, contract_address, owner) = deploy_for_simulations();
-    let simulation_id: felt252 = 'sim123';
-    let simulation_hash: felt252 = 'hash456';
+fn test_verify_scenario_non_existent() {
+    let (dispatcher, _, _) = deploy_for_scenarios();
+
+    let non_existent_id: felt252 = 999;
+    let some_hash: felt252 = 456;
+
+    // Try to verify non-existent scenario
+    let result = dispatcher.verify_scenario(non_existent_id, some_hash);
+    assert!(result == VerificationResult::NotFound);
+}
+
+#[test]
+#[should_panic(expected: ('Scenario ID cannot be zero', ))]
+fn test_register_scenario_zero_id() {
+    let (dispatcher, contract_address, owner) = deploy_for_scenarios();
+    let scenario_id: felt252 = 0;
+    let scenario_hash: felt252 = 'hash456';
     
     start_cheat_caller_address(contract_address, owner);
-    // Should not panic - first registration
-    dispatcher.register_simulation(simulation_id, simulation_hash);
+    dispatcher.register_scenario(scenario_id, scenario_hash);
     stop_cheat_caller_address(contract_address);
 }
 
 #[test]
-fn test_verify_simulation_valid() {
-    let (dispatcher, contract_address, owner) = deploy_for_simulations();
+#[should_panic(expected: ('Scenario hash cannot be zero', ))]
+fn test_register_scenario_zero_hash() {
+    let (dispatcher, contract_address, owner) = deploy_for_scenarios();
+    let scenario_id: felt252 = 'scenario123';
+    let scenario_hash: felt252 = 0;
+    
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_scenario(scenario_id, scenario_hash);
+    stop_cheat_caller_address(contract_address);
+}
 
+// ===== SIMULATION TESTS =====
+
+#[test]
+fn test_register_simulation_success() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 'sim123';
+    let simulation_hash: felt252 = 'hash456';
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
+    
+    start_cheat_caller_address(contract_address, owner);
+    // Should not panic - first registration
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Character not found', ))]
+fn test_register_simulation_invalid_character() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    
+    // Only register scenario, not character
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 'sim123';
+    let simulation_hash: felt252 = 'hash456';
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id: 'invalid_char',  // This character doesn't exist
+        scenario_id,
+    };
+    
+    start_cheat_caller_address(contract_address, owner);
+    // Should panic - character not found
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+}
+
+#[test]
+#[should_panic(expected: ('Scenario not found', ))]
+fn test_register_simulation_invalid_scenario() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    
+    // Only register character, not scenario
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 'sim123';
+    let simulation_hash: felt252 = 'hash456';
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id: 'invalid_scenario',  // This scenario doesn't exist
+    };
+    
+    start_cheat_caller_address(contract_address, owner);
+    // Should panic - scenario not found
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+}
+
+#[test]
+fn test_get_simulation_info_success() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 'sim123';
+    let simulation_hash: felt252 = 'hash456';
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
+    
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    stop_cheat_caller_address(contract_address);
+    
+    // Get simulation info
+    let info = dispatcher.get_simulation_info(simulation_id);
+    assert(info.simulation_hash == simulation_hash, 'Wrong simulation hash');
+    assert(info.author == owner, 'Wrong author');
+    assert(info.character_id == character_id, 'Wrong character_id');
+    assert(info.scenario_id == scenario_id, 'Wrong scenario_id');
+}
+
+#[test]
+fn test_verify_simulation_valid() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
     let simulation_id: felt252 = 123;
     let simulation_hash: felt252 = 456;
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
 
     // First register the simulation
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash);
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then verify it
@@ -353,19 +535,156 @@ fn test_verify_simulation_valid() {
 
 #[test]
 fn test_get_simulation_hash_success() {
-    let (dispatcher, contract_address, owner) = deploy_for_simulations();
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
 
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
     let simulation_id: felt252 = 123;
     let simulation_hash: felt252 = 456;
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
 
     // First register the simulation
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash);
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then get the hash
     let retrieved_hash = dispatcher.get_simulation_hash(simulation_id);
     assert_eq!(retrieved_hash, simulation_hash);
+}
+
+#[test]
+fn test_verify_simulation_invalid_hash() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 123;
+    let simulation_hash: felt252 = 456;
+    let wrong_hash: felt252 = 789;
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
+
+    // First register the simulation
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    stop_cheat_caller_address(contract_address);
+
+    // Then verify with wrong hash
+    let result = dispatcher.verify_simulation(simulation_id, wrong_hash);
+    assert!(result == VerificationResult::Mismatch);
+}
+
+#[test]
+fn test_verify_simulation_non_existent() {
+    let (dispatcher, _, _, _, _) = deploy_for_simulations();
+
+    let non_existent_id: felt252 = 999;
+    let some_hash: felt252 = 456;
+
+    // Try to verify non-existent simulation
+    let result = dispatcher.verify_simulation(non_existent_id, some_hash);
+    assert!(result == VerificationResult::NotFound);
+}
+
+#[test]
+#[should_panic(expected: ('Simulation not found', ))]
+fn test_get_simulation_hash_not_found() {
+    let (dispatcher, _, _, _, _) = deploy_for_simulations();
+
+    let non_existent_id: felt252 = 999;
+
+    // Try to get hash for non-existent simulation
+    dispatcher.get_simulation_hash(non_existent_id);
+}
+
+#[test]
+#[should_panic(expected: ('Simulation not found', ))]
+fn test_get_simulation_info_not_found() {
+    let (dispatcher, _, _, _, _) = deploy_for_simulations();
+
+    let non_existent_id: felt252 = 999;
+
+    // Try to get info for non-existent simulation
+    dispatcher.get_simulation_info(non_existent_id);
+}
+
+#[test]
+#[should_panic(expected: ('Simulation ID cannot be zero', ))]
+fn test_register_simulation_zero_id() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 0;
+    let simulation_hash: felt252 = 'hash456';
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
+    
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Simulation hash cannot be zero', ))]
+fn test_register_simulation_zero_hash() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 'sim123';
+    let simulation_hash: felt252 = 0;
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
+    
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Author cannot be zero', ))]
+fn test_register_simulation_zero_author() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 'sim123';
+    let simulation_hash: felt252 = 'hash456';
+    let zero_author: ContractAddress = 0.try_into().unwrap();
+    let metadata = SimulationMetadata {
+        author: zero_author,
+        character_id,
+        scenario_id,
+    };
+    
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    stop_cheat_caller_address(contract_address);
 }
 
 // ===== BATCH CHARACTER VERSION TESTS =====
@@ -626,8 +945,12 @@ fn test_batch_verify_scenarios_empty_array() {
 
 #[test]
 fn test_batch_verify_simulations_all_valid() {
-    let (dispatcher, contract_address, owner) = deploy_for_simulations();
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
 
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
     // Register multiple simulations
     let sim_id_1: felt252 = 100;
     let sim_hash_1: felt252 = 200;
@@ -635,11 +958,17 @@ fn test_batch_verify_simulations_all_valid() {
     let sim_hash_2: felt252 = 201;
     let sim_id_3: felt252 = 102;
     let sim_hash_3: felt252 = 202;
+    
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
 
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(sim_id_1, sim_hash_1);
-    dispatcher.register_simulation(sim_id_2, sim_hash_2);
-    dispatcher.register_simulation(sim_id_3, sim_hash_3);
+    dispatcher.register_simulation(sim_id_1, sim_hash_1, metadata);
+    dispatcher.register_simulation(sim_id_2, sim_hash_2, metadata);
+    dispatcher.register_simulation(sim_id_3, sim_hash_3, metadata);
     stop_cheat_caller_address(contract_address);
 
     // Prepare batch verification array
@@ -667,18 +996,28 @@ fn test_batch_verify_simulations_all_valid() {
 
 #[test]
 fn test_batch_verify_simulations_mixed_results() {
-    let (dispatcher, contract_address, owner) = deploy_for_simulations();
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
 
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
     // Register only some simulations
     let sim_id_1: felt252 = 100;
     let sim_hash_1: felt252 = 200;
     let sim_id_2: felt252 = 101;
     let wrong_hash_2: felt252 = 999; // Wrong hash
     let sim_id_3: felt252 = 102; // Not registered
+    
+    let metadata = SimulationMetadata {
+        author: owner,
+        character_id,
+        scenario_id,
+    };
 
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(sim_id_1, sim_hash_1);
-    dispatcher.register_simulation(sim_id_2, 201); // Register with different hash
+    dispatcher.register_simulation(sim_id_1, sim_hash_1, metadata);
+    dispatcher.register_simulation(sim_id_2, 201, metadata); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
     // Prepare batch verification array
@@ -706,7 +1045,7 @@ fn test_batch_verify_simulations_mixed_results() {
 
 #[test]
 fn test_batch_verify_simulations_empty_array() {
-    let (dispatcher, _, _) = deploy_for_simulations();
+    let (dispatcher, _, _, _, _) = deploy_for_simulations();
 
     // Prepare empty batch verification array
     let batch_array = ArrayTrait::new();
@@ -722,10 +1061,10 @@ fn test_batch_verify_simulations_empty_array() {
 
 #[test]
 fn test_register_session_success() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
     
     // First register a simulation
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
     
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 'hash456';
@@ -741,10 +1080,10 @@ fn test_register_session_success() {
 #[test]
 #[should_panic(expected: ('Session already registered', ))]
 fn test_register_session_duplicate() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
     
     // First register a simulation
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
     
     let session_id: felt252 = 'session123';
     let hash1: felt252 = 'hash456';
@@ -765,10 +1104,10 @@ fn test_register_session_duplicate() {
 #[test]
 #[should_panic(expected: ('Session ID cannot be zero', ))]
 fn test_register_session_zero_id() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
     
     // Register a simulation first
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
     
     let session_id: felt252 = 0;
     let root_hash: felt252 = 'hash456';
@@ -783,10 +1122,10 @@ fn test_register_session_zero_id() {
 #[test]
 #[should_panic(expected: ('Root hash cannot be zero', ))]
 fn test_register_session_zero_hash() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
     
     // Register a simulation first
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
     
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 0;
@@ -801,10 +1140,10 @@ fn test_register_session_zero_hash() {
 #[test]
 #[should_panic(expected: ('Author cannot be zero', ))]
 fn test_register_session_zero_author() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
     
     // Register a simulation first
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
     
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 'hash456';
@@ -818,10 +1157,10 @@ fn test_register_session_zero_author() {
 
 #[test]
 fn test_verify_session_valid() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
 
     // Register a simulation first
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
@@ -840,10 +1179,10 @@ fn test_verify_session_valid() {
 
 #[test]
 fn test_verify_session_invalid_hash() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
 
     // Register a simulation first
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
@@ -863,7 +1202,7 @@ fn test_verify_session_invalid_hash() {
 
 #[test]
 fn test_verify_session_non_existent() {
-    let (dispatcher, _, _, _) = deploy_for_sessions();
+    let (dispatcher, _, _, _, _, _) = deploy_for_sessions();
 
     let non_existent_id: felt252 = 999;
     let some_hash: felt252 = 456;
@@ -875,10 +1214,10 @@ fn test_verify_session_non_existent() {
 
 #[test]
 fn test_get_session_info_success() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
 
     // Register a simulation first
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
@@ -901,7 +1240,7 @@ fn test_get_session_info_success() {
 #[test]
 #[should_panic(expected: ('Session not found', ))]
 fn test_get_session_info_not_found() {
-    let (dispatcher, _, _, _) = deploy_for_sessions();
+    let (dispatcher, _, _, _, _, _) = deploy_for_sessions();
 
     let non_existent_id: felt252 = 999;
 
@@ -911,10 +1250,10 @@ fn test_get_session_info_not_found() {
 
 #[test]
 fn test_grant_access_success() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
 
     // Register a simulation first
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
@@ -936,10 +1275,10 @@ fn test_grant_access_success() {
 
 #[test]
 fn test_has_access_returns_false_for_no_access() {
-    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
 
     // Register a simulation first
-    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
@@ -959,7 +1298,7 @@ fn test_has_access_returns_false_for_no_access() {
 #[test]
 #[should_panic(expected: ('Session not found', ))]
 fn test_grant_access_nonexistent_session() {
-    let (dispatcher, _, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, _, _, _, contract_address, owner) = deploy_for_sessions();
 
     let non_existent_session: felt252 = 999;
     let grantee: ContractAddress = 'grantee'.try_into().unwrap();
@@ -973,7 +1312,7 @@ fn test_grant_access_nonexistent_session() {
 #[test]
 #[should_panic(expected: ('Simulation not found', ))]
 fn test_register_session_invalid_simulation() {
-    let (dispatcher, _, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, _, _, _, contract_address, owner) = deploy_for_sessions();
     
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 'hash456';
