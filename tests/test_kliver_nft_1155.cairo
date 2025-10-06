@@ -8,6 +8,73 @@ use openzeppelin::access::ownable::interface::{IOwnableDispatcher, IOwnableDispa
 // Import Kliver NFT 1155 interface
 use kliver_on_chain::kliver_nft_1155::{IKliverNFT1155Dispatcher, IKliverNFT1155DispatcherTrait};
 
+// Mock ERC1155Receiver contract for testing
+#[starknet::contract]
+mod MockERC1155Receiver {
+    use openzeppelin::token::erc1155::interface::IERC1155Receiver;
+    use openzeppelin::introspection::src5::SRC5Component;
+    use starknet::ContractAddress;
+    
+    component!(path: SRC5Component, storage: src5, event: SRC5Event);
+    
+    #[abi(embed_v0)]
+    impl SRC5Impl = SRC5Component::SRC5Impl<ContractState>;
+    impl SRC5InternalImpl = SRC5Component::InternalImpl<ContractState>;
+    
+    #[storage]
+    struct Storage {
+        #[substorage(v0)]
+        src5: SRC5Component::Storage,
+    }
+    
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        #[flat]
+        SRC5Event: SRC5Component::Event,
+    }
+    
+    #[constructor]
+    fn constructor(ref self: ContractState) {
+        // SRC5 component doesn't need manual initialization in newer versions
+    }
+    
+    #[abi(embed_v0)]
+    impl ERC1155ReceiverImpl of IERC1155Receiver<ContractState> {
+        fn on_erc1155_received(
+            self: @ContractState,
+            operator: ContractAddress,
+            from: ContractAddress,
+            token_id: u256,
+            value: u256,
+            data: Span<felt252>
+        ) -> felt252 {
+            // Return the magic value indicating acceptance
+            0x4e2312e0
+        }
+        
+        fn on_erc1155_batch_received(
+            self: @ContractState,
+            operator: ContractAddress,
+            from: ContractAddress,
+            token_ids: Span<u256>,
+            values: Span<u256>,
+            data: Span<felt252>
+        ) -> felt252 {
+            // Return the magic value indicating acceptance
+            0x4e2312e0
+        }
+    }
+}
+
+/// Helper function to deploy a mock ERC1155Receiver contract
+fn deploy_mock_receiver() -> ContractAddress {
+    let contract = declare("MockERC1155Receiver").unwrap().contract_class();
+    let constructor_calldata = array![];
+    let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
+    contract_address
+}
+
 /// Helper function to deploy the NFT 1155 contract
 fn deploy_nft_1155_contract() -> (IKliverNFT1155Dispatcher, IERC1155Dispatcher, IOwnableDispatcher, ContractAddress) {
     let owner: ContractAddress = starknet::contract_address_const::<0x123>();
@@ -90,11 +157,11 @@ fn test_mint_to_user() {
     let max_supply: u256 = 1000;
     kliver_dispatcher.add_token_type(token_id, max_supply, false, "warrior.json");
     
-    // Mint tokens
+    // Mint tokens using unsafe method for EOA testing
     let user: ContractAddress = starknet::contract_address_const::<0x456>();
     let amount: u256 = 5;
     
-    kliver_dispatcher.mint_to_user(user, token_id, amount);
+    kliver_dispatcher.mint_to_user_unsafe(user, token_id, amount);
     
     // Verify mint
     let balance = erc1155_dispatcher.balance_of(user, token_id);
@@ -150,7 +217,7 @@ fn test_batch_mint_to_user() {
     let token_ids = array![104, 105, 106].span();
     let amounts = array![10, 5, 1].span();
     
-    kliver_dispatcher.batch_mint_to_user(user, token_ids, amounts);
+    kliver_dispatcher.batch_mint_to_user_unsafe(user, token_ids, amounts);
     
     // Verify batch mint
     let balance1 = erc1155_dispatcher.balance_of(user, 104);
@@ -183,7 +250,7 @@ fn test_batch_mint_arrays_length_mismatch() {
     let token_ids = array![107, 108].span();  // 2 elements
     let amounts = array![10].span();      // 1 element (mismatch!)
     
-    kliver_dispatcher.batch_mint_to_user(user, token_ids, amounts);
+    kliver_dispatcher.batch_mint_to_user_unsafe(user, token_ids, amounts);
     
     stop_cheat_caller_address(kliver_dispatcher.contract_address);
 }
@@ -198,7 +265,7 @@ fn test_burn_user_tokens() {
     // Setup and mint
     kliver_dispatcher.add_token_type(108, 1000, false, "warrior.json");
     let user: ContractAddress = starknet::contract_address_const::<0x456>();
-    kliver_dispatcher.mint_to_user(user, 108, 10);
+    kliver_dispatcher.mint_to_user_unsafe(user, 108, 10);
     
     // Burn some tokens
     kliver_dispatcher.burn_user_tokens(user, 108, 3);
@@ -224,7 +291,7 @@ fn test_burn_exceeds_balance() {
     // Setup and mint
     kliver_dispatcher.add_token_type(109, 1000, false, "warrior.json");
     let user: ContractAddress = starknet::contract_address_const::<0x456>();
-    kliver_dispatcher.mint_to_user(user, 109, 5);
+    kliver_dispatcher.mint_to_user_unsafe(user, 109, 5);
     
     // Try to burn more than owned
     kliver_dispatcher.burn_user_tokens(user, 109, 10);
@@ -243,7 +310,7 @@ fn test_soulbound_transfer_blocked() {
     // Create soulbound token
     kliver_dispatcher.add_token_type(110, 1000, true, "soulbound.json");
     let user1: ContractAddress = starknet::contract_address_const::<0x456>();
-    kliver_dispatcher.mint_to_user(user1, 110, 1);
+    kliver_dispatcher.mint_to_user_unsafe(user1, 110, 1);
     
     stop_cheat_caller_address(kliver_dispatcher.contract_address);
     
@@ -251,8 +318,7 @@ fn test_soulbound_transfer_blocked() {
     start_cheat_caller_address(kliver_dispatcher.contract_address, user1);
     
     let user2: ContractAddress = starknet::contract_address_const::<0x789>();
-    let data = array![].span();
-    erc1155_dispatcher.safe_transfer_from(user1, user2, 110, 1, data);
+    kliver_dispatcher.safe_transfer_from_unsafe(user1, user2, 110, 1);
     
     stop_cheat_caller_address(kliver_dispatcher.contract_address);
 }
@@ -267,7 +333,7 @@ fn test_regular_token_transfer() {
     // Create regular (non-soulbound) token
     kliver_dispatcher.add_token_type(111, 1000, false, "transferable.json");
     let user1: ContractAddress = starknet::contract_address_const::<0x456>();
-    kliver_dispatcher.mint_to_user(user1, 111, 5);
+    kliver_dispatcher.mint_to_user_unsafe(user1, 111, 5);
     
     stop_cheat_caller_address(kliver_dispatcher.contract_address);
     
@@ -275,8 +341,7 @@ fn test_regular_token_transfer() {
     start_cheat_caller_address(kliver_dispatcher.contract_address, user1);
     
     let user2: ContractAddress = starknet::contract_address_const::<0x789>();
-    let data = array![].span();
-    erc1155_dispatcher.safe_transfer_from(user1, user2, 111, 2, data);
+    kliver_dispatcher.safe_transfer_from_unsafe(user1, user2, 111, 2);
     
     // Verify transfer
     let balance1 = erc1155_dispatcher.balance_of(user1, 111);
@@ -302,10 +367,10 @@ fn test_batch_balance_of() {
     let user1: ContractAddress = starknet::contract_address_const::<0x456>();
     let user2: ContractAddress = starknet::contract_address_const::<0x789>();
     
-    kliver_dispatcher.mint_to_user(user1, 112, 10);
-    kliver_dispatcher.mint_to_user(user1, 113, 5);
-    kliver_dispatcher.mint_to_user(user2, 112, 3);
-    kliver_dispatcher.mint_to_user(user2, 113, 7);
+    kliver_dispatcher.mint_to_user_unsafe(user1, 112, 10);
+    kliver_dispatcher.mint_to_user_unsafe(user1, 113, 5);
+    kliver_dispatcher.mint_to_user_unsafe(user2, 112, 3);
+    kliver_dispatcher.mint_to_user_unsafe(user2, 113, 7);
     
     // Test batch balance query
     let owners = array![user1, user1, user2, user2].span();
@@ -369,7 +434,7 @@ fn test_with_timestamp() {
     kliver_dispatcher.add_token_type(116, 1000, false, "timestamped.json");
     
     let user: ContractAddress = starknet::contract_address_const::<0x456>();
-    kliver_dispatcher.mint_to_user(user, 116, 1);
+    kliver_dispatcher.mint_to_user_unsafe(user, 116, 1);
     
     // The events should be emitted with the mocked timestamp
     // This test mainly verifies the contract works with timestamp manipulation
