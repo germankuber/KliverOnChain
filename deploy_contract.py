@@ -259,8 +259,9 @@ class ContractDeployer:
         all_output = result.get("stdout", "") + result.get("stderr", "")
         
         # First check if we have a successful new declaration
-        class_hash_pattern = r"class_hash: (0x[a-fA-F0-9]+)"
-        tx_hash_pattern = r"transaction_hash: (0x[a-fA-F0-9]+)"
+        # Support both formats: "class_hash: 0x..." and "Class Hash:       0x..."
+        class_hash_pattern = r"(?:class_hash:|Class Hash:)\s*(0x[a-fA-F0-9]+)"
+        tx_hash_pattern = r"(?:transaction_hash:|Transaction Hash:)\s*(0x[a-fA-F0-9]+)"
         
         class_hash_match = re.search(class_hash_pattern, all_output)
         
@@ -371,12 +372,21 @@ class ContractDeployer:
             return None
             
         # Parse contract address from output
-        contract_address_pattern = r"contract_address: (0x[a-fA-F0-9]+)"
+        # Support both formats: "contract_address: 0x..." and "Contract Address: 0x..."
+        contract_address_pattern = r"(?:contract_address:|Contract Address:)\s*(0x[a-fA-F0-9]+)"
         match = re.search(contract_address_pattern, result["stdout"])
         
         if match:
             contract_address = match.group(1)
             print(f"{Colors.SUCCESS}✓ Contract deployed at address: {contract_address}{Colors.RESET}")
+            
+            # Also look for transaction hash for confirmation
+            tx_hash_pattern = r"(?:transaction_hash:|Transaction Hash:)\s*(0x[a-fA-F0-9]+)"
+            tx_match = re.search(tx_hash_pattern, result["stdout"])
+            if tx_match:
+                tx_hash = tx_match.group(1)
+                print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
+            
             return contract_address
         else:
             print(f"{Colors.ERROR}Could not parse contract address from deployment output{Colors.RESET}")
