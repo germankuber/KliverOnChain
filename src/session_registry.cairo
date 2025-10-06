@@ -1,9 +1,10 @@
 use starknet::ContractAddress;
 use crate::types::VerificationResult;
 
-/// Session metadata containing author and score information
+/// Session metadata containing simulation_id, author and score information
 #[derive(Drop, Serde, starknet::Store)]
 pub struct SessionMetadata {
+    pub simulation_id: felt252,
     pub author: ContractAddress,
     pub score: u32,
 }
@@ -12,6 +13,7 @@ pub struct SessionMetadata {
 #[derive(Drop, Serde)]
 pub struct SessionInfo {
     pub root_hash: felt252,
+    pub simulation_id: felt252,
     pub author: ContractAddress,
     pub score: u32,
 }
@@ -37,6 +39,7 @@ pub struct SessionRegistered {
     #[key]
     pub session_id: felt252,
     pub root_hash: felt252,
+    pub simulation_id: felt252,
     pub author: ContractAddress,
     pub score: u32,
     pub registered_by: ContractAddress,

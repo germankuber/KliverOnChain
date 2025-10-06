@@ -44,9 +44,21 @@ fn deploy_for_simulations() -> (ISimulationRegistryDispatcher, ContractAddress, 
     (sim_dispatcher, sim_dispatcher.contract_address, owner)
 }
 
-fn deploy_for_sessions() -> (ISessionRegistryDispatcher, ContractAddress, ContractAddress) {
-    let (_, _, _, _, session_dispatcher, owner) = deploy_contract();
-    (session_dispatcher, session_dispatcher.contract_address, owner)
+fn deploy_for_sessions() -> (ISessionRegistryDispatcher, ISimulationRegistryDispatcher, ContractAddress, ContractAddress) {
+    let (_, _, sim_dispatcher, _, session_dispatcher, owner) = deploy_contract();
+    (session_dispatcher, sim_dispatcher, session_dispatcher.contract_address, owner)
+}
+
+/// Helper function to register a test simulation and return its ID
+fn register_test_simulation(sim_dispatcher: ISimulationRegistryDispatcher, contract_address: ContractAddress, owner: ContractAddress) -> felt252 {
+    let simulation_id: felt252 = 'test_sim_123';
+    let simulation_hash: felt252 = 'sim_hash_456';
+    
+    start_cheat_caller_address(contract_address, owner);
+    sim_dispatcher.register_simulation(simulation_id, simulation_hash);
+    stop_cheat_caller_address(contract_address);
+    
+    simulation_id
 }
 
 #[test]
@@ -710,11 +722,15 @@ fn test_batch_verify_simulations_empty_array() {
 
 #[test]
 fn test_register_session_success() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    
+    // First register a simulation
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 'hash456';
     let author: ContractAddress = 'author'.try_into().unwrap();
-    let metadata = SessionMetadata { author, score: 100_u32 };
+    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
     // Should not panic - first registration
@@ -725,13 +741,17 @@ fn test_register_session_success() {
 #[test]
 #[should_panic(expected: ('Session already registered', ))]
 fn test_register_session_duplicate() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    
+    // First register a simulation
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    
     let session_id: felt252 = 'session123';
     let hash1: felt252 = 'hash456';
     let hash2: felt252 = 'hash789';
     let author: ContractAddress = 'author'.try_into().unwrap();
-    let metadata1 = SessionMetadata { author, score: 100_u32 };
-    let metadata2 = SessionMetadata { author, score: 200_u32 };
+    let metadata1 = SessionMetadata { simulation_id, author, score: 100_u32 };
+    let metadata2 = SessionMetadata { simulation_id, author, score: 200_u32 };
 
     start_cheat_caller_address(contract_address, owner);
     // First registration should succeed
@@ -745,11 +765,15 @@ fn test_register_session_duplicate() {
 #[test]
 #[should_panic(expected: ('Session ID cannot be zero', ))]
 fn test_register_session_zero_id() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    
+    // Register a simulation first
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    
     let session_id: felt252 = 0;
     let root_hash: felt252 = 'hash456';
     let author: ContractAddress = 'author'.try_into().unwrap();
-    let metadata = SessionMetadata { author, score: 100_u32 };
+    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
     dispatcher.register_session(session_id, root_hash, metadata);
@@ -759,11 +783,15 @@ fn test_register_session_zero_id() {
 #[test]
 #[should_panic(expected: ('Root hash cannot be zero', ))]
 fn test_register_session_zero_hash() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    
+    // Register a simulation first
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 0;
     let author: ContractAddress = 'author'.try_into().unwrap();
-    let metadata = SessionMetadata { author, score: 100_u32 };
+    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
     dispatcher.register_session(session_id, root_hash, metadata);
@@ -773,11 +801,15 @@ fn test_register_session_zero_hash() {
 #[test]
 #[should_panic(expected: ('Author cannot be zero', ))]
 fn test_register_session_zero_author() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+    
+    // Register a simulation first
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
+    
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 'hash456';
     let author: ContractAddress = 0.try_into().unwrap();
-    let metadata = SessionMetadata { author, score: 100_u32 };
+    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
     dispatcher.register_session(session_id, root_hash, metadata);
@@ -786,14 +818,17 @@ fn test_register_session_zero_author() {
 
 #[test]
 fn test_verify_session_valid() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+
+    // Register a simulation first
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
     let author: ContractAddress = 'author'.try_into().unwrap();
 
     // First register the session
-    let metadata = SessionMetadata { author, score: 100_u32 };
+    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
     start_cheat_caller_address(contract_address, owner);
     dispatcher.register_session(session_id, root_hash, metadata);
     stop_cheat_caller_address(contract_address);
@@ -805,7 +840,10 @@ fn test_verify_session_valid() {
 
 #[test]
 fn test_verify_session_invalid_hash() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+
+    // Register a simulation first
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
@@ -813,7 +851,7 @@ fn test_verify_session_invalid_hash() {
     let author: ContractAddress = 'author'.try_into().unwrap();
 
     // First register the session
-    let metadata = SessionMetadata { author, score: 100_u32 };
+    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
     start_cheat_caller_address(contract_address, owner);
     dispatcher.register_session(session_id, root_hash, metadata);
     stop_cheat_caller_address(contract_address);
@@ -825,7 +863,7 @@ fn test_verify_session_invalid_hash() {
 
 #[test]
 fn test_verify_session_non_existent() {
-    let (dispatcher, _, _) = deploy_for_sessions();
+    let (dispatcher, _, _, _) = deploy_for_sessions();
 
     let non_existent_id: felt252 = 999;
     let some_hash: felt252 = 456;
@@ -837,7 +875,10 @@ fn test_verify_session_non_existent() {
 
 #[test]
 fn test_get_session_info_success() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+
+    // Register a simulation first
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
@@ -845,13 +886,14 @@ fn test_get_session_info_success() {
 
     // First register the session
     start_cheat_caller_address(contract_address, owner);
-    let metadata = SessionMetadata { author, score: 150_u32 };
+    let metadata = SessionMetadata { simulation_id, author, score: 150_u32 };
     dispatcher.register_session(session_id, root_hash, metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then get the session info
     let session_info = dispatcher.get_session_info(session_id);
     assert_eq!(session_info.root_hash, root_hash);
+    assert_eq!(session_info.simulation_id, simulation_id);
     assert_eq!(session_info.author, author);
     assert_eq!(session_info.score, 150_u32);
 }
@@ -859,7 +901,7 @@ fn test_get_session_info_success() {
 #[test]
 #[should_panic(expected: ('Session not found', ))]
 fn test_get_session_info_not_found() {
-    let (dispatcher, _, _) = deploy_for_sessions();
+    let (dispatcher, _, _, _) = deploy_for_sessions();
 
     let non_existent_id: felt252 = 999;
 
@@ -869,7 +911,10 @@ fn test_get_session_info_not_found() {
 
 #[test]
 fn test_grant_access_success() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+
+    // Register a simulation first
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
@@ -877,7 +922,7 @@ fn test_grant_access_success() {
     let grantee: ContractAddress = 'grantee'.try_into().unwrap();
 
     // First register the session
-    let metadata = SessionMetadata { author, score: 100_u32 };
+    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
     start_cheat_caller_address(contract_address, owner);
     dispatcher.register_session(session_id, root_hash, metadata);
 
@@ -891,7 +936,10 @@ fn test_grant_access_success() {
 
 #[test]
 fn test_has_access_returns_false_for_no_access() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, contract_address, owner) = deploy_for_sessions();
+
+    // Register a simulation first
+    let simulation_id = register_test_simulation(sim_dispatcher, contract_address, owner);
 
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
@@ -899,7 +947,7 @@ fn test_has_access_returns_false_for_no_access() {
     let random_addr: ContractAddress = 'random'.try_into().unwrap();
 
     // Register the session but don't grant access
-    let metadata = SessionMetadata { author, score: 100_u32 };
+    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
     start_cheat_caller_address(contract_address, owner);
     dispatcher.register_session(session_id, root_hash, metadata);
     stop_cheat_caller_address(contract_address);
@@ -911,7 +959,7 @@ fn test_has_access_returns_false_for_no_access() {
 #[test]
 #[should_panic(expected: ('Session not found', ))]
 fn test_grant_access_nonexistent_session() {
-    let (dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, _, contract_address, owner) = deploy_for_sessions();
 
     let non_existent_session: felt252 = 999;
     let grantee: ContractAddress = 'grantee'.try_into().unwrap();
@@ -919,5 +967,22 @@ fn test_grant_access_nonexistent_session() {
     start_cheat_caller_address(contract_address, owner);
     // Try to grant access to non-existent session
     dispatcher.grant_access(non_existent_session, grantee);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Simulation not found', ))]
+fn test_register_session_invalid_simulation() {
+    let (dispatcher, _, contract_address, owner) = deploy_for_sessions();
+    
+    let session_id: felt252 = 'session123';
+    let root_hash: felt252 = 'hash456';
+    let invalid_simulation_id: felt252 = 'nonexistent_sim';
+    let author: ContractAddress = 'author'.try_into().unwrap();
+    let metadata = SessionMetadata { simulation_id: invalid_simulation_id, author, score: 100_u32 };
+
+    start_cheat_caller_address(contract_address, owner);
+    // Should panic - simulation doesn't exist
+    dispatcher.register_session(session_id, root_hash, metadata);
     stop_cheat_caller_address(contract_address);
 }

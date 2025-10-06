@@ -62,6 +62,7 @@ pub mod kliver_registry {
         simulations: Map<felt252, felt252>,
         // Sessions:
         session_roots: Map<felt252, felt252>,                  // session_id -> root_hash
+        session_simulations: Map<felt252, felt252>,            // session_id -> simulation_id
         session_authors: Map<felt252, ContractAddress>,        // session_id -> author (seller original)
         session_scores: Map<felt252, u32>,                     // session_id -> score
         session_access: Map<(felt252, ContractAddress), bool>, // (session_id, addr) -> true
@@ -71,6 +72,8 @@ pub mod kliver_registry {
         pub const SESSION_ID_CANNOT_BE_ZERO: felt252 = 'Session ID cannot be zero';
         pub const ROOT_HASH_CANNOT_BE_ZERO: felt252 = 'Root hash cannot be zero';
         pub const AUTHOR_CANNOT_BE_ZERO: felt252 = 'Author cannot be zero';
+        pub const SIMULATION_ID_CANNOT_BE_ZERO: felt252 = 'Simulation ID cannot be zero';
+        pub const SIMULATION_NOT_FOUND: felt252 = 'Simulation not found';
         pub const SESSION_ALREADY_REGISTERED: felt252 = 'Session already registered';
         pub const SESSION_NOT_FOUND: felt252 = 'Session not found';
         pub const GRANTEE_CANNOT_BE_ZERO: felt252 = 'Grantee cannot be zero';
@@ -365,18 +368,25 @@ pub mod kliver_registry {
 
             assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
             assert(root_hash != 0, Errors::ROOT_HASH_CANNOT_BE_ZERO);
+            assert(metadata.simulation_id != 0, Errors::SIMULATION_ID_CANNOT_BE_ZERO);
             assert(!metadata.author.is_zero(), Errors::AUTHOR_CANNOT_BE_ZERO);
+
+            // Validate that the simulation exists
+            let simulation_hash = self.simulations.read(metadata.simulation_id);
+            assert(simulation_hash != 0, Errors::SIMULATION_NOT_FOUND);
 
             let existing = self.session_roots.read(session_id);
             assert(existing == 0, Errors::SESSION_ALREADY_REGISTERED);
 
             self.session_roots.write(session_id, root_hash);
+            self.session_simulations.write(session_id, metadata.simulation_id);
             self.session_authors.write(session_id, metadata.author);
             self.session_scores.write(session_id, metadata.score);
 
             self.emit(SessionRegistered {
                 session_id,
                 root_hash,
+                simulation_id: metadata.simulation_id,
                 author: metadata.author,
                 score: metadata.score,
                 registered_by: get_caller_address()
@@ -401,11 +411,13 @@ pub mod kliver_registry {
             assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
             let root_hash = self.session_roots.read(session_id);
             assert(root_hash != 0, Errors::SESSION_NOT_FOUND);
+            let simulation_id = self.session_simulations.read(session_id);
             let author = self.session_authors.read(session_id);
             let score = self.session_scores.read(session_id);
             
             SessionInfo {
                 root_hash,
+                simulation_id,
                 author,
                 score
             }
