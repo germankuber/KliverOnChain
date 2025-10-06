@@ -14,7 +14,7 @@ pub mod kliver_registry {
     use starknet::{ContractAddress, get_caller_address};
     use core::num::traits::Zero;
 
-    use crate::session_registry::{SessionRegistered, SessionAccessGranted};
+    use crate::session_registry::{SessionRegistered, SessionAccessGranted, SessionMetadata, SessionInfo};
 
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -63,6 +63,7 @@ pub mod kliver_registry {
         // Sessions:
         session_roots: Map<felt252, felt252>,                  // session_id -> root_hash
         session_authors: Map<felt252, ContractAddress>,        // session_id -> author (seller original)
+        session_scores: Map<felt252, u32>,                     // session_id -> score
         session_access: Map<(felt252, ContractAddress), bool>, // (session_id, addr) -> true
     }
 
@@ -358,24 +359,26 @@ pub mod kliver_registry {
     // Session Registry Implementation
     #[abi(embed_v0)]
     impl SessionRegistryImpl of ISessionRegistry<ContractState> {
-        fn register_session(ref self: ContractState, session_id: felt252, root_hash: felt252, author: ContractAddress) {
+        fn register_session(ref self: ContractState, session_id: felt252, root_hash: felt252, metadata: SessionMetadata) {
             self._assert_not_paused();
             self._assert_only_owner(); // Por ahora, sólo Kliver registra
 
             assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
             assert(root_hash != 0, Errors::ROOT_HASH_CANNOT_BE_ZERO);
-            assert(!author.is_zero(), Errors::AUTHOR_CANNOT_BE_ZERO);
+            assert(!metadata.author.is_zero(), Errors::AUTHOR_CANNOT_BE_ZERO);
 
             let existing = self.session_roots.read(session_id);
             assert(existing == 0, Errors::SESSION_ALREADY_REGISTERED);
 
             self.session_roots.write(session_id, root_hash);
-            self.session_authors.write(session_id, author);
+            self.session_authors.write(session_id, metadata.author);
+            self.session_scores.write(session_id, metadata.score);
 
             self.emit(SessionRegistered {
                 session_id,
                 root_hash,
-                author,
+                author: metadata.author,
+                score: metadata.score,
                 registered_by: get_caller_address()
             });
         }
@@ -394,12 +397,18 @@ pub mod kliver_registry {
             }
         }
 
-        fn get_session_info(self: @ContractState, session_id: felt252) -> (felt252, ContractAddress) {
+        fn get_session_info(self: @ContractState, session_id: felt252) -> SessionInfo {
             assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
-            let root = self.session_roots.read(session_id);
-            assert(root != 0, Errors::SESSION_NOT_FOUND);
+            let root_hash = self.session_roots.read(session_id);
+            assert(root_hash != 0, Errors::SESSION_NOT_FOUND);
             let author = self.session_authors.read(session_id);
-            (root, author)
+            let score = self.session_scores.read(session_id);
+            
+            SessionInfo {
+                root_hash,
+                author,
+                score
+            }
         }
 
         // ---- Opcional: access list (trazabilidad de ventas) ----
