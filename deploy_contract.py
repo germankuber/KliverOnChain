@@ -332,7 +332,7 @@ class ContractDeployer:
         print(f"{Colors.ERROR}✗ Transaction confirmation timeout after {max_attempts * 5} seconds{Colors.RESET}")
         return False
     
-    def deploy_contract(self, class_hash: str, owner_address: str) -> Optional[str]:
+    def deploy_contract(self, class_hash: str, owner_address: str, nft_address: Optional[str] = None) -> Optional[str]:
         """Deploy the contract and return the contract address"""
         contract_config = self.contracts[self.contract_type]
         contract_name = contract_config["name"]
@@ -356,8 +356,15 @@ class ContractDeployer:
                 base_uri_calldata = ["0", "0", "0"]
 
             constructor_calldata = [owner_address] + base_uri_calldata
+        elif self.contract_type == "registry":
+            # Registry requires: owner + nft_address
+            if not nft_address:
+                print(f"{Colors.ERROR}✗ NFT address is required for Registry deployment{Colors.RESET}")
+                return None
+            print(f"{Colors.INFO}📋 Using NFT address: {nft_address}{Colors.RESET}")
+            constructor_calldata = [owner_address, nft_address]
         else:
-            # Registry and other contracts require only owner
+            # Other contracts require only owner
             constructor_calldata = [owner_address]
 
         command = [
@@ -418,8 +425,30 @@ class ContractDeployer:
             
         print(f"{Colors.SUCCESS}✓ Deployment info saved to: {filename}{Colors.RESET}")
     
-    def deploy_full_flow(self, owner_address: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Execute the complete deployment flow"""
+    def validate_nft_contract(self, nft_address: str) -> bool:
+        """Validate that the provided address is a valid NFT contract"""
+        print(f"{Colors.INFO}🔍 Validating NFT contract at {nft_address}...{Colors.RESET}")
+        
+        # Try to call a method on the NFT contract to validate it exists and is an NFT
+        command = [
+            "sncast", "--account", self.account, "call",
+            "--contract-address", nft_address,
+            "--function", "name",  # Standard ERC721 function
+            "--url", self.rpc_url
+        ]
+        
+        result = self._run_command(command, "Validating NFT contract")
+        
+        if result["success"]:
+            print(f"{Colors.SUCCESS}✓ NFT contract validated successfully{Colors.RESET}")
+            return True
+        else:
+            print(f"{Colors.ERROR}✗ Invalid NFT contract address or contract not deployed{Colors.RESET}")
+            print(f"{Colors.ERROR}Please ensure the NFT contract is deployed first{Colors.RESET}")
+            return False
+
+    def deploy_full_flow(self, owner_address: Optional[str] = None, nft_address: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Execute the complete deployment flow for a single contract"""
         contract_config = self.contracts[self.contract_type]
         contract_name = contract_config["name"]
         
@@ -440,6 +469,16 @@ class ContractDeployer:
         if not owner_address:
             owner_address = account_address
             print(f"{Colors.INFO}Owner: {owner_address[:10]}...{owner_address[-4:]}{Colors.RESET}")
+        
+        # Validate NFT address if deploying registry
+        if self.contract_type == "registry":
+            if not nft_address:
+                print(f"{Colors.ERROR}✗ NFT address is required for Registry deployment{Colors.RESET}")
+                print(f"{Colors.INFO}Use --nft-address option or deploy with --contract all{Colors.RESET}")
+                return None
+            
+            if not self.validate_nft_contract(nft_address):
+                return None
             
         # Compile contract
         if not self.compile_contract():
@@ -453,7 +492,7 @@ class ContractDeployer:
             return None
             
         # Deploy contract
-        contract_address = self.deploy_contract(class_hash, owner_address)
+        contract_address = self.deploy_contract(class_hash, owner_address, nft_address)
         if not contract_address:
             print(f"{Colors.ERROR}Deployment failed.{Colors.RESET}")
             return None
@@ -467,6 +506,8 @@ class ContractDeployer:
         print(f"{Colors.BOLD}Explorer: {Colors.INFO}https://sepolia.starkscan.co/contract/{contract_address}{Colors.RESET}")
         print(f"Class Hash: {class_hash}")
         print(f"Network: {self.network} | Owner: {owner_address[:10]}...{owner_address[-4:]}")
+        if nft_address:
+            print(f"NFT Contract: {nft_address}")
         
         # Return deployment info for summary
         return {
@@ -474,18 +515,18 @@ class ContractDeployer:
             "contract_address": contract_address,
             "class_hash": class_hash,
             "network": self.network,
-            "owner": owner_address
+            "owner": owner_address,
+            "nft_address": nft_address if nft_address else None
         }
-        
-        return deployment_info
 
 @click.command()
 @click.option('--environment', '-e', required=True, help='Environment to deploy to: dev, qa, or prod')
 @click.option('--contract', '-c', default='registry', help='Contract to deploy: registry, nft, or all')
 @click.option('--rpc-url', '-r', help='Custom RPC URL (optional - overrides environment config)')
 @click.option('--owner', '-o', help='Owner address for the contract (uses account address if not specified)')
+@click.option('--nft-address', '-n', help='NFT contract address (required when deploying registry separately)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
-def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optional[str], verbose: bool):
+def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optional[str], nft_address: Optional[str], verbose: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration
     
@@ -497,10 +538,23 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
     5. Deploys the contract instances
     6. Saves deployment information
     
+    DEPLOYMENT MODES:
+    
+    1. Deploy Everything (NFT + Registry):
+        python deploy_contract.py --environment dev --contract all
+        This will deploy NFT first, then use its address for Registry
+    
+    2. Deploy NFT Only:
+        python deploy_contract.py --environment dev --contract nft --owner 0x123...
+    
+    3. Deploy Registry Only (requires NFT address):
+        python deploy_contract.py --environment dev --contract registry --nft-address 0x456...
+        The script will validate that the NFT contract exists before deploying Registry
+    
     Example usage:
-        python deploy_contract.py --environment dev --contract registry
+        python deploy_contract.py --environment dev --contract all
         python deploy_contract.py --environment qa --contract nft --owner 0x123...
-        python deploy_contract.py --environment prod --contract all --owner 0x123...
+        python deploy_contract.py --environment prod --contract registry --nft-address 0x456...
     """
     
     try:
@@ -530,23 +584,52 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
         success = True
         
         if contract == 'all':
-            # Deploy registry first
-            deployer_registry = ContractDeployer(account, network, 'registry', rpc_url, env_config)
-            registry_result = deployer_registry.deploy_full_flow(owner)
-            if registry_result:
-                deployments.append(registry_result)
+            click.echo(f"\n{Colors.BOLD}🚀 COMPLETE DEPLOYMENT MODE{Colors.RESET}")
+            click.echo(f"{Colors.INFO}This will deploy NFT first, then Registry using the NFT address{Colors.RESET}\n")
+            
+            # Step 1: Deploy NFT first
+            click.echo(f"{Colors.BOLD}Step 1/2: Deploying NFT Contract{Colors.RESET}")
+            deployer_nft = ContractDeployer(account, network, 'nft', rpc_url, env_config)
+            nft_result = deployer_nft.deploy_full_flow(owner)
+            if nft_result:
+                deployments.append(nft_result)
+                nft_deployed_address = nft_result['contract_address']
+                click.echo(f"\n{Colors.SUCCESS}✓ NFT deployed successfully at: {nft_deployed_address}{Colors.RESET}\n")
             else:
                 success = False
+                click.echo(f"\n{Colors.ERROR}✗ NFT deployment failed. Aborting.{Colors.RESET}")
 
-            # Deploy NFT second
-            if success:  # Only proceed if registry succeeded
-                deployer_nft = ContractDeployer(account, network, 'nft', rpc_url, env_config)
-                nft_result = deployer_nft.deploy_full_flow(owner)
-                if nft_result:
-                    deployments.append(nft_result)
+            # Step 2: Deploy Registry using NFT address
+            if success:
+                click.echo(f"{Colors.BOLD}Step 2/2: Deploying Registry Contract{Colors.RESET}")
+                deployer_registry = ContractDeployer(account, network, 'registry', rpc_url, env_config)
+                registry_result = deployer_registry.deploy_full_flow(owner, nft_deployed_address)
+                if registry_result:
+                    deployments.append(registry_result)
+                    click.echo(f"\n{Colors.SUCCESS}✓ Registry deployed successfully{Colors.RESET}\n")
                 else:
                     success = False
-        else:
+                    click.echo(f"\n{Colors.ERROR}✗ Registry deployment failed{Colors.RESET}")
+        
+        elif contract == 'registry':
+            # Deploying registry separately - requires NFT address
+            if not nft_address:
+                click.echo(f"\n{Colors.ERROR}❌ NFT address is required when deploying Registry separately{Colors.RESET}")
+                click.echo(f"{Colors.INFO}Use: --nft-address 0x... or deploy with --contract all{Colors.RESET}\n")
+                exit(1)
+            
+            click.echo(f"\n{Colors.BOLD}🎯 SEPARATE REGISTRY DEPLOYMENT{Colors.RESET}")
+            click.echo(f"{Colors.INFO}Using NFT contract at: {nft_address}{Colors.RESET}\n")
+            
+            deployer = ContractDeployer(account, network, contract, rpc_url, env_config)
+            result = deployer.deploy_full_flow(owner, nft_address)
+            if result:
+                deployments.append(result)
+            else:
+                success = False
+        
+        else:  # NFT only
+            click.echo(f"\n{Colors.BOLD}🎯 NFT-ONLY DEPLOYMENT{Colors.RESET}\n")
             deployer = ContractDeployer(account, network, contract, rpc_url, env_config)
             result = deployer.deploy_full_flow(owner)
             if result:
@@ -575,21 +658,41 @@ def print_deployment_summary(deployments: list, network: str):
     if not deployments:
         return
         
-    print(f"\n{Colors.BOLD}{'='*60}{Colors.RESET}")
+    print(f"\n{Colors.BOLD}{'='*70}{Colors.RESET}")
     print(f"{Colors.BOLD}{Colors.SUCCESS}🎉 DEPLOYMENT SUMMARY{Colors.RESET}")
-    print(f"{Colors.BOLD}{'='*60}{Colors.RESET}")
+    print(f"{Colors.BOLD}{'='*70}{Colors.RESET}")
+    
+    nft_address = None
+    registry_deployment = None
     
     for i, deployment in enumerate(deployments, 1):
         contract_name = deployment['contract_name']
         contract_address = deployment['contract_address']
         
+        # Track NFT address for later
+        if contract_name == "KliverNFT":
+            nft_address = contract_address
+        
+        # Track registry deployment
+        if contract_name == "kliver_registry":
+            registry_deployment = deployment
+        
         print(f"\n{Colors.BOLD}{i}. {contract_name.upper()}{Colors.RESET}")
-        print(f"   Address: {Colors.SUCCESS}{Colors.BOLD}{contract_address}{Colors.RESET}")
-        print(f"   Explorer: {Colors.INFO}https://sepolia.starkscan.co/contract/{contract_address}{Colors.RESET}")
-        print(f"   Class Hash: {deployment['class_hash']}")
+        print(f"   Address:    {Colors.SUCCESS}{Colors.BOLD}{contract_address}{Colors.RESET}")
+        print(f"   Explorer:   {Colors.INFO}https://sepolia.starkscan.co/contract/{contract_address}{Colors.RESET}")
+        print(f"   Class Hash: {deployment['class_hash'][:10]}...{deployment['class_hash'][-8:]}")
+        
+        # Show NFT address if this is registry and we have NFT info
+        if contract_name == "kliver_registry" and deployment.get('nft_address'):
+            print(f"   NFT Link:   {Colors.WARNING}{deployment['nft_address']}{Colors.RESET}")
     
     print(f"\n{Colors.BOLD}Network: {network.upper()} | Owner: {deployments[0]['owner'][:10]}...{deployments[0]['owner'][-4:]}{Colors.RESET}")
-    print(f"{Colors.BOLD}{'='*60}{Colors.RESET}")
+    
+    # Show relationship if both were deployed
+    if nft_address and registry_deployment:
+        print(f"\n{Colors.INFO}ℹ️  Registry is configured to use the NFT contract for author validation{Colors.RESET}")
+    
+    print(f"{Colors.BOLD}{'='*70}{Colors.RESET}")
 
 if __name__ == '__main__':
     deploy()
