@@ -18,6 +18,7 @@ pub mod kliver_registry {
     use crate::simulation_registry::SimulationMetadata;
     use crate::character_registry::CharacterMetadata;
     use crate::scenario_registry::ScenarioMetadata;
+    use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
 
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -76,6 +77,7 @@ pub mod kliver_registry {
 
     pub mod Errors {
         pub const NFT_ADDRESS_CANNOT_BE_ZERO: felt252 = 'NFT address cannot be zero';
+        pub const AUTHOR_MUST_OWN_NFT: felt252 = 'Author must own a Kliver NFT';
         pub const SESSION_ID_CANNOT_BE_ZERO: felt252 = 'Session ID cannot be zero';
         pub const ROOT_HASH_CANNOT_BE_ZERO: felt252 = 'Root hash cannot be zero';
         pub const AUTHOR_CANNOT_BE_ZERO: felt252 = 'Author cannot be zero';
@@ -119,6 +121,9 @@ pub mod kliver_registry {
             assert(character_version_id != 0, 'Version ID cannot be zero');
             assert(character_version_hash != 0, 'Version hash cannot be zero');
             assert(!author.is_zero(), 'Author cannot be zero');
+
+            // Validate that author has a Kliver NFT
+            self._assert_author_has_nft(author);
 
             // Check if character version ID is already registered
             let existing_hash = self.character_versions.read(character_version_id);
@@ -237,6 +242,9 @@ pub mod kliver_registry {
             assert(scenario_hash != 0, 'Scenario hash cannot be zero');
             assert(!author.is_zero(), 'Author cannot be zero');
 
+            // Validate that author has a Kliver NFT
+            self._assert_author_has_nft(author);
+
             // Check if scenario is already registered
             let existing_hash = self.scenarios.read(scenario_id);
             assert(existing_hash == 0, 'Scenario already registered');
@@ -346,6 +354,9 @@ pub mod kliver_registry {
             assert(!metadata.author.is_zero(), 'Author cannot be zero');
             assert(metadata.character_id != 0, 'Character ID cannot be zero');
             assert(metadata.scenario_id != 0, 'Scenario ID cannot be zero');
+
+            // Validate that author has a Kliver NFT
+            self._assert_author_has_nft(metadata.author);
 
             // Validate that character exists
             let character_hash = self.character_versions.read(metadata.character_id);
@@ -585,6 +596,13 @@ pub mod kliver_registry {
 
         fn _assert_not_paused(self: @ContractState) {
             assert(!self.paused.read(), 'Contract is paused');
+        }
+
+        fn _assert_author_has_nft(self: @ContractState, author: ContractAddress) {
+            let nft_address = self.nft_address.read();
+            let nft_dispatcher = IKliverNFTDispatcher { contract_address: nft_address };
+            let has_nft = nft_dispatcher.user_has_nft(author);
+            assert(has_nft, Errors::AUTHOR_MUST_OWN_NFT);
         }
     }
 }

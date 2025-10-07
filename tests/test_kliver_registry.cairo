@@ -9,11 +9,32 @@ use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimul
 use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
 use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait, SessionMetadata};
 use kliver_on_chain::types::VerificationResult;
+use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+
+/// Helper function to deploy the NFT contract and mint an NFT to the owner
+fn deploy_nft_contract(owner: ContractAddress) -> ContractAddress {
+    
+    let nft_contract = declare("KliverNFT").unwrap().contract_class();
+    let mut nft_constructor_calldata = ArrayTrait::new();
+    nft_constructor_calldata.append(owner.into());
+    // ByteArray for base_uri - need to serialize it properly
+    let base_uri: ByteArray = "https://api.kliver.io/nft/";
+    Serde::serialize(@base_uri, ref nft_constructor_calldata);
+    let (nft_address, _) = nft_contract.deploy(@nft_constructor_calldata).unwrap();
+    
+    // Mint an NFT to the owner so they can register content
+    let nft_dispatcher = IKliverNFTDispatcher { contract_address: nft_address };
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(owner);
+    stop_cheat_caller_address(nft_address);
+    
+    nft_address
+}
 
 /// Helper function to deploy the contract and return all dispatchers
 fn deploy_contract() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ISimulationRegistryDispatcher, IOwnerRegistryDispatcher, ISessionRegistryDispatcher, ContractAddress) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
-    let nft_address: ContractAddress = 'nft_contract'.try_into().unwrap();
+    let nft_address = deploy_nft_contract(owner);
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
@@ -161,10 +182,17 @@ fn test_constructor_zero_nft_address() {
 
     #[test]
     fn test_get_nft_address() {
-        let (_, _, _, owner_dispatcher, _, _) = deploy_contract();
+        let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
         let nft_address = owner_dispatcher.get_nft_address();
-        let expected_nft: ContractAddress = 'nft_contract'.try_into().unwrap();
-        assert_eq!(nft_address, expected_nft);
+        
+        // Verify the address is not zero
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+        assert(nft_address != zero_address, 'NFT address should not be zero');
+        
+        // Verify that the NFT contract at this address responds correctly
+        let nft_dispatcher = IKliverNFTDispatcher { contract_address: nft_address };
+        let has_nft = nft_dispatcher.user_has_nft(owner);
+        assert_eq!(has_nft, true, "Owner should have NFT");
     }
 
     #[test]
