@@ -1,16 +1,16 @@
 # Kliver OnChain Platform
 
-A comprehensive Cairo smart contract suite for Starknet that includes registry systems for managing AI interactions and an NFT system for Kliver platform users.
+A comprehensive Cairo smart contract suite for Starknet that includes registry systems for managing AI interactions and an NFT-gated authentication system for the Kliver platform.
 
 ## Overview
 
 The Kliver OnChain Platform consists of two main components:
 
-1. **Kliver Registry**: A decentralized solution that tracks and validates character versions, scenarios, simulations, and ownership data for the Kliver platform.
+1. **Kliver Registry**: A decentralized solution that tracks and validates character versions, scenarios, simulations, and ownership data for the Kliver platform. **Requires NFT ownership** for content registration.
 
-2. **Kliver NFT**: An ERC721-compliant NFT that is minted for users who log into the Kliver platform, serving as a digital badge of membership and participation.
+2. **Kliver NFT**: An ERC721-compliant NFT that serves as the authentication mechanism for the Kliver platform. Users must own a Kliver NFT to register content in the Registry.
 
-Both contracts ensure data integrity through cryptographic hashing and implement robust access control mechanisms.
+Both contracts ensure data integrity through cryptographic hashing and implement robust access control mechanisms with NFT-gated authentication.
 
 ## Features
 
@@ -153,61 +153,240 @@ fn transfer_ownership(new_owner: ContractAddress)  // Owner only
 fn upgrade(new_class_hash: ClassHash)  // Owner only, upgradeable pattern
 ```
 
-## 🚀 Quick Deployment
+## 🚀 Deployment Guide
 
-### Deploy Both Contracts (Recommended)
-```bash
-# QA Environment (Sepolia testnet)
-poetry run python deploy_contract.py --environment qa --contract registry
-poetry run python deploy_contract.py --environment qa --contract nft
+### 🔑 Key Concept: NFT-Gated Registry
 
-# Production Environment (Mainnet - CAUTION!)
-poetry run python deploy_contract.py --environment prod --contract registry  
-poetry run python deploy_contract.py --environment prod --contract nft
+The **Kliver Registry** requires an **NFT contract address** during deployment. This NFT contract is used to validate that authors own a Kliver NFT before they can register characters, scenarios, or simulations.
+
+#### Architecture Flow
+
+```
+┌─────────────┐
+│  Kliver NFT │ ← Users must own this NFT
+└──────┬──────┘
+       │
+       │ (address passed to constructor)
+       │
+       ▼
+┌──────────────────┐
+│ Kliver Registry  │ ← Validates NFT ownership on registration
+└──────────────────┘
 ```
 
-### Deploy Individual Contracts
-```bash
-# Registry only
-poetry run python deploy_contract.py --environment qa --contract registry
-
-# NFT only
-poetry run python deploy_contract.py --environment qa --contract nft
+When a user tries to register content:
+```
+User registers → Registry checks → Does author have NFT?
+                                         ↓
+                                   ┌─────┴─────┐
+                                  YES          NO
+                                   ↓            ↓
+                            Registration OK   Error: Must own NFT
 ```
 
-### Command Options
+### 📋 Deployment Modes
+
+#### Mode 1: Complete Deployment (Recommended) ✅
+
+Deploy both NFT and Registry with automatic linking.
+
+```bash
+python deploy_contract.py --environment dev --contract all
+```
+
+**What happens:**
+1. ✅ Deploys NFT contract
+2. ✅ Deploys Registry contract with NFT address
+3. ✅ Automatically links them
+4. ✅ Saves deployment info for both
+
+**Use this when:** Starting a fresh deployment
+
+#### Mode 2: NFT Only Deployment
+
+Deploy only the NFT contract.
+
+```bash
+python deploy_contract.py --environment dev --contract nft --owner 0x123...
+```
+
+**Use this when:** You need to deploy NFT first, then Registry later
+
+#### Mode 3: Registry Only Deployment (Requires NFT)
+
+Deploy Registry using an existing NFT contract.
+
+```bash
+python deploy_contract.py --environment dev --contract registry --nft-address 0xABCDEF...
+```
+
+**⚠️ Important:** The script will **validate** that the NFT contract exists before deploying Registry!
+
+**Use this when:** 
+- NFT is already deployed
+- Redeploying Registry with a different configuration
+
+### 🔒 NFT Validation
+
+When deploying Registry separately (`--contract registry`), the script automatically validates:
+
+1. **NFT Contract Exists**: Calls the NFT contract to verify it's deployed
+2. **Valid NFT Contract**: Checks it responds to standard ERC721 methods
+3. **Deployment Abort**: If validation fails, Registry deployment is aborted
+
+This prevents misconfiguration and ensures the Registry always has a valid NFT reference.
+
+### 🌍 Environment Configuration
+
+Edit `deployment_config.yml` to set up your environments:
+
+```yaml
+environments:
+  dev:
+    name: "Development"
+    network: "sepolia"
+    account: "kliver-dev"
+    rpc_url: "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
+    
+  qa:
+    name: "QA"
+    network: "sepolia"
+    account: "kliver-qa"
+    rpc_url: "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
+    
+  prod:
+    name: "Production"
+    network: "mainnet"
+    account: "kliver-prod"
+    rpc_url: "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
+```
+
+### 📝 Complete Deployment Examples
+
+#### Development Environment
+
+```bash
+# Option 1: Deploy everything (recommended for dev)
+python deploy_contract.py --environment dev --contract all
+
+# Option 2: Deploy NFT first, then Registry later
+python deploy_contract.py --environment dev --contract nft
+# ... note the NFT address from output ...
+python deploy_contract.py --environment dev --contract registry --nft-address 0xNFT_ADDRESS
+
+# Option 3: Deploy with custom owner
+python deploy_contract.py --environment dev --contract all --owner 0x1234...
+```
+
+#### QA Environment
+
+```bash
+# Deploy complete system to QA
+python deploy_contract.py --environment qa --contract all
+
+# Or separate deployments
+python deploy_contract.py --environment qa --contract nft --owner 0x5678...
+python deploy_contract.py --environment qa --contract registry --nft-address 0xQA_NFT_ADDR
+```
+
+#### Production Environment ⚠️
+
+```bash
+# PRODUCTION: Always deploy everything together for consistency
+python deploy_contract.py --environment prod --contract all --owner 0xPROD_OWNER
+
+# Only if absolutely necessary, deploy separately:
+python deploy_contract.py --environment prod --contract nft --owner 0xPROD_OWNER
+python deploy_contract.py --environment prod --contract registry --nft-address 0xPROD_NFT_ADDR
+```
+
+### ⚠️ Error Handling
+
+#### Error: "NFT address is required for Registry deployment"
+
+**Cause:** Trying to deploy Registry without specifying NFT address
+
+**Solution:** 
+```bash
+# Either deploy everything:
+python deploy_contract.py --environment dev --contract all
+
+# Or provide NFT address:
+python deploy_contract.py --environment dev --contract registry --nft-address 0x123...
+```
+
+#### Error: "Invalid NFT contract address or contract not deployed"
+
+**Cause:** Provided NFT address doesn't point to a valid deployed NFT contract
+
+**Solution:**
+1. Verify the NFT address is correct
+2. Ensure the NFT is deployed on the same network
+3. Check the NFT contract on explorer (e.g., Starkscan)
+
+### 📊 Deployment Output Example
+
+```
+� COMPLETE DEPLOYMENT MODE
+This will deploy NFT first, then Registry using the NFT address
+
+Step 1/2: Deploying NFT Contract
+🔨 Compiling contracts...
+✓ Compilation successful
+📤 Declaring contract...
+✓ Contract declared with class hash: 0xABC...
+🚀 Deploying KliverNFT...
+✓ Contract deployed at address: 0x123NFT...
+
+Step 2/2: Deploying Registry Contract
+🔍 Validating NFT contract at 0x123NFT...
+✓ NFT contract validated successfully
+📤 Declaring contract...
+✓ Contract declared with class hash: 0xDEF...
+🚀 Deploying kliver_registry...
+✓ Contract deployed at address: 0x456REGISTRY...
+
+======================================================================
+🎉 DEPLOYMENT SUMMARY
+======================================================================
+
+1. KLIVERNFT
+   Address:    0x123NFT...
+   Explorer:   https://sepolia.starkscan.co/contract/0x123NFT...
+   Class Hash: 0xABC...
+
+2. KLIVER_REGISTRY
+   Address:    0x456REGISTRY...
+   Explorer:   https://sepolia.starkscan.co/contract/0x456REGISTRY...
+   Class Hash: 0xDEF...
+   NFT Link:   0x123NFT...
+
+Network: SEPOLIA | Owner: 0xOWNER...
+
+ℹ️  Registry is configured to use the NFT contract for author validation
+======================================================================
+```
+
+### 🔐 Security Notes
+
+1. **Always validate NFT address**: The script does this automatically, but double-check in production
+2. **Test on Sepolia first**: Use dev/qa environments before production
+3. **Backup deployment info**: JSON files are saved automatically - keep them safe
+4. **Verify on Explorer**: Always check deployed contracts on Starkscan
+
+### 💡 Additional Resources
+
+- Check `deployment_examples.sh` for more command examples
+- Review `deployment_quick_ref.sh` for visual quick reference
+
+### Command Options Reference
+
 | Option | Values | Description |
 |--------|--------|-------------|
 | `--environment` | `dev`, `qa`, `prod` | Auto-configures network & account |
-| `--contract` | `registry`, `nft` | Which contract to deploy |
+| `--contract` | `all`, `nft`, `registry` | Which contract(s) to deploy |
 | `--owner` | `0x123...` | Optional owner address (uses account if not specified) |
-
-### What happens automatically:
-- ✅ **Network selection**: qa/dev → Sepolia, prod → Mainnet  
-- ✅ **Account selection**: Uses environment-specific account
-- ✅ **Transaction waiting**: Waits for declaration confirmation (5s intervals)
-- ✅ **Smart error handling**: Handles "already declared" cases
-- ✅ **Clean output**: Shows essential info with colored addresses
-
-## � Example Output
-
-```bash
-$ poetry run python deploy_contract.py --environment qa --contract registry
-
-🎯 Deploying kliver_registry to sepolia
-Account: qa | Network: sepolia
---------------------------------------------------
-🔍 Checking prerequisites...
-✓ Prerequisites OK
-� Declaring kliver_registry...
-✓ Contract already declared with class hash: 0x07c96f4fd...cbecf9
-🚀 Deploying kliver_registry...
-✓ Contract deployed at address: 0x07c4815ef6...77da6
-
-🎉 DEPLOYMENT SUCCESSFUL!
-Contract: 0x07c4815ef629823a8ac87dfa8bc6675e059c780e8041b923cc9f9fe6d4d77da6
-Explorer: https://sepolia.starkscan.co/contract/0x07c4815ef629823a8ac87dfa8bc6675e059c780e8041b923cc9f9fe6d4d77da6
-```
+| `--nft-address` | `0xABC...` | Required when deploying registry separately |
 
 
 
