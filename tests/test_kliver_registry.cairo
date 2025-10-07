@@ -5,7 +5,7 @@ use core::array::ArrayTrait;
 // Import contract interfaces from modular structure
 use kliver_on_chain::character_registry::{ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait};
 use kliver_on_chain::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait};
-use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata, SimulationInfo};
+use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata};
 use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
 use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait, SessionMetadata, SessionInfo};
 use kliver_on_chain::types::VerificationResult;
@@ -88,13 +88,15 @@ fn register_test_simulation(
     let simulation_id: felt252 = 'test_sim_123';
     let simulation_hash: felt252 = 'sim_hash_456';
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash,
     };
     
     start_cheat_caller_address(contract_address, owner);
-    sim_dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    sim_dispatcher.register_simulation(metadata);
     stop_cheat_caller_address(contract_address);
     
     simulation_id
@@ -426,14 +428,16 @@ fn test_register_simulation_success() {
     let simulation_id: felt252 = 'sim123';
     let simulation_hash: felt252 = 'hash456';
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash,
     };
     
     start_cheat_caller_address(contract_address, owner);
     // Should not panic - first registration
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -448,14 +452,16 @@ fn test_register_simulation_invalid_character() {
     let simulation_id: felt252 = 'sim123';
     let simulation_hash: felt252 = 'hash456';
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id: 'invalid_char',  // This character doesn't exist
         scenario_id,
+        simulation_hash,
     };
     
     start_cheat_caller_address(contract_address, owner);
     // Should panic - character not found
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
 }
 
 #[test]
@@ -469,14 +475,16 @@ fn test_register_simulation_invalid_scenario() {
     let simulation_id: felt252 = 'sim123';
     let simulation_hash: felt252 = 'hash456';
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id,
         scenario_id: 'invalid_scenario',  // This scenario doesn't exist
+        simulation_hash,
     };
     
     start_cheat_caller_address(contract_address, owner);
     // Should panic - scenario not found
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
 }
 
 #[test]
@@ -490,17 +498,20 @@ fn test_get_simulation_info_success() {
     let simulation_id: felt252 = 'sim123';
     let simulation_hash: felt252 = 'hash456';
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash,
     };
     
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
     stop_cheat_caller_address(contract_address);
     
     // Get simulation info
     let info = dispatcher.get_simulation_info(simulation_id);
+    assert(info.simulation_id == simulation_id, 'Wrong simulation ID');
     assert(info.simulation_hash == simulation_hash, 'Wrong simulation hash');
     assert(info.author == owner, 'Wrong author');
     assert(info.character_id == character_id, 'Wrong character_id');
@@ -518,14 +529,16 @@ fn test_verify_simulation_valid() {
     let simulation_id: felt252 = 123;
     let simulation_hash: felt252 = 456;
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash,
     };
 
     // First register the simulation
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then verify it
@@ -544,14 +557,16 @@ fn test_get_simulation_hash_success() {
     let simulation_id: felt252 = 123;
     let simulation_hash: felt252 = 456;
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash,
     };
 
     // First register the simulation
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then get the hash
@@ -571,14 +586,16 @@ fn test_verify_simulation_invalid_hash() {
     let simulation_hash: felt252 = 456;
     let wrong_hash: felt252 = 789;
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash,
     };
 
     // First register the simulation
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then verify with wrong hash
@@ -632,13 +649,15 @@ fn test_register_simulation_zero_id() {
     let simulation_id: felt252 = 0;
     let simulation_hash: felt252 = 'hash456';
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash,
     };
     
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -654,13 +673,15 @@ fn test_register_simulation_zero_hash() {
     let simulation_id: felt252 = 'sim123';
     let simulation_hash: felt252 = 0;
     let metadata = SimulationMetadata {
+        simulation_id,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash,
     };
     
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -677,13 +698,15 @@ fn test_register_simulation_zero_author() {
     let simulation_hash: felt252 = 'hash456';
     let zero_author: ContractAddress = 0.try_into().unwrap();
     let metadata = SimulationMetadata {
+        simulation_id,
         author: zero_author,
         character_id,
         scenario_id,
+        simulation_hash,
     };
     
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(simulation_id, simulation_hash, metadata);
+    dispatcher.register_simulation(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -959,23 +982,39 @@ fn test_batch_verify_simulations_all_valid() {
     let sim_id_3: felt252 = 102;
     let sim_hash_3: felt252 = 202;
     
-    let metadata = SimulationMetadata {
+    let metadata_1 = SimulationMetadata {
+        simulation_id: sim_id_1,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash: sim_hash_1,
+    };
+    let metadata_2 = SimulationMetadata {
+        simulation_id: sim_id_2,
+        author: owner,
+        character_id,
+        scenario_id,
+        simulation_hash: sim_hash_2,
+    };
+    let metadata_3 = SimulationMetadata {
+        simulation_id: sim_id_3,
+        author: owner,
+        character_id,
+        scenario_id,
+        simulation_hash: sim_hash_3,
     };
 
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(sim_id_1, sim_hash_1, metadata);
-    dispatcher.register_simulation(sim_id_2, sim_hash_2, metadata);
-    dispatcher.register_simulation(sim_id_3, sim_hash_3, metadata);
+    dispatcher.register_simulation(metadata_1);
+    dispatcher.register_simulation(metadata_2);
+    dispatcher.register_simulation(metadata_3);
     stop_cheat_caller_address(contract_address);
 
     // Prepare batch verification array
     let mut batch_array = ArrayTrait::new();
-    batch_array.append((sim_id_1, sim_hash_1));
-    batch_array.append((sim_id_2, sim_hash_2));
-    batch_array.append((sim_id_3, sim_hash_3));
+    batch_array.append(metadata_1);
+    batch_array.append(metadata_2);
+    batch_array.append(metadata_3);
 
     // Batch verify
     let results = dispatcher.batch_verify_simulations(batch_array);
@@ -1006,25 +1045,51 @@ fn test_batch_verify_simulations_mixed_results() {
     let sim_id_1: felt252 = 100;
     let sim_hash_1: felt252 = 200;
     let sim_id_2: felt252 = 101;
+    let sim_hash_2: felt252 = 201;
     let wrong_hash_2: felt252 = 999; // Wrong hash
     let sim_id_3: felt252 = 102; // Not registered
     
-    let metadata = SimulationMetadata {
+    let metadata_1 = SimulationMetadata {
+        simulation_id: sim_id_1,
         author: owner,
         character_id,
         scenario_id,
+        simulation_hash: sim_hash_1,
+    };
+    let metadata_2 = SimulationMetadata {
+        simulation_id: sim_id_2,
+        author: owner,
+        character_id,
+        scenario_id,
+        simulation_hash: sim_hash_2,
     };
 
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_simulation(sim_id_1, sim_hash_1, metadata);
-    dispatcher.register_simulation(sim_id_2, 201, metadata); // Register with different hash
+    dispatcher.register_simulation(metadata_1);
+    dispatcher.register_simulation(metadata_2); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
+    // Prepare batch verification array with metadata for verification
+    let metadata_1_check = metadata_1; // Should be valid
+    let metadata_2_wrong = SimulationMetadata {
+        simulation_id: sim_id_2,
+        author: owner,
+        character_id,
+        scenario_id,
+        simulation_hash: wrong_hash_2, // Wrong hash
+    };
+    let metadata_3_not_registered = SimulationMetadata {
+        simulation_id: sim_id_3,
+        author: owner,
+        character_id,
+        scenario_id,
+        simulation_hash: 202, // Not registered
+    };
+    
     let mut batch_array = ArrayTrait::new();
-    batch_array.append((sim_id_1, sim_hash_1));      // Should be valid
-    batch_array.append((sim_id_2, wrong_hash_2));    // Should be invalid (wrong hash)
-    batch_array.append((sim_id_3, 202));             // Should be invalid (not registered)
+    batch_array.append(metadata_1_check);      // Should be valid
+    batch_array.append(metadata_2_wrong);    // Should be invalid (wrong hash)
+    batch_array.append(metadata_3_not_registered);             // Should be invalid (not registered)
 
     // Batch verify
     let results = dispatcher.batch_verify_simulations(batch_array);

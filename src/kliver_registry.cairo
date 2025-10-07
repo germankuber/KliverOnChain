@@ -15,7 +15,7 @@ pub mod kliver_registry {
     use core::num::traits::Zero;
 
     use crate::session_registry::{SessionRegistered, SessionAccessGranted, SessionMetadata, SessionInfo};
-    use crate::simulation_registry::{SimulationMetadata, SimulationInfo};
+    use crate::simulation_registry::SimulationMetadata;
 
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -281,15 +281,15 @@ pub mod kliver_registry {
     // Simulation Registry Implementation
     #[abi(embed_v0)]
     impl SimulationRegistryImpl of ISimulationRegistry<ContractState> {
-        fn register_simulation(ref self: ContractState, simulation_id: felt252, simulation_hash: felt252, metadata: SimulationMetadata) {
+        fn register_simulation(ref self: ContractState, metadata: SimulationMetadata) {
             // Check if contract is paused
             self._assert_not_paused();
             // Only owner can register simulations
             self._assert_only_owner();
 
             // Validate inputs
-            assert(simulation_id != 0, 'Simulation ID cannot be zero');
-            assert(simulation_hash != 0, 'Simulation hash cannot be zero');
+            assert(metadata.simulation_id != 0, 'Simulation ID cannot be zero');
+            assert(metadata.simulation_hash != 0, 'Simulation hash cannot be zero');
             assert(!metadata.author.is_zero(), 'Author cannot be zero');
             assert(metadata.character_id != 0, 'Character ID cannot be zero');
             assert(metadata.scenario_id != 0, 'Scenario ID cannot be zero');
@@ -303,19 +303,19 @@ pub mod kliver_registry {
             assert(scenario_hash != 0, Errors::SCENARIO_NOT_FOUND);
 
             // Check if simulation is already registered
-            let existing_hash = self.simulations.read(simulation_id);
+            let existing_hash = self.simulations.read(metadata.simulation_id);
             assert(existing_hash == 0, 'Simulation already registered');
 
             // Save the simulation and metadata
-            self.simulations.write(simulation_id, simulation_hash);
-            self.simulation_authors.write(simulation_id, metadata.author);
-            self.simulation_characters.write(simulation_id, metadata.character_id);
-            self.simulation_scenarios.write(simulation_id, metadata.scenario_id);
+            self.simulations.write(metadata.simulation_id, metadata.simulation_hash);
+            self.simulation_authors.write(metadata.simulation_id, metadata.author);
+            self.simulation_characters.write(metadata.simulation_id, metadata.character_id);
+            self.simulation_scenarios.write(metadata.simulation_id, metadata.scenario_id);
 
             // Emit event
             self.emit(SimulationRegistered {
-                simulation_id,
-                simulation_hash,
+                simulation_id: metadata.simulation_id,
+                simulation_hash: metadata.simulation_hash,
                 author: metadata.author,
                 character_id: metadata.character_id,
                 scenario_id: metadata.scenario_id,
@@ -340,13 +340,15 @@ pub mod kliver_registry {
             }
         }
 
-        fn batch_verify_simulations(self: @ContractState, simulations: Array<(felt252, felt252)>) -> Array<(felt252, VerificationResult)> {
+        fn batch_verify_simulations(self: @ContractState, simulations: Array<SimulationMetadata>) -> Array<(felt252, VerificationResult)> {
             let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
             let len = simulations.len();
 
             while i != len {
-                let (simulation_id, simulation_hash) = *simulations.at(i);
+                let metadata = *simulations.at(i);
+                let simulation_id = metadata.simulation_id;
+                let simulation_hash = metadata.simulation_hash;
 
                 // For batch operations, handle zero values gracefully instead of panicking
                 let verification_result = if simulation_id == 0 || simulation_hash == 0 {
@@ -383,7 +385,7 @@ pub mod kliver_registry {
             stored_hash
         }
 
-        fn get_simulation_info(self: @ContractState, simulation_id: felt252) -> SimulationInfo {
+        fn get_simulation_info(self: @ContractState, simulation_id: felt252) -> SimulationMetadata {
             // Validate input
             assert(simulation_id != 0, 'Simulation ID cannot be zero');
 
@@ -395,11 +397,12 @@ pub mod kliver_registry {
             let character_id = self.simulation_characters.read(simulation_id);
             let scenario_id = self.simulation_scenarios.read(simulation_id);
 
-            SimulationInfo {
-                simulation_hash,
+            SimulationMetadata {
+                simulation_id,
                 author,
                 character_id,
                 scenario_id,
+                simulation_hash,
             }
         }
     }
