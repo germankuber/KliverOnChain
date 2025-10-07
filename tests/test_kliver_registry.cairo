@@ -13,9 +13,11 @@ use kliver_on_chain::types::VerificationResult;
 /// Helper function to deploy the contract and return all dispatchers
 fn deploy_contract() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ISimulationRegistryDispatcher, IOwnerRegistryDispatcher, ISessionRegistryDispatcher, ContractAddress) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let nft_address: ContractAddress = 'nft_contract'.try_into().unwrap();
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
+    constructor_calldata.append(nft_address.into());
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
     (
         ICharacterRegistryDispatcher { contract_address },
@@ -125,10 +127,29 @@ fn test_constructor() {
 #[should_panic]
 fn test_constructor_zero_owner() {
     let zero_owner: ContractAddress = 0.try_into().unwrap();
+    let nft_address: ContractAddress = 'nft_contract'.try_into().unwrap();
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(zero_owner.into());
+    constructor_calldata.append(nft_address.into());
     let (_contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
+}
+
+#[test]
+fn test_constructor_zero_nft_address() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let zero_nft: ContractAddress = 0.try_into().unwrap();
+    let contract = declare("kliver_registry").unwrap().contract_class();
+    let mut constructor_calldata = ArrayTrait::new();
+    constructor_calldata.append(owner.into());
+    constructor_calldata.append(zero_nft.into());
+    
+    match contract.deploy(@constructor_calldata) {
+        Result::Ok(_) => core::panic_with_felt252('Should have panicked'),
+        Result::Err(errors) => {
+            assert(*errors.at(0) == 'NFT address cannot be zero', 'Wrong error message');
+        }
+    }
 }
 
     #[test]
@@ -136,6 +157,14 @@ fn test_constructor_zero_owner() {
         let (_, _, _, owner_dispatcher, _, expected_owner) = deploy_contract();
         let owner = owner_dispatcher.get_owner();
         assert_eq!(owner, expected_owner);
+    }
+
+    #[test]
+    fn test_get_nft_address() {
+        let (_, _, _, owner_dispatcher, _, _) = deploy_contract();
+        let nft_address = owner_dispatcher.get_nft_address();
+        let expected_nft: ContractAddress = 'nft_contract'.try_into().unwrap();
+        assert_eq!(nft_address, expected_nft);
     }
 
     #[test]

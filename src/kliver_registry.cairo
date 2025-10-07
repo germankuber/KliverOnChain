@@ -51,6 +51,7 @@ pub mod kliver_registry {
     struct Storage {
         owner: ContractAddress,
         paused: bool,
+        nft_address: ContractAddress,
         /// Maps character version ID to its hash
         character_versions: Map<felt252, felt252>,
         // Character metadata:
@@ -74,6 +75,7 @@ pub mod kliver_registry {
     }
 
     pub mod Errors {
+        pub const NFT_ADDRESS_CANNOT_BE_ZERO: felt252 = 'NFT address cannot be zero';
         pub const SESSION_ID_CANNOT_BE_ZERO: felt252 = 'Session ID cannot be zero';
         pub const ROOT_HASH_CANNOT_BE_ZERO: felt252 = 'Root hash cannot be zero';
         pub const AUTHOR_CANNOT_BE_ZERO: felt252 = 'Author cannot be zero';
@@ -90,9 +92,12 @@ pub mod kliver_registry {
     fn constructor(
         ref self: ContractState,
         owner: ContractAddress,
+        nft_address: ContractAddress,
     ) {
         assert(!owner.is_zero(), 'Owner cannot be zero');
+        assert(!nft_address.is_zero(), Errors::NFT_ADDRESS_CANNOT_BE_ZERO);
         self.owner.write(owner);
+        self.nft_address.write(nft_address);
         self.paused.write(false);
     }
 
@@ -543,6 +548,10 @@ pub mod kliver_registry {
     impl OwnerRegistryImpl of IOwnerRegistry<ContractState> {
         fn get_owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
+        }
+
+        fn get_nft_address(self: @ContractState) -> ContractAddress {
+            self.nft_address.read()
         }
 
         fn transfer_ownership(ref self: ContractState, new_owner: ContractAddress) {
