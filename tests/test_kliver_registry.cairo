@@ -50,6 +50,27 @@ fn deploy_contract() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatch
     )
 }
 
+/// Helper function to deploy contract with NFT dispatcher access
+fn deploy_contract_with_nft() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ISimulationRegistryDispatcher, IOwnerRegistryDispatcher, ISessionRegistryDispatcher, IKliverNFTDispatcher, ContractAddress, ContractAddress) {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let nft_address = deploy_nft_contract(owner);
+    let contract = declare("kliver_registry").unwrap().contract_class();
+    let mut constructor_calldata = ArrayTrait::new();
+    constructor_calldata.append(owner.into());
+    constructor_calldata.append(nft_address.into());
+    let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
+    (
+        ICharacterRegistryDispatcher { contract_address },
+        IScenarioRegistryDispatcher { contract_address },
+        ISimulationRegistryDispatcher { contract_address },
+        IOwnerRegistryDispatcher { contract_address },
+        ISessionRegistryDispatcher { contract_address },
+        IKliverNFTDispatcher { contract_address: nft_address },
+        owner,
+        nft_address
+    )
+}
+
 /// Helper for character registry tests
 fn deploy_for_characters() -> (ICharacterRegistryDispatcher, ContractAddress, ContractAddress) {
     let (char_dispatcher, _, _, _, _, owner) = deploy_contract();
@@ -67,9 +88,9 @@ fn deploy_for_simulations() -> (ISimulationRegistryDispatcher, ICharacterRegistr
     (sim_dispatcher, char_dispatcher, scenario_dispatcher, sim_dispatcher.contract_address, owner)
 }
 
-fn deploy_for_sessions() -> (ISessionRegistryDispatcher, ISimulationRegistryDispatcher, ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ContractAddress, ContractAddress) {
-    let (char_dispatcher, scenario_dispatcher, sim_dispatcher, _, session_dispatcher, owner) = deploy_contract();
-    (session_dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, session_dispatcher.contract_address, owner)
+fn deploy_for_sessions() -> (ISessionRegistryDispatcher, ISimulationRegistryDispatcher, ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, IKliverNFTDispatcher, ContractAddress, ContractAddress, ContractAddress) {
+    let (char_dispatcher, scenario_dispatcher, sim_dispatcher, _, session_dispatcher, nft_dispatcher, owner, nft_address) = deploy_contract_with_nft();
+    (session_dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, session_dispatcher.contract_address, owner, nft_address)
 }
 
 /// Helper function to register a test character and return its ID
@@ -1475,7 +1496,7 @@ fn test_batch_verify_simulations_empty_array() {
 
 #[test]
 fn test_register_session_success() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, contract_address, owner, nft_address) = deploy_for_sessions();
     
     // First register a simulation
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1483,6 +1504,12 @@ fn test_register_session_success() {
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 'hash456';
     let author: ContractAddress = 'author'.try_into().unwrap();
+    
+    // Mint NFT to author so they can be validated
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(author);
+    stop_cheat_caller_address(nft_address);
+    
     let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
@@ -1494,7 +1521,7 @@ fn test_register_session_success() {
 #[test]
 #[should_panic(expected: ('Session already registered', ))]
 fn test_register_session_duplicate() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, contract_address, owner, nft_address) = deploy_for_sessions();
     
     // First register a simulation
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1503,6 +1530,12 @@ fn test_register_session_duplicate() {
     let hash1: felt252 = 'hash456';
     let hash2: felt252 = 'hash789';
     let author: ContractAddress = 'author'.try_into().unwrap();
+    
+    // Mint NFT to author
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(author);
+    stop_cheat_caller_address(nft_address);
+    
     let metadata1 = SessionMetadata { session_id, root_hash: hash1, simulation_id, author, score: 100_u32 };
     let metadata2 = SessionMetadata { session_id, root_hash: hash2, simulation_id, author, score: 200_u32 };
 
@@ -1518,7 +1551,7 @@ fn test_register_session_duplicate() {
 #[test]
 #[should_panic(expected: ('Session ID cannot be zero', ))]
 fn test_register_session_zero_id() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, contract_address, owner, nft_address) = deploy_for_sessions();
     
     // Register a simulation first
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1526,6 +1559,12 @@ fn test_register_session_zero_id() {
     let session_id: felt252 = 0;
     let root_hash: felt252 = 'hash456';
     let author: ContractAddress = 'author'.try_into().unwrap();
+    
+    // Mint NFT to author
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(author);
+    stop_cheat_caller_address(nft_address);
+    
     let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
@@ -1536,7 +1575,7 @@ fn test_register_session_zero_id() {
 #[test]
 #[should_panic(expected: ('Root hash cannot be zero', ))]
 fn test_register_session_zero_hash() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, contract_address, owner, nft_address) = deploy_for_sessions();
     
     // Register a simulation first
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1544,6 +1583,12 @@ fn test_register_session_zero_hash() {
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 0;
     let author: ContractAddress = 'author'.try_into().unwrap();
+    
+    // Mint NFT to author
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(author);
+    stop_cheat_caller_address(nft_address);
+    
     let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
@@ -1554,7 +1599,7 @@ fn test_register_session_zero_hash() {
 #[test]
 #[should_panic(expected: ('Author cannot be zero', ))]
 fn test_register_session_zero_author() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, _nft_dispatcher, contract_address, owner, _nft_address) = deploy_for_sessions();
     
     // Register a simulation first
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1571,7 +1616,7 @@ fn test_register_session_zero_author() {
 
 #[test]
 fn test_verify_session_valid() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, contract_address, owner, nft_address) = deploy_for_sessions();
 
     // Register a simulation first
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1579,6 +1624,11 @@ fn test_verify_session_valid() {
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
     let author: ContractAddress = 'author'.try_into().unwrap();
+    
+    // Mint NFT to author
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(author);
+    stop_cheat_caller_address(nft_address);
 
     // First register the session
     let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
@@ -1593,7 +1643,7 @@ fn test_verify_session_valid() {
 
 #[test]
 fn test_verify_session_invalid_hash() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, contract_address, owner, nft_address) = deploy_for_sessions();
 
     // Register a simulation first
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1602,6 +1652,11 @@ fn test_verify_session_invalid_hash() {
     let root_hash: felt252 = 456;
     let wrong_hash: felt252 = 789;
     let author: ContractAddress = 'author'.try_into().unwrap();
+    
+    // Mint NFT to author
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(author);
+    stop_cheat_caller_address(nft_address);
 
     // First register the session
     let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
@@ -1616,7 +1671,7 @@ fn test_verify_session_invalid_hash() {
 
 #[test]
 fn test_verify_session_non_existent() {
-    let (dispatcher, _, _, _, _, _) = deploy_for_sessions();
+    let (dispatcher, _, _, _, _, _, _, _) = deploy_for_sessions();
 
     let non_existent_id: felt252 = 999;
     let some_hash: felt252 = 456;
@@ -1628,7 +1683,7 @@ fn test_verify_session_non_existent() {
 
 #[test]
 fn test_get_session_info_success() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, contract_address, owner, nft_address) = deploy_for_sessions();
 
     // Register a simulation first
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1636,6 +1691,11 @@ fn test_get_session_info_success() {
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
     let author: ContractAddress = 'author'.try_into().unwrap();
+    
+    // Mint NFT to author
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(author);
+    stop_cheat_caller_address(nft_address);
 
     // First register the session
     start_cheat_caller_address(contract_address, owner);
@@ -1655,7 +1715,7 @@ fn test_get_session_info_success() {
 #[test]
 #[should_panic(expected: ('Session not found', ))]
 fn test_get_session_info_not_found() {
-    let (dispatcher, _, _, _, _, _) = deploy_for_sessions();
+    let (dispatcher, _, _, _, _, _, _, _) = deploy_for_sessions();
 
     let non_existent_id: felt252 = 999;
 
@@ -1665,7 +1725,7 @@ fn test_get_session_info_not_found() {
 
 #[test]
 fn test_grant_access_success() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, contract_address, owner, nft_address) = deploy_for_sessions();
 
     // Register a simulation first
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1674,6 +1734,11 @@ fn test_grant_access_success() {
     let root_hash: felt252 = 456;
     let author: ContractAddress = 'author'.try_into().unwrap();
     let grantee: ContractAddress = 'grantee'.try_into().unwrap();
+    
+    // Mint NFT to author
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(author);
+    stop_cheat_caller_address(nft_address);
 
     // First register the session
     let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
@@ -1690,7 +1755,7 @@ fn test_grant_access_success() {
 
 #[test]
 fn test_has_access_returns_false_for_no_access() {
-    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, sim_dispatcher, char_dispatcher, scenario_dispatcher, nft_dispatcher, contract_address, owner, nft_address) = deploy_for_sessions();
 
     // Register a simulation first
     let simulation_id = register_test_simulation(sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner);
@@ -1698,6 +1763,11 @@ fn test_has_access_returns_false_for_no_access() {
     let session_id: felt252 = 123;
     let root_hash: felt252 = 456;
     let author: ContractAddress = 'author'.try_into().unwrap();
+    
+    // Mint NFT to author
+    start_cheat_caller_address(nft_address, owner);
+    nft_dispatcher.mint_to_user(author);
+    stop_cheat_caller_address(nft_address);
     let random_addr: ContractAddress = 'random'.try_into().unwrap();
 
     // Register the session but don't grant access
@@ -1713,7 +1783,7 @@ fn test_has_access_returns_false_for_no_access() {
 #[test]
 #[should_panic(expected: ('Session not found', ))]
 fn test_grant_access_nonexistent_session() {
-    let (dispatcher, _, _, _, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, _, _, _, _, contract_address, owner, _) = deploy_for_sessions();
 
     let non_existent_session: felt252 = 999;
     let grantee: ContractAddress = 'grantee'.try_into().unwrap();
@@ -1725,9 +1795,9 @@ fn test_grant_access_nonexistent_session() {
 }
 
 #[test]
-#[should_panic(expected: ('Simulation not found', ))]
+#[should_panic(expected: ('Author must own a Kliver NFT', ))]
 fn test_register_session_invalid_simulation() {
-    let (dispatcher, _, _, _, contract_address, owner) = deploy_for_sessions();
+    let (dispatcher, _, _, _, _, contract_address, owner, _) = deploy_for_sessions();
     
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 'hash456';

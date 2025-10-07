@@ -483,6 +483,9 @@ pub mod kliver_registry {
             assert(metadata.simulation_id != 0, Errors::SIMULATION_ID_CANNOT_BE_ZERO);
             assert(!metadata.author.is_zero(), Errors::AUTHOR_CANNOT_BE_ZERO);
 
+            // Validate that the author has an NFT
+            self._assert_author_has_nft(metadata.author);
+
             // Validate that the simulation exists
             let simulation_hash = self.simulations.read(metadata.simulation_id);
             assert(simulation_hash != 0, Errors::SIMULATION_NOT_FOUND);
