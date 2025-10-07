@@ -7,7 +7,7 @@ use kliver_on_chain::character_registry::{ICharacterRegistryDispatcher, ICharact
 use kliver_on_chain::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait, ScenarioMetadata};
 use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata};
 use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
-use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait, SessionMetadata, SessionInfo};
+use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait, SessionMetadata};
 use kliver_on_chain::types::VerificationResult;
 
 /// Helper function to deploy the contract and return all dispatchers
@@ -1426,11 +1426,11 @@ fn test_register_session_success() {
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 'hash456';
     let author: ContractAddress = 'author'.try_into().unwrap();
-    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
     // Should not panic - first registration
-    dispatcher.register_session(session_id, root_hash, metadata);
+    dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -1446,15 +1446,15 @@ fn test_register_session_duplicate() {
     let hash1: felt252 = 'hash456';
     let hash2: felt252 = 'hash789';
     let author: ContractAddress = 'author'.try_into().unwrap();
-    let metadata1 = SessionMetadata { simulation_id, author, score: 100_u32 };
-    let metadata2 = SessionMetadata { simulation_id, author, score: 200_u32 };
+    let metadata1 = SessionMetadata { session_id, root_hash: hash1, simulation_id, author, score: 100_u32 };
+    let metadata2 = SessionMetadata { session_id, root_hash: hash2, simulation_id, author, score: 200_u32 };
 
     start_cheat_caller_address(contract_address, owner);
     // First registration should succeed
-    dispatcher.register_session(session_id, hash1, metadata1);
+    dispatcher.register_session(metadata1);
 
     // Second registration with same session ID should fail
-    dispatcher.register_session(session_id, hash2, metadata2);
+    dispatcher.register_session(metadata2);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -1469,10 +1469,10 @@ fn test_register_session_zero_id() {
     let session_id: felt252 = 0;
     let root_hash: felt252 = 'hash456';
     let author: ContractAddress = 'author'.try_into().unwrap();
-    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(session_id, root_hash, metadata);
+    dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -1487,10 +1487,10 @@ fn test_register_session_zero_hash() {
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 0;
     let author: ContractAddress = 'author'.try_into().unwrap();
-    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(session_id, root_hash, metadata);
+    dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -1505,10 +1505,10 @@ fn test_register_session_zero_author() {
     let session_id: felt252 = 'session123';
     let root_hash: felt252 = 'hash456';
     let author: ContractAddress = 0.try_into().unwrap();
-    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(session_id, root_hash, metadata);
+    dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -1524,9 +1524,9 @@ fn test_verify_session_valid() {
     let author: ContractAddress = 'author'.try_into().unwrap();
 
     // First register the session
-    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(session_id, root_hash, metadata);
+    dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then verify it
@@ -1547,9 +1547,9 @@ fn test_verify_session_invalid_hash() {
     let author: ContractAddress = 'author'.try_into().unwrap();
 
     // First register the session
-    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(session_id, root_hash, metadata);
+    dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then verify with wrong hash
@@ -1582,16 +1582,17 @@ fn test_get_session_info_success() {
 
     // First register the session
     start_cheat_caller_address(contract_address, owner);
-    let metadata = SessionMetadata { simulation_id, author, score: 150_u32 };
-    dispatcher.register_session(session_id, root_hash, metadata);
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 150_u32 };
+    dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then get the session info
-    let session_info = dispatcher.get_session_info(session_id);
-    assert_eq!(session_info.root_hash, root_hash);
-    assert_eq!(session_info.simulation_id, simulation_id);
-    assert_eq!(session_info.author, author);
-    assert_eq!(session_info.score, 150_u32);
+    let session_metadata = dispatcher.get_session_info(session_id);
+    assert_eq!(session_metadata.session_id, session_id);
+    assert_eq!(session_metadata.root_hash, root_hash);
+    assert_eq!(session_metadata.simulation_id, simulation_id);
+    assert_eq!(session_metadata.author, author);
+    assert_eq!(session_metadata.score, 150_u32);
 }
 
 #[test]
@@ -1618,9 +1619,9 @@ fn test_grant_access_success() {
     let grantee: ContractAddress = 'grantee'.try_into().unwrap();
 
     // First register the session
-    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(session_id, root_hash, metadata);
+    dispatcher.register_session(metadata);
 
     // Grant access
     dispatcher.grant_access(session_id, grantee);
@@ -1643,9 +1644,9 @@ fn test_has_access_returns_false_for_no_access() {
     let random_addr: ContractAddress = 'random'.try_into().unwrap();
 
     // Register the session but don't grant access
-    let metadata = SessionMetadata { simulation_id, author, score: 100_u32 };
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(session_id, root_hash, metadata);
+    dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Check access (should be false)
@@ -1675,10 +1676,10 @@ fn test_register_session_invalid_simulation() {
     let root_hash: felt252 = 'hash456';
     let invalid_simulation_id: felt252 = 'nonexistent_sim';
     let author: ContractAddress = 'author'.try_into().unwrap();
-    let metadata = SessionMetadata { simulation_id: invalid_simulation_id, author, score: 100_u32 };
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id: invalid_simulation_id, author, score: 100_u32 };
 
     start_cheat_caller_address(contract_address, owner);
     // Should panic - simulation doesn't exist
-    dispatcher.register_session(session_id, root_hash, metadata);
+    dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 }
