@@ -17,12 +17,13 @@ pub mod kliver_registry {
     use crate::session_registry::{SessionRegistered, SessionAccessGranted, SessionMetadata, SessionInfo};
     use crate::simulation_registry::SimulationMetadata;
     use crate::character_registry::CharacterMetadata;
+    use crate::scenario_registry::ScenarioMetadata;
 
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
         CharacterVersionRegistered: CharacterVersionRegistered,
-        ScenarioRegistered: ScenarioRegistered,
+        ScenarioRegistered: ScenarioMetadata,
         SimulationRegistered: SimulationRegistered,
         SessionRegistered: SessionRegistered,
         SessionAccessGranted: SessionAccessGranted,
@@ -33,14 +34,6 @@ pub mod kliver_registry {
         #[key]
         pub character_version_id: felt252,
         pub character_version_hash: felt252,
-        pub registered_by: ContractAddress,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    pub struct ScenarioRegistered {
-        #[key]
-        pub scenario_id: felt252,
-        pub scenario_hash: felt252,
         pub registered_by: ContractAddress,
     }
 
@@ -64,6 +57,8 @@ pub mod kliver_registry {
         character_authors: Map<felt252, ContractAddress>,        // character_version_id -> author
         /// Maps scenario ID to its hash
         scenarios: Map<felt252, felt252>,
+        // Scenario metadata:
+        scenario_authors: Map<felt252, ContractAddress>,         // scenario_id -> author
         /// Maps simulation ID to its hash
         simulations: Map<felt252, felt252>,
         // Simulations metadata:
@@ -221,29 +216,32 @@ pub mod kliver_registry {
     // Scenario Registry Implementation
     #[abi(embed_v0)]
     impl ScenarioRegistryImpl of IScenarioRegistry<ContractState> {
-        fn register_scenario(ref self: ContractState, scenario_id: felt252, scenario_hash: felt252) {
+        fn register_scenario(ref self: ContractState, metadata: ScenarioMetadata) {
             // Check if contract is paused
             self._assert_not_paused();
             // Only owner can register scenarios
             self._assert_only_owner();
 
+            // Extract values from metadata
+            let scenario_id = metadata.scenario_id;
+            let scenario_hash = metadata.scenario_hash;
+            let author = metadata.author;
+
             // Validate inputs
             assert(scenario_id != 0, 'Scenario ID cannot be zero');
             assert(scenario_hash != 0, 'Scenario hash cannot be zero');
+            assert(!author.is_zero(), 'Author cannot be zero');
 
             // Check if scenario is already registered
             let existing_hash = self.scenarios.read(scenario_id);
             assert(existing_hash == 0, 'Scenario already registered');
 
-            // Save the scenario
+            // Save the scenario and metadata
             self.scenarios.write(scenario_id, scenario_hash);
+            self.scenario_authors.write(scenario_id, author);
 
             // Emit event
-            self.emit(ScenarioRegistered {
-                scenario_id,
-                scenario_hash,
-                registered_by: get_caller_address()
-            });
+            self.emit(Event::ScenarioRegistered(metadata));
         }
 
         fn verify_scenario(self: @ContractState, scenario_id: felt252, scenario_hash: felt252) -> VerificationResult {
@@ -264,13 +262,15 @@ pub mod kliver_registry {
             }
         }
 
-        fn batch_verify_scenarios(self: @ContractState, scenarios: Array<(felt252, felt252)>) -> Array<(felt252, VerificationResult)> {
+        fn batch_verify_scenarios(self: @ContractState, scenarios: Array<ScenarioMetadata>) -> Array<(felt252, VerificationResult)> {
             let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
             let len = scenarios.len();
 
             while i != len {
-                let (scenario_id, scenario_hash) = *scenarios.at(i);
+                let metadata = *scenarios.at(i);
+                let scenario_id = metadata.scenario_id;
+                let scenario_hash = metadata.scenario_hash;
 
                 // For batch operations, handle zero values gracefully instead of panicking
                 let verification_result = if scenario_id == 0 || scenario_hash == 0 {
@@ -305,6 +305,24 @@ pub mod kliver_registry {
             assert(stored_hash != 0, 'Scenario not found');
 
             stored_hash
+        }
+
+        fn get_scenario_info(self: @ContractState, scenario_id: felt252) -> ScenarioMetadata {
+            // Validate input
+            assert(scenario_id != 0, 'Scenario ID cannot be zero');
+
+            // Get the stored data for this scenario ID
+            let scenario_hash = self.scenarios.read(scenario_id);
+            assert(scenario_hash != 0, 'Scenario not found');
+
+            let author = self.scenario_authors.read(scenario_id);
+
+            // Return the complete metadata
+            ScenarioMetadata {
+                scenario_id,
+                scenario_hash,
+                author,
+            }
         }
     }
 

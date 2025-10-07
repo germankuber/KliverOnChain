@@ -4,7 +4,7 @@ use core::array::ArrayTrait;
 
 // Import contract interfaces from modular structure
 use kliver_on_chain::character_registry::{ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait, CharacterMetadata};
-use kliver_on_chain::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait};
+use kliver_on_chain::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait, ScenarioMetadata};
 use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata};
 use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
 use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait, SessionMetadata, SessionInfo};
@@ -72,8 +72,14 @@ fn register_test_scenario(scenario_dispatcher: IScenarioRegistryDispatcher, cont
     let scenario_id: felt252 = 'test_scen_123';
     let scenario_hash: felt252 = 'scen_hash_456';
     
+    let metadata = ScenarioMetadata {
+        scenario_id,
+        scenario_hash,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
-    scenario_dispatcher.register_scenario(scenario_id, scenario_hash);
+    scenario_dispatcher.register_scenario(metadata);
     stop_cheat_caller_address(contract_address);
     
     scenario_id
@@ -383,9 +389,15 @@ fn test_register_scenario_success() {
     let scenario_id: felt252 = 'scenario123';
     let scenario_hash: felt252 = 'hash456';
     
+    let metadata = ScenarioMetadata {
+        scenario_id,
+        scenario_hash,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
     // Should not panic - first registration
-    dispatcher.register_scenario(scenario_id, scenario_hash);
+    dispatcher.register_scenario(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -397,12 +409,24 @@ fn test_register_scenario_duplicate() {
     let hash1: felt252 = 'hash456';
     let hash2: felt252 = 'hash789';
     
+    let metadata1 = ScenarioMetadata {
+        scenario_id,
+        scenario_hash: hash1,
+        author: owner,
+    };
+    
+    let metadata2 = ScenarioMetadata {
+        scenario_id,
+        scenario_hash: hash2,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
     // First registration should succeed
-    dispatcher.register_scenario(scenario_id, hash1);
+    dispatcher.register_scenario(metadata1);
     
     // Second registration with same scenario ID should fail
-    dispatcher.register_scenario(scenario_id, hash2);
+    dispatcher.register_scenario(metadata2);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -413,9 +437,15 @@ fn test_verify_scenario_valid() {
     let scenario_id: felt252 = 123;
     let scenario_hash: felt252 = 456;
 
+    let metadata = ScenarioMetadata {
+        scenario_id,
+        scenario_hash,
+        author: owner,
+    };
+
     // First register the scenario
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_scenario(scenario_id, scenario_hash);
+    dispatcher.register_scenario(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then verify it
@@ -430,9 +460,15 @@ fn test_get_scenario_hash_success() {
     let scenario_id: felt252 = 123;
     let scenario_hash: felt252 = 456;
 
+    let metadata = ScenarioMetadata {
+        scenario_id,
+        scenario_hash,
+        author: owner,
+    };
+
     // First register the scenario
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_scenario(scenario_id, scenario_hash);
+    dispatcher.register_scenario(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then get the hash
@@ -452,6 +488,42 @@ fn test_get_scenario_hash_not_found() {
 }
 
 #[test]
+fn test_get_scenario_info_success() {
+    let (dispatcher, contract_address, owner) = deploy_for_scenarios();
+
+    let scenario_id: felt252 = 123;
+    let scenario_hash: felt252 = 456;
+
+    let metadata = ScenarioMetadata {
+        scenario_id,
+        scenario_hash,
+        author: owner,
+    };
+
+    // First register the scenario
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_scenario(metadata);
+    stop_cheat_caller_address(contract_address);
+
+    // Then get the complete info
+    let retrieved_metadata = dispatcher.get_scenario_info(scenario_id);
+    assert_eq!(retrieved_metadata.scenario_id, scenario_id);
+    assert_eq!(retrieved_metadata.scenario_hash, scenario_hash);
+    assert_eq!(retrieved_metadata.author, owner);
+}
+
+#[test]
+#[should_panic(expected: ('Scenario not found', ))]
+fn test_get_scenario_info_not_found() {
+    let (dispatcher, _, _) = deploy_for_scenarios();
+
+    let non_existent_id: felt252 = 999;
+
+    // Try to get info for non-existent scenario
+    dispatcher.get_scenario_info(non_existent_id);
+}
+
+#[test]
 fn test_verify_scenario_invalid_hash() {
     let (dispatcher, contract_address, owner) = deploy_for_scenarios();
 
@@ -459,9 +531,15 @@ fn test_verify_scenario_invalid_hash() {
     let scenario_hash: felt252 = 456;
     let wrong_hash: felt252 = 789;
 
+    let metadata = ScenarioMetadata {
+        scenario_id,
+        scenario_hash,
+        author: owner,
+    };
+
     // First register the scenario
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_scenario(scenario_id, scenario_hash);
+    dispatcher.register_scenario(metadata);
     stop_cheat_caller_address(contract_address);
 
     // Then verify with wrong hash
@@ -488,8 +566,14 @@ fn test_register_scenario_zero_id() {
     let scenario_id: felt252 = 0;
     let scenario_hash: felt252 = 'hash456';
     
+    let metadata = ScenarioMetadata {
+        scenario_id,
+        scenario_hash,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_scenario(scenario_id, scenario_hash);
+    dispatcher.register_scenario(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -500,8 +584,14 @@ fn test_register_scenario_zero_hash() {
     let scenario_id: felt252 = 'scenario123';
     let scenario_hash: felt252 = 0;
     
+    let metadata = ScenarioMetadata {
+        scenario_id,
+        scenario_hash,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_scenario(scenario_id, scenario_hash);
+    dispatcher.register_scenario(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -1041,17 +1131,33 @@ fn test_batch_verify_scenarios_all_valid() {
     let scenario_id_3: felt252 = 102;
     let scenario_hash_3: felt252 = 202;
 
+    let metadata1 = ScenarioMetadata {
+        scenario_id: scenario_id_1,
+        scenario_hash: scenario_hash_1,
+        author: owner,
+    };
+    let metadata2 = ScenarioMetadata {
+        scenario_id: scenario_id_2,
+        scenario_hash: scenario_hash_2,
+        author: owner,
+    };
+    let metadata3 = ScenarioMetadata {
+        scenario_id: scenario_id_3,
+        scenario_hash: scenario_hash_3,
+        author: owner,
+    };
+
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_scenario(scenario_id_1, scenario_hash_1);
-    dispatcher.register_scenario(scenario_id_2, scenario_hash_2);
-    dispatcher.register_scenario(scenario_id_3, scenario_hash_3);
+    dispatcher.register_scenario(metadata1);
+    dispatcher.register_scenario(metadata2);
+    dispatcher.register_scenario(metadata3);
     stop_cheat_caller_address(contract_address);
 
     // Prepare batch verification array
     let mut batch_array = ArrayTrait::new();
-    batch_array.append((scenario_id_1, scenario_hash_1));
-    batch_array.append((scenario_id_2, scenario_hash_2));
-    batch_array.append((scenario_id_3, scenario_hash_3));
+    batch_array.append(metadata1);
+    batch_array.append(metadata2);
+    batch_array.append(metadata3);
 
     // Batch verify
     let results = dispatcher.batch_verify_scenarios(batch_array);
@@ -1081,16 +1187,43 @@ fn test_batch_verify_scenarios_mixed_results() {
     let wrong_hash_2: felt252 = 999; // Wrong hash
     let scenario_id_3: felt252 = 102; // Not registered
 
+    let metadata1_register = ScenarioMetadata {
+        scenario_id: scenario_id_1,
+        scenario_hash: scenario_hash_1,
+        author: owner,
+    };
+    let metadata2_register = ScenarioMetadata {
+        scenario_id: scenario_id_2,
+        scenario_hash: 201,
+        author: owner,
+    };
+
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_scenario(scenario_id_1, scenario_hash_1);
-    dispatcher.register_scenario(scenario_id_2, 201); // Register with different hash
+    dispatcher.register_scenario(metadata1_register);
+    dispatcher.register_scenario(metadata2_register); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
     // Prepare batch verification array
+    let metadata1_verify = ScenarioMetadata {
+        scenario_id: scenario_id_1,
+        scenario_hash: scenario_hash_1,
+        author: owner,
+    };
+    let metadata2_verify = ScenarioMetadata {
+        scenario_id: scenario_id_2,
+        scenario_hash: wrong_hash_2,
+        author: owner,
+    };
+    let metadata3_verify = ScenarioMetadata {
+        scenario_id: scenario_id_3,
+        scenario_hash: 202,
+        author: owner,
+    };
+
     let mut batch_array = ArrayTrait::new();
-    batch_array.append((scenario_id_1, scenario_hash_1));    // Should be valid
-    batch_array.append((scenario_id_2, wrong_hash_2));       // Should be invalid (wrong hash)
-    batch_array.append((scenario_id_3, 202));                // Should be invalid (not registered)
+    batch_array.append(metadata1_verify);    // Should be valid
+    batch_array.append(metadata2_verify);       // Should be invalid (wrong hash)
+    batch_array.append(metadata3_verify);                // Should be invalid (not registered)
 
     // Batch verify
     let results = dispatcher.batch_verify_scenarios(batch_array);
