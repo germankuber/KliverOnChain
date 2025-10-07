@@ -387,12 +387,22 @@ class ContractDeployer:
             contract_address = match.group(1)
             print(f"{Colors.SUCCESS}✓ Contract deployed at address: {contract_address}{Colors.RESET}")
             
-            # Also look for transaction hash for confirmation
+            # Look for transaction hash and wait for confirmation
             tx_hash_pattern = r"(?:transaction_hash:|Transaction Hash:)\s*(0x[a-fA-F0-9]+)"
             tx_match = re.search(tx_hash_pattern, result["stdout"])
             if tx_match:
                 tx_hash = tx_match.group(1)
-                print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
+                print(f"{Colors.INFO}📋 Deployment transaction hash: {tx_hash}{Colors.RESET}")
+                
+                # CRITICAL: Wait for deployment transaction to be confirmed before proceeding
+                print(f"{Colors.BOLD}⏳ Waiting for deployment to be confirmed on the network...{Colors.RESET}")
+                if not self.wait_for_transaction(tx_hash):
+                    print(f"{Colors.ERROR}✗ Deployment transaction not confirmed. Contract may not be available yet.{Colors.RESET}")
+                    return None
+                    
+                print(f"{Colors.SUCCESS}✓ Contract deployment confirmed on L2!{Colors.RESET}")
+            else:
+                print(f"{Colors.WARNING}⚠️  No transaction hash found in deployment output{Colors.RESET}")
             
             return contract_address
         else:
