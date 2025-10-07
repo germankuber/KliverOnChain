@@ -16,6 +16,7 @@ pub mod kliver_registry {
 
     use crate::session_registry::{SessionRegistered, SessionAccessGranted, SessionMetadata, SessionInfo};
     use crate::simulation_registry::SimulationMetadata;
+    use crate::character_registry::CharacterMetadata;
 
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -59,6 +60,8 @@ pub mod kliver_registry {
         paused: bool,
         /// Maps character version ID to its hash
         character_versions: Map<felt252, felt252>,
+        // Character metadata:
+        character_authors: Map<felt252, ContractAddress>,        // character_version_id -> author
         /// Maps scenario ID to its hash
         scenarios: Map<felt252, felt252>,
         /// Maps simulation ID to its hash
@@ -101,22 +104,29 @@ pub mod kliver_registry {
     // Character Registry Implementation
     #[abi(embed_v0)]
     impl CharacterRegistryImpl of ICharacterRegistry<ContractState> {
-        fn register_character_version(ref self: ContractState, character_version_id: felt252, character_version_hash: felt252) {
+        fn register_character_version(ref self: ContractState, metadata: CharacterMetadata) {
             // Check if contract is paused
             self._assert_not_paused();
             // Only owner can register character versions
             self._assert_only_owner();
 
+            // Extract values from metadata
+            let character_version_id = metadata.character_version_id;
+            let character_version_hash = metadata.character_version_hash;
+            let author = metadata.author;
+
             // Validate inputs
             assert(character_version_id != 0, 'Version ID cannot be zero');
             assert(character_version_hash != 0, 'Version hash cannot be zero');
+            assert(!author.is_zero(), 'Author cannot be zero');
 
             // Check if character version ID is already registered
             let existing_hash = self.character_versions.read(character_version_id);
             assert(existing_hash == 0, 'Version ID already registered');
 
-            // Save the character version
+            // Save the character version and metadata
             self.character_versions.write(character_version_id, character_version_hash);
+            self.character_authors.write(character_version_id, author);
 
             // Emit event
             self.emit(CharacterVersionRegistered {
@@ -144,13 +154,15 @@ pub mod kliver_registry {
             }
         }
 
-        fn batch_verify_character_versions(self: @ContractState, character_versions: Array<(felt252, felt252)>) -> Array<(felt252, VerificationResult)> {
+        fn batch_verify_character_versions(self: @ContractState, character_versions: Array<CharacterMetadata>) -> Array<(felt252, VerificationResult)> {
             let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
             let len = character_versions.len();
 
             while i != len {
-                let (character_version_id, character_version_hash) = *character_versions.at(i);
+                let metadata = *character_versions.at(i);
+                let character_version_id = metadata.character_version_id;
+                let character_version_hash = metadata.character_version_hash;
 
                 // For batch operations, handle zero values gracefully instead of panicking
                 let verification_result = if character_version_id == 0 || character_version_hash == 0 {
@@ -185,6 +197,24 @@ pub mod kliver_registry {
             assert(stored_hash != 0, 'Character version not found');
 
             stored_hash
+        }
+
+        fn get_character_version_info(self: @ContractState, character_version_id: felt252) -> CharacterMetadata {
+            // Validate input
+            assert(character_version_id != 0, 'Version ID cannot be zero');
+
+            // Get the stored data for this character version ID
+            let character_version_hash = self.character_versions.read(character_version_id);
+            assert(character_version_hash != 0, 'Character version not found');
+
+            let author = self.character_authors.read(character_version_id);
+
+            // Return the complete metadata
+            CharacterMetadata {
+                character_version_id,
+                character_version_hash,
+                author,
+            }
         }
     }
 

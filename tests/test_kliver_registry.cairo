@@ -3,7 +3,7 @@ use starknet::ContractAddress;
 use core::array::ArrayTrait;
 
 // Import contract interfaces from modular structure
-use kliver_on_chain::character_registry::{ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait};
+use kliver_on_chain::character_registry::{ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait, CharacterMetadata};
 use kliver_on_chain::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait};
 use kliver_on_chain::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata};
 use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
@@ -54,8 +54,14 @@ fn register_test_character(char_dispatcher: ICharacterRegistryDispatcher, contra
     let character_id: felt252 = 'test_char_123';
     let character_hash: felt252 = 'char_hash_456';
     
+    let metadata = CharacterMetadata {
+        character_version_id: character_id,
+        character_version_hash: character_hash,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
-    char_dispatcher.register_character_version(character_id, character_hash);
+    char_dispatcher.register_character_version(metadata);
     stop_cheat_caller_address(contract_address);
     
     character_id
@@ -133,9 +139,15 @@ fn test_constructor_zero_owner() {
         let character_version_id: felt252 = 123;
         let character_version_hash: felt252 = 456;
 
+        let metadata = CharacterMetadata {
+            character_version_id,
+            character_version_hash,
+            author: owner,
+        };
+
         // First register the character version
         start_cheat_caller_address(contract_address, owner);
-        dispatcher.register_character_version(character_version_id, character_version_hash);
+        dispatcher.register_character_version(metadata);
         stop_cheat_caller_address(contract_address);
 
         // Then verify it
@@ -151,9 +163,15 @@ fn test_constructor_zero_owner() {
         let character_version_hash: felt252 = 456;
         let wrong_hash: felt252 = 789;
 
+        let metadata = CharacterMetadata {
+            character_version_id,
+            character_version_hash,
+            author: owner,
+        };
+
         // First register the character version
         start_cheat_caller_address(contract_address, owner);
-        dispatcher.register_character_version(character_version_id, character_version_hash);
+        dispatcher.register_character_version(metadata);
         stop_cheat_caller_address(contract_address);
 
         // Then verify with wrong hash
@@ -202,9 +220,15 @@ fn test_constructor_zero_owner() {
         let character_version_id: felt252 = 123;
         let character_version_hash: felt252 = 456;
 
+        let metadata = CharacterMetadata {
+            character_version_id,
+            character_version_hash,
+            author: owner,
+        };
+
         // First register the character version
         start_cheat_caller_address(contract_address, owner);
-        dispatcher.register_character_version(character_version_id, character_version_hash);
+        dispatcher.register_character_version(metadata);
         stop_cheat_caller_address(contract_address);
 
         // Then get the hash
@@ -232,15 +256,57 @@ fn test_constructor_zero_owner() {
         dispatcher.get_character_version_hash(0);
     }
 
+    #[test]
+    fn test_get_character_version_info_success() {
+        let (dispatcher, contract_address, owner) = deploy_for_characters();
+
+        let character_version_id: felt252 = 123;
+        let character_version_hash: felt252 = 456;
+
+        let metadata = CharacterMetadata {
+            character_version_id,
+            character_version_hash,
+            author: owner,
+        };
+
+        // First register the character version
+        start_cheat_caller_address(contract_address, owner);
+        dispatcher.register_character_version(metadata);
+        stop_cheat_caller_address(contract_address);
+
+        // Then get the complete info
+        let retrieved_metadata = dispatcher.get_character_version_info(character_version_id);
+        assert_eq!(retrieved_metadata.character_version_id, character_version_id);
+        assert_eq!(retrieved_metadata.character_version_hash, character_version_hash);
+        assert_eq!(retrieved_metadata.author, owner);
+    }
+
+    #[test]
+    #[should_panic(expected: ('Character version not found', ))]
+    fn test_get_character_version_info_not_found() {
+        let (dispatcher, _, _) = deploy_for_characters();
+
+        let non_existent_id: felt252 = 999;
+
+        // Try to get info for non-existent character version
+        dispatcher.get_character_version_info(non_existent_id);
+    }
+
 #[test]
 fn test_register_character_version_success() {
     let (contract, contract_address, owner) = deploy_for_characters();
     let character_version_id: felt252 = 'character123';
     let character_version_hash: felt252 = 'hash456';
     
+    let metadata = CharacterMetadata {
+        character_version_id,
+        character_version_hash,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
     // Should not panic - first registration
-    contract.register_character_version(character_version_id, character_version_hash);
+    contract.register_character_version(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -252,12 +318,24 @@ fn test_register_character_version_duplicate() {
     let hash1: felt252 = 'hash456';
     let hash2: felt252 = 'hash789';
     
+    let metadata1 = CharacterMetadata {
+        character_version_id,
+        character_version_hash: hash1,
+        author: owner,
+    };
+    
+    let metadata2 = CharacterMetadata {
+        character_version_id,
+        character_version_hash: hash2,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
     // First registration should succeed
-    contract.register_character_version(character_version_id, hash1);
+    contract.register_character_version(metadata1);
     
     // Second registration with same version ID should fail
-    contract.register_character_version(character_version_id, hash2);
+    contract.register_character_version(metadata2);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -268,8 +346,14 @@ fn test_register_character_version_zero_id() {
     let character_version_id: felt252 = 0;
     let character_version_hash: felt252 = 'hash456';
     
+    let metadata = CharacterMetadata {
+        character_version_id,
+        character_version_hash,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
-    contract.register_character_version(character_version_id, character_version_hash);
+    contract.register_character_version(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -280,8 +364,14 @@ fn test_register_character_version_zero_hash() {
     let character_version_id: felt252 = 'character123';
     let character_version_hash: felt252 = 0;
     
+    let metadata = CharacterMetadata {
+        character_version_id,
+        character_version_hash,
+        author: owner,
+    };
+    
     start_cheat_caller_address(contract_address, owner);
-    contract.register_character_version(character_version_id, character_version_hash);
+    contract.register_character_version(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
@@ -724,17 +814,33 @@ fn test_batch_verify_character_versions_all_valid() {
     let char_id_3: felt252 = 102;
     let char_hash_3: felt252 = 202;
 
+    let metadata1 = CharacterMetadata {
+        character_version_id: char_id_1,
+        character_version_hash: char_hash_1,
+        author: owner,
+    };
+    let metadata2 = CharacterMetadata {
+        character_version_id: char_id_2,
+        character_version_hash: char_hash_2,
+        author: owner,
+    };
+    let metadata3 = CharacterMetadata {
+        character_version_id: char_id_3,
+        character_version_hash: char_hash_3,
+        author: owner,
+    };
+
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_character_version(char_id_1, char_hash_1);
-    dispatcher.register_character_version(char_id_2, char_hash_2);
-    dispatcher.register_character_version(char_id_3, char_hash_3);
+    dispatcher.register_character_version(metadata1);
+    dispatcher.register_character_version(metadata2);
+    dispatcher.register_character_version(metadata3);
     stop_cheat_caller_address(contract_address);
 
     // Prepare batch verification array
     let mut batch_array = ArrayTrait::new();
-    batch_array.append((char_id_1, char_hash_1));
-    batch_array.append((char_id_2, char_hash_2));
-    batch_array.append((char_id_3, char_hash_3));
+    batch_array.append(metadata1);
+    batch_array.append(metadata2);
+    batch_array.append(metadata3);
 
     // Batch verify
     let results = dispatcher.batch_verify_character_versions(batch_array);
@@ -764,16 +870,43 @@ fn test_batch_verify_character_versions_mixed_results() {
     let wrong_hash_2: felt252 = 999; // Wrong hash
     let char_id_3: felt252 = 102; // Not registered
 
+    let metadata1_register = CharacterMetadata {
+        character_version_id: char_id_1,
+        character_version_hash: char_hash_1,
+        author: owner,
+    };
+    let metadata2_register = CharacterMetadata {
+        character_version_id: char_id_2,
+        character_version_hash: 201,
+        author: owner,
+    };
+
     start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_character_version(char_id_1, char_hash_1);
-    dispatcher.register_character_version(char_id_2, 201); // Register with different hash
+    dispatcher.register_character_version(metadata1_register);
+    dispatcher.register_character_version(metadata2_register); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
     // Prepare batch verification array
+    let metadata1_verify = CharacterMetadata {
+        character_version_id: char_id_1,
+        character_version_hash: char_hash_1,
+        author: owner,
+    };
+    let metadata2_verify = CharacterMetadata {
+        character_version_id: char_id_2,
+        character_version_hash: wrong_hash_2,
+        author: owner,
+    };
+    let metadata3_verify = CharacterMetadata {
+        character_version_id: char_id_3,
+        character_version_hash: 202,
+        author: owner,
+    };
+
     let mut batch_array = ArrayTrait::new();
-    batch_array.append((char_id_1, char_hash_1));    // Should be valid
-    batch_array.append((char_id_2, wrong_hash_2));   // Should be invalid (wrong hash)
-    batch_array.append((char_id_3, 202));            // Should be invalid (not registered)
+    batch_array.append(metadata1_verify);    // Should be valid
+    batch_array.append(metadata2_verify);   // Should be invalid (wrong hash)
+    batch_array.append(metadata3_verify);            // Should be invalid (not registered)
 
     // Batch verify
     let results = dispatcher.batch_verify_character_versions(batch_array);
@@ -794,13 +927,29 @@ fn test_batch_verify_character_versions_mixed_results() {
 
 #[test]
 fn test_batch_verify_character_versions_with_zero_values() {
-    let (dispatcher, _, _) = deploy_for_characters();
+    let (dispatcher, _, owner) = deploy_for_characters();
 
     // Prepare batch verification array with zero values
+    let metadata1 = CharacterMetadata {
+        character_version_id: 0,
+        character_version_hash: 200,
+        author: owner,
+    };
+    let metadata2 = CharacterMetadata {
+        character_version_id: 100,
+        character_version_hash: 0,
+        author: owner,
+    };
+    let metadata3 = CharacterMetadata {
+        character_version_id: 0,
+        character_version_hash: 0,
+        author: owner,
+    };
+
     let mut batch_array = ArrayTrait::new();
-    batch_array.append((0, 200));        // Zero ID
-    batch_array.append((100, 0));        // Zero hash
-    batch_array.append((0, 0));          // Both zero
+    batch_array.append(metadata1);        // Zero ID
+    batch_array.append(metadata2);        // Zero hash
+    batch_array.append(metadata3);          // Both zero
 
     // Batch verify
     let results = dispatcher.batch_verify_character_versions(batch_array);
@@ -841,7 +990,12 @@ fn test_batch_verify_character_versions_large_batch() {
     start_cheat_caller_address(contract_address, owner);
     let mut i = 1;
     while i != 11 {
-        dispatcher.register_character_version(i.into(), (i + 100).into());
+        let metadata = CharacterMetadata {
+            character_version_id: i.into(),
+            character_version_hash: (i + 100).into(),
+            author: owner,
+        };
+        dispatcher.register_character_version(metadata);
         i += 1;
     };
     stop_cheat_caller_address(contract_address);
@@ -850,7 +1004,12 @@ fn test_batch_verify_character_versions_large_batch() {
     let mut batch_array = ArrayTrait::new();
     let mut j = 1;
     while j != 11 {
-        batch_array.append((j.into(), (j + 100).into()));
+        let metadata = CharacterMetadata {
+            character_version_id: j.into(),
+            character_version_hash: (j + 100).into(),
+            author: owner,
+        };
+        batch_array.append(metadata);
         j += 1;
     };
 
