@@ -136,6 +136,7 @@ mod SimulationCore {
         simulation_id: felt252,
         token_id: felt252,
         daily_amount: u256,
+        release_hour: u8,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -371,7 +372,7 @@ mod SimulationCore {
                     },
                 );
 
-            self.emit(SimulationRegistered { simulation_id, token_id, daily_amount });
+            self.emit(SimulationRegistered { simulation_id, token_id, daily_amount, release_hour });
         }
 
         fn add_to_whitelist(
