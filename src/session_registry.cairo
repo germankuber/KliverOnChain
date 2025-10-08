@@ -25,6 +25,12 @@ pub trait ISessionRegistry<TContractState> {
     fn grant_access(ref self: TContractState, session_id: felt252, addr: ContractAddress);
     /// Check if an address has access to a session
     fn has_access(self: @TContractState, session_id: felt252, addr: ContractAddress) -> bool;
+    /// Get the verifier address
+    fn get_verifier_address(self: @TContractState) -> ContractAddress;
+    /// Verify a complete proof for a session
+    fn verify_complete_session(
+        self: @TContractState, full_proof_with_hints: Span<felt252>,
+    ) -> Option<Span<u256>>;
 }
 
 /// Session Access Granted Event

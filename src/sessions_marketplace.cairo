@@ -7,7 +7,7 @@ mod SessionsMarketplace {
     use super::super::session_registry::{
         ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait
     };
-    // use super::super::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait}; // TODO: implement verifier
+    use super::super::kliver_registry::{IVerifierDispatcher, IVerifierDispatcherTrait};
 
     // Estados posibles de un listing
     #[allow(starknet::store_no_default_variant)]
@@ -239,11 +239,12 @@ mod SessionsMarketplace {
             assert(challenge == listing.challenge, 'Challenge mismatch');
 
             // Llamar al verifier
-            // let mut verifier = IVerifierDispatcher {
-            //     contract_address: self.verifier.read()
-            // };
-            // let is_valid = verifier.verify(proof, public_inputs);
-            let is_valid = true; // TODO: implement verifier
+            let verifier_address = self.verifier.read();
+            let verifier = IVerifierDispatcher {
+                contract_address: verifier_address
+            };
+            let result = verifier.verify_ultra_starknet_honk_proof(proof);
+            let is_valid = result.is_some();
 
             // Emitir evento de proof
             self.emit(ProofSubmitted {
@@ -285,10 +286,6 @@ mod SessionsMarketplace {
             self.registry.read()
         }
 
-        fn get_verifier_address(self: @ContractState) -> ContractAddress {
-            self.verifier.read()
-        }
-
         fn get_listing_by_session(self: @ContractState, session_id: felt252) -> u256 {
             self.session_to_listing.read(session_id)
         }
@@ -324,7 +321,6 @@ mod SessionsMarketplace {
         fn get_listing_status(self: @TContractState, listing_id: u256) -> ListingStatus;
         fn get_listing_count(self: @TContractState) -> u256;
         fn get_registry_address(self: @TContractState) -> ContractAddress;
-        fn get_verifier_address(self: @TContractState) -> ContractAddress;
         fn get_listing_by_session(self: @TContractState, session_id: felt252) -> u256;
     }
 }

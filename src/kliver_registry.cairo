@@ -6,10 +6,19 @@ use crate::owner_registry::IOwnerRegistry;
 use crate::session_registry::ISessionRegistry;
 use crate::types::VerificationResult;
 
+/// Verifier Interface for proof verification
+#[starknet::interface]
+pub trait IVerifier<TContractState> {
+    fn verify_ultra_starknet_honk_proof(
+        self: @TContractState, full_proof_with_hints: Span<felt252>,
+    ) -> Option<Span<u256>>;
+}
+
 /// Kliver Registry Contract
 #[starknet::contract]
 pub mod kliver_registry {
     use super::{ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry, ISessionRegistry, VerificationResult};
+    use super::{IVerifierDispatcher, IVerifierDispatcherTrait};
     use starknet::storage::{Map, StoragePointerReadAccess, StoragePointerWriteAccess, StorageMapReadAccess, StorageMapWriteAccess};
     use starknet::{ContractAddress, get_caller_address};
     use core::num::traits::Zero;
@@ -53,6 +62,7 @@ pub mod kliver_registry {
         owner: ContractAddress,
         paused: bool,
         nft_address: ContractAddress,
+        verifier_address: ContractAddress,
         /// Maps character version ID to its hash
         character_versions: Map<felt252, felt252>,
         // Character metadata:
@@ -95,11 +105,14 @@ pub mod kliver_registry {
         ref self: ContractState,
         owner: ContractAddress,
         nft_address: ContractAddress,
+        verifier_address: ContractAddress,
     ) {
         assert(!owner.is_zero(), 'Owner cannot be zero');
         assert(!nft_address.is_zero(), Errors::NFT_ADDRESS_CANNOT_BE_ZERO);
+        assert(!verifier_address.is_zero(), 'Verifier address cannot be zero');
         self.owner.write(owner);
         self.nft_address.write(nft_address);
+        self.verifier_address.write(verifier_address);
         self.paused.write(false);
     }
 
@@ -515,6 +528,15 @@ pub mod kliver_registry {
             }
         }
 
+        fn verify_complete_session(
+            self: @ContractState, full_proof_with_hints: Span<felt252>,
+        ) -> Option<Span<u256>> {
+            let verifier = IVerifierDispatcher {
+                contract_address: self.verifier_address.read()
+            };
+            verifier.verify_ultra_starknet_honk_proof(full_proof_with_hints)
+        }
+
         fn get_session_info(self: @ContractState, session_id: felt252) -> SessionMetadata {
             assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
             let root_hash = self.session_roots.read(session_id);
@@ -554,6 +576,10 @@ pub mod kliver_registry {
 
         fn has_access(self: @ContractState, session_id: felt252, addr: ContractAddress) -> bool {
             self.session_access.read((session_id, addr))
+        }
+
+        fn get_verifier_address(self: @ContractState) -> ContractAddress {
+            self.verifier_address.read()
         }
     }
 
