@@ -26,6 +26,8 @@ pub trait ISimulationRegistry<TContractState> {
     fn get_simulation_hash(self: @TContractState, simulation_id: felt252) -> felt252;
     /// Get complete simulation information
     fn get_simulation_info(self: @TContractState, simulation_id: felt252) -> SimulationMetadata;
+    /// Check if a simulation exists
+    fn simulation_exists(self: @TContractState, simulation_id: felt252) -> bool;
 }
 
 /// Simulation Registered Event

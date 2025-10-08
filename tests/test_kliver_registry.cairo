@@ -1816,3 +1816,52 @@ fn test_register_session_invalid_simulation() {
     dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 }
+
+// ===== SIMULATION EXISTS TESTS =====
+
+#[test]
+fn test_simulation_exists_true() {
+    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+    
+    let simulation_id: felt252 = 'sim123';
+    let simulation_hash: felt252 = 'hash456';
+    let metadata = SimulationMetadata {
+        simulation_id,
+        author: owner,
+        character_id,
+        scenario_id,
+        simulation_hash,
+    };
+    
+    start_cheat_caller_address(contract_address, owner);
+    dispatcher.register_simulation(metadata);
+    stop_cheat_caller_address(contract_address);
+    
+    // Test simulation_exists
+    let exists = dispatcher.simulation_exists(simulation_id);
+    assert(exists, 'Simulation should exist');
+}
+
+#[test]
+fn test_simulation_exists_false() {
+    let (dispatcher, _, _, _, _) = deploy_for_simulations();
+    
+    let nonexistent_simulation_id: felt252 = 'nonexistent';
+    
+    // Test simulation_exists for non-registered simulation
+    let exists = dispatcher.simulation_exists(nonexistent_simulation_id);
+    assert(!exists, 'Simulation should not exist');
+}
+
+#[test]
+fn test_simulation_exists_zero_id() {
+    let (dispatcher, _, _, _, _) = deploy_for_simulations();
+    
+    // Test simulation_exists with zero ID
+    let exists = dispatcher.simulation_exists(0);
+    assert(!exists, 'Zero ID should not exist');
+}

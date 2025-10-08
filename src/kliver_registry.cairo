@@ -482,6 +482,17 @@ pub mod kliver_registry {
                 simulation_hash,
             }
         }
+
+        fn simulation_exists(self: @ContractState, simulation_id: felt252) -> bool {
+            // Validate input
+            if simulation_id == 0 {
+                return false;
+            }
+
+            // Check if simulation exists by looking at stored hash
+            let stored_hash = self.simulations.read(simulation_id);
+            stored_hash != 0
+        }
     }
 
     // Session Registry Implementation

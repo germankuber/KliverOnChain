@@ -5,12 +5,23 @@
 use starknet::ContractAddress;
 
 // ────────────────────────────────────────────────
+// Shared Structures
+// ────────────────────────────────────────────────
+
+#[derive(Drop, Serde, Copy, starknet::Store)]
+pub struct Simulation {
+    pub token_id: felt252,
+    pub daily_amount: u256,
+    pub active: bool,
+}
+
+// ────────────────────────────────────────────────
 // External interfaces
 // ────────────────────────────────────────────────
 
 #[starknet::interface]
 pub trait IKliverRegistry<TContractState> {
-    fn simulation_exists(ref self: TContractState, simulation_id: felt252) -> bool;
+    fn simulation_exists(self: @TContractState, simulation_id: felt252) -> bool;
 }
 
 #[starknet::interface]
@@ -32,7 +43,13 @@ pub trait ISimulationCore<TContractState> {
     fn claim_tokens(ref self: TContractState, simulation_id: felt252);
     fn spend_tokens(ref self: TContractState, simulation_id: felt252, amount: u256);
     fn set_active(ref self: TContractState, simulation_id: felt252, value: bool);
+    fn get_simulation_data(self: @TContractState, simulation_id: felt252) -> Simulation;
     fn get_owner(self: @TContractState) -> ContractAddress;
+    // New methods for simulation management
+    fn is_simulation_registered(self: @TContractState, simulation_id: felt252) -> bool;
+    fn is_simulation_active(self: @TContractState, simulation_id: felt252) -> bool;
+    fn activate_simulation(ref self: TContractState, simulation_id: felt252);
+    fn deactivate_simulation(ref self: TContractState, simulation_id: felt252);
 }
 
 // ────────────────────────────────────────────────
@@ -54,16 +71,10 @@ mod SimulationCore {
         owner: ContractAddress,
         registry_address: ContractAddress,
         token_address: ContractAddress,
-        simulations: Map<felt252, Simulation>,
+        simulations: Map<felt252, super::Simulation>,
         whitelist: Map<(felt252, ContractAddress), bool>,
         last_claim: Map<(felt252, ContractAddress), u64>,
-    }
-
-    #[derive(Drop, Serde, Copy, starknet::Store)]
-    struct Simulation {
-        token_id: felt252,
-        daily_amount: u256,
-        active: bool,
+        next_token_id: felt252,
     }
 
     // ─────────────── Events ───────────────
@@ -114,6 +125,7 @@ mod SimulationCore {
         self.owner.write(owner);
         self.registry_address.write(registry_address);
         self.token_address.write(token_address);
+        self.next_token_id.write(1); // Start token IDs from 1
     }
 
     // ─────────────── Internal helpers ───────────────
@@ -134,12 +146,14 @@ mod SimulationCore {
             let registry = IKliverRegistryDispatcher {
                 contract_address: self.registry_address.read(),
             };
-            let exists = registry.simulation_exists(simulation_id);
-            assert(exists, 'Simulation not found');
+            assert(registry.simulation_exists(simulation_id), 'Simulation not found');
 
-            let token_id = simulation_id;
+            // Get next token ID and increment counter
+            let token_id = self.next_token_id.read();
+            self.next_token_id.write(token_id + 1);
+
             self.simulations.entry(simulation_id).write(
-                Simulation { token_id, daily_amount, active: true }
+                super::Simulation { token_id, daily_amount, active: true }
             );
 
             self.emit(SimulationRegistered { simulation_id, token_id, daily_amount });
@@ -147,6 +161,7 @@ mod SimulationCore {
 
         fn add_to_whitelist(ref self: ContractState, simulation_id: felt252, wallet: ContractAddress) {
             self.only_owner();
+            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
             self.whitelist.entry((simulation_id, wallet)).write(true);
             self.emit(Whitelisted { simulation_id, wallet });
         }
@@ -159,11 +174,14 @@ mod SimulationCore {
             let user = get_caller_address();
             let now = get_block_timestamp();
 
+            // Validate simulation is registered first, then check if active
+            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
+            assert(self.is_simulation_active(simulation_id), 'Simulation not active');
+
             // Validate whitelist
             assert(self.whitelist.entry((simulation_id, user)).read(), 'Not whitelisted');
 
             let sim = self.simulations.entry(simulation_id).read();
-            assert(sim.active, 'Simulation inactive');
 
             // Cooldown
             let last = self.last_claim.entry((simulation_id, user)).read();
@@ -179,8 +197,12 @@ mod SimulationCore {
 
         fn spend_tokens(ref self: ContractState, simulation_id: felt252, amount: u256) {
             let user = get_caller_address();
+            
+            // Validate simulation is registered first, then check if active
+            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
+            assert(self.is_simulation_active(simulation_id), 'Simulation not active');
+            
             let sim = self.simulations.entry(simulation_id).read();
-            assert(sim.active, 'Simulation inactive');
 
             let token = IKliver1155Dispatcher { contract_address: self.token_address.read() };
             let balance = token.balance_of(user, sim.token_id);
@@ -192,11 +214,53 @@ mod SimulationCore {
 
         fn set_active(ref self: ContractState, simulation_id: felt252, value: bool) {
             self.only_owner();
+            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
             let sim = self.simulations.entry(simulation_id).read();
-            let updated_sim = Simulation {
+            let updated_sim = super::Simulation {
                 token_id: sim.token_id,
                 daily_amount: sim.daily_amount,
                 active: value
+            };
+            self.simulations.entry(simulation_id).write(updated_sim);
+        }
+
+        fn get_simulation_data(self: @ContractState, simulation_id: felt252) -> super::Simulation {
+            self.simulations.entry(simulation_id).read()
+        }
+
+        // New methods for simulation management
+        fn is_simulation_registered(self: @ContractState, simulation_id: felt252) -> bool {
+            let sim = self.simulations.entry(simulation_id).read();
+            sim.token_id != 0
+        }
+
+        fn is_simulation_active(self: @ContractState, simulation_id: felt252) -> bool {
+            let sim = self.simulations.entry(simulation_id).read();
+            sim.token_id != 0 && sim.active
+        }
+
+        fn activate_simulation(ref self: ContractState, simulation_id: felt252) {
+            self.only_owner();
+            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
+            
+            let sim = self.simulations.entry(simulation_id).read();
+            let updated_sim = super::Simulation {
+                token_id: sim.token_id,
+                daily_amount: sim.daily_amount,
+                active: true
+            };
+            self.simulations.entry(simulation_id).write(updated_sim);
+        }
+
+        fn deactivate_simulation(ref self: ContractState, simulation_id: felt252) {
+            self.only_owner();
+            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
+            
+            let sim = self.simulations.entry(simulation_id).read();
+            let updated_sim = super::Simulation {
+                token_id: sim.token_id,
+                daily_amount: sim.daily_amount,
+                active: false
             };
             self.simulations.entry(simulation_id).write(updated_sim);
         }
