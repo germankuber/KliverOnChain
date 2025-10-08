@@ -1,0 +1,41 @@
+[tool.poetry]
+name = "kliver-deploy"
+version = "1.0.0"
+description = "Modern deployment system for Kliver smart contracts on StarkNet"
+authors = ["Kliver Team"]
+readme = "README.md"
+packages = [{include = "kliver_deploy"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+click = "^8.1.7"
+pyyaml = "^6.0.1"
+colorama = "^0.4.6"
+
+[tool.poetry.scripts]
+kliver-deploy = "kliver_deploy.cli:deploy"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+black = "^23.0.0"
+isort = "^5.12.0"
+flake8 = "^6.0.0"
+mypy = "^1.5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

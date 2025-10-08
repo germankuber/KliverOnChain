@@ -15,7 +15,7 @@ accounts.json
 *.swp
 *.swo
 *~
-
+deployment_*
 # OS generated files
 .DS_Store
 .DS_Store?
