@@ -206,7 +206,7 @@ class ContractDeployer:
         validation_functions = {
             "nft": "name",  # ERC721
             "registry": "get_owner",  # Registry specific
-            "kliver_1155": "balance_of",  # ERC1155
+            "token": "balance_of",  # ERC1155 (KliverNFT1155)
         }
         
         function_name = validation_functions.get(contract_type)
