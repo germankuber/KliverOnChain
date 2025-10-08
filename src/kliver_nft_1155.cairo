@@ -326,8 +326,8 @@ pub mod KliverNFT1155 {
             values: Span<u256>,
         ) {
             let mut contract_state = self.get_contract_mut();
-            let owner = contract_state.ownable.owner();
-            let caller = get_caller_address();
+            let _owner = contract_state.ownable.owner();
+            let _caller = get_caller_address();
             
             // Allow minting (from == 0) and burning (to == 0)
             if from.is_zero() || to.is_zero() {
@@ -539,7 +539,7 @@ pub mod KliverNFT1155 {
             self._validate_mint(to, token_id, amount);
             
             // Use the internal update function which bypasses acceptance check
-            let zero_address = starknet::contract_address_const::<0>();
+            let zero_address = 0_felt252.try_into().unwrap();
             let token_ids = array![token_id].span();
             let amounts = array![amount].span();
             
@@ -584,7 +584,7 @@ pub mod KliverNFT1155 {
             }
             
             // Use the internal update function to bypass acceptance check
-            let zero_address = starknet::contract_address_const::<0>();
+            let zero_address = 0_felt252.try_into().unwrap();
             self.erc1155.update(zero_address, to, token_ids, amounts);
             
             // Update total supplies for each token

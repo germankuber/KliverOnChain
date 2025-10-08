@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #[starknet::contract]
 mod SessionsMarketplace {
-    use starknet::{ContractAddress, get_caller_address, get_contract_address};
+    use starknet::{ContractAddress, get_caller_address};
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, StoragePointerWriteAccess};
     use core::num::traits::Zero;
     use super::super::session_registry::{
@@ -146,7 +146,7 @@ mod SessionsMarketplace {
                 session_id,
                 root,
                 seller: caller,
-                buyer: starknet::contract_address_const::<0>(),
+                buyer: 0_felt252.try_into().unwrap(),
                 status: ListingStatus::Open,
                 challenge: 0,
                 price,
