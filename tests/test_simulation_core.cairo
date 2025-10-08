@@ -502,19 +502,18 @@ fn test_is_whitelisted_false() {
 // ===== ADDITIONAL COMPREHENSIVE TESTS =====
 
 #[test]
+#[should_panic(expected: ('Daily amount must be > 0',))]
 fn test_register_simulation_zero_daily_amount() {
     let (core_address, registry_address, _, owner) = setup();
     let core = ISimulationCoreDispatcher { contract_address: core_address };
     
-    // Setup simulation in registry
     let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
     start_cheat_caller_address(registry_address, owner);
     registry.add_simulation('sim_1');
     stop_cheat_caller_address(registry_address);
     
-    // Register simulation with zero daily amount (should work)
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 0, 7);
+    core.register_simulation('sim_1', 0, 7); // Should fail with 'Daily amount must be > 0'
     stop_cheat_caller_address(core_address);
 }
 
