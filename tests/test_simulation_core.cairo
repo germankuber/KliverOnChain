@@ -5,7 +5,7 @@
 use starknet::{ContractAddress, contract_address_const};
 use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address, stop_cheat_caller_address, start_cheat_block_timestamp, stop_cheat_block_timestamp};
 
-use kliver_on_chain::simulation_core::{ISimulationCoreDispatcher, ISimulationCoreDispatcherTrait, Simulation};
+use kliver_on_chain::simulation_core::{ISimulationCoreDispatcher, ISimulationCoreDispatcherTrait, Simulation, TimeUntilClaim, ClaimableInfo};
 use kliver_on_chain::{IKliver1155Dispatcher, IKliver1155DispatcherTrait};
 
 // Mock contracts
@@ -91,6 +91,7 @@ fn setup() -> (ContractAddress, ContractAddress, ContractAddress, ContractAddres
     constructor_calldata.append(registry_address.into());
     constructor_calldata.append(token_address.into());
     constructor_calldata.append(owner.into());
+    constructor_calldata.append(1000_u64.into()); // vesting_start_time
     
     let (core_address, _) = core_contract.deploy(@constructor_calldata).unwrap();
     
@@ -121,7 +122,7 @@ fn test_register_simulation_success() {
     // Register simulation in core
     let daily_amount: u256 = 100;
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('simulation_1', daily_amount);
+    core.register_simulation('simulation_1', daily_amount, 7); // 7 AM
     stop_cheat_caller_address(core_address);
 }
 
@@ -132,7 +133,7 @@ fn test_register_simulation_not_in_registry() {
     let core = ISimulationCoreDispatcher { contract_address: core_address };
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('nonexistent', 100);
+    core.register_simulation('nonexistent', 100, 7);
     stop_cheat_caller_address(core_address);
 }
 
@@ -151,7 +152,7 @@ fn test_register_simulation_not_owner() {
     
     // Try to register as non-owner
     start_cheat_caller_address(core_address, non_owner);
-    core.register_simulation('simulation_1', 100);
+    core.register_simulation('simulation_1', 100, 7);
     stop_cheat_caller_address(core_address);
 }
 
@@ -168,7 +169,7 @@ fn test_add_to_whitelist() {
     // First register the simulation
     registry.add_simulation(simulation_id);
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation(simulation_id, daily_amount);
+    core.register_simulation(simulation_id, daily_amount, 7);
     
     // Now add to whitelist
     core.add_to_whitelist(simulation_id, user);
@@ -204,12 +205,13 @@ fn test_claim_tokens_success() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', daily_amount);
+    core.register_simulation('sim_1', daily_amount, 7);
     core.add_to_whitelist('sim_1', user);
     stop_cheat_caller_address(core_address);
     
-    // Set timestamp
-    start_cheat_block_timestamp(core_address, 86400);
+    // Set timestamp to day 1 after vesting start at 7:00 AM
+    let claim_timestamp = 1000 + 86400 + 25200; // vesting_start + 1 day + 7 hours
+    start_cheat_block_timestamp(core_address, claim_timestamp);
     
     // Claim tokens
     start_cheat_caller_address(core_address, user);
@@ -239,7 +241,7 @@ fn test_claim_tokens_not_whitelisted() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     stop_cheat_caller_address(core_address);
     
     // Try to claim
@@ -262,7 +264,7 @@ fn test_claim_tokens_inactive_simulation() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     core.add_to_whitelist('sim_1', user);
     core.deactivate_simulation('sim_1'); // Deactivate
     stop_cheat_caller_address(core_address);
@@ -274,7 +276,7 @@ fn test_claim_tokens_inactive_simulation() {
 }
 
 #[test]
-#[should_panic(expected: ('Claim cooldown not passed',))]
+#[should_panic(expected: ('No tokens available to claim',))]
 fn test_claim_tokens_cooldown_not_passed() {
     let (core_address, registry_address, _, owner) = setup();
     let core = ISimulationCoreDispatcher { contract_address: core_address };
@@ -287,17 +289,17 @@ fn test_claim_tokens_cooldown_not_passed() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     core.add_to_whitelist('sim_1', user);
     stop_cheat_caller_address(core_address);
     
-    // First claim
-    start_cheat_block_timestamp(core_address, 86400);
+    // First claim at day 1, 7:00 AM
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200);
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     
     // Try to claim again immediately (should fail)
-    start_cheat_block_timestamp(core_address, 86400 + 1000); // Only 1000 seconds later
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200 + 1000); // Only 1000 seconds later
     core.claim_tokens('sim_1');
     stop_cheat_caller_address(core_address);
     stop_cheat_block_timestamp(core_address);
@@ -317,17 +319,19 @@ fn test_claim_tokens_after_cooldown() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', daily_amount);
+    core.register_simulation('sim_1', daily_amount, 7);
     core.add_to_whitelist('sim_1', user);
     stop_cheat_caller_address(core_address);
     
-    // First claim
-    start_cheat_block_timestamp(core_address, 86400);
+    // First claim - Day 1 at 7:00 AM (vesting_start_time + 1 day + 7 hours)
+    let day1_timestamp = 1000 + 86400 + 25200; // vesting_start + 1 day + 7 hours
+    start_cheat_block_timestamp(core_address, day1_timestamp);
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     
-    // Second claim after cooldown
-    start_cheat_block_timestamp(core_address, 86400 * 2); // 2 days
+    // Second claim - Day 2 at 7:00 AM
+    let day2_timestamp = 1000 + 86400 * 2 + 25200; // vesting_start + 2 days + 7 hours
+    start_cheat_block_timestamp(core_address, day2_timestamp);
     core.claim_tokens('sim_1');
     stop_cheat_caller_address(core_address);
     stop_cheat_block_timestamp(core_address);
@@ -353,11 +357,13 @@ fn test_spend_tokens_success() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', daily_amount);
+    core.register_simulation('sim_1', daily_amount, 7);
     core.add_to_whitelist('sim_1', user);
     stop_cheat_caller_address(core_address);
     
-    start_cheat_block_timestamp(core_address, 86400);
+    // Claim tokens - Day 1 at 7:00 AM
+    let day1_timestamp = 1000 + 86400 + 25200; // vesting_start + 1 day + 7 hours
+    start_cheat_block_timestamp(core_address, day1_timestamp);
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     
@@ -388,11 +394,13 @@ fn test_spend_tokens_insufficient_balance() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     core.add_to_whitelist('sim_1', user);
     stop_cheat_caller_address(core_address);
     
-    start_cheat_block_timestamp(core_address, 86400);
+    // Claim tokens - Day 1 at 7:00 AM
+    let day1_timestamp = 1000 + 86400 + 25200; // vesting_start + 1 day + 7 hours
+    start_cheat_block_timestamp(core_address, day1_timestamp);
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     
@@ -416,11 +424,11 @@ fn test_spend_tokens_inactive_simulation() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     core.add_to_whitelist('sim_1', user);
     stop_cheat_caller_address(core_address);
     
-    start_cheat_block_timestamp(core_address, 86400);
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200);
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     stop_cheat_caller_address(core_address);
@@ -449,7 +457,7 @@ fn test_simulation_state_change() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     
     // Deactivate
     core.deactivate_simulation('sim_1');
@@ -473,7 +481,7 @@ fn test_deactivate_simulation_not_owner() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     stop_cheat_caller_address(core_address);
     
     // Try to deactivate as non-owner
@@ -506,7 +514,7 @@ fn test_register_simulation_zero_daily_amount() {
     
     // Register simulation with zero daily amount (should work)
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 0);
+    core.register_simulation('sim_1', 0, 7);
     stop_cheat_caller_address(core_address);
 }
 
@@ -524,7 +532,7 @@ fn test_register_simulation_large_daily_amount() {
     // Register simulation with large daily amount
     let large_amount: u256 = 1000000000000000000000; // 1000 tokens
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', large_amount);
+    core.register_simulation('sim_1', large_amount, 7);
     stop_cheat_caller_address(core_address);
 }
 
@@ -543,7 +551,7 @@ fn test_multiple_users_whitelist() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     
     // Add multiple users to whitelist
     core.add_to_whitelist('sim_1', user1);
@@ -573,9 +581,9 @@ fn test_multiple_simulations() {
     
     start_cheat_caller_address(core_address, owner);
     // Register multiple simulations with different daily amounts
-    core.register_simulation('sim_1', 100);
-    core.register_simulation('sim_2', 200);
-    core.register_simulation('sim_3', 300);
+    core.register_simulation('sim_1', 100, 7);
+    core.register_simulation('sim_2', 200, 7);
+    core.register_simulation('sim_3', 300, 7);
     
     // Whitelist user for all simulations
     core.add_to_whitelist('sim_1', user);
@@ -603,14 +611,14 @@ fn test_claim_tokens_different_simulations() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
-    core.register_simulation('sim_2', 200);
+    core.register_simulation('sim_1', 100, 7);
+    core.register_simulation('sim_2', 200, 7);
     core.add_to_whitelist('sim_1', user);
     core.add_to_whitelist('sim_2', user);
     stop_cheat_caller_address(core_address);
     
-    // Claim from both simulations
-    start_cheat_block_timestamp(core_address, 86400);
+    // Claim from both simulations at day 1, 7:00 AM
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200);
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     core.claim_tokens('sim_2');
@@ -641,13 +649,13 @@ fn test_spend_tokens_different_simulations() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
-    core.register_simulation('sim_2', 200);
+    core.register_simulation('sim_1', 100, 7);
+    core.register_simulation('sim_2', 200, 7);
     core.add_to_whitelist('sim_1', user);
     core.add_to_whitelist('sim_2', user);
     stop_cheat_caller_address(core_address);
     
-    start_cheat_block_timestamp(core_address, 86400);
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200);
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     core.claim_tokens('sim_2');
@@ -681,12 +689,12 @@ fn test_simulation_state_and_claim_interaction() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     core.add_to_whitelist('sim_1', user);
     stop_cheat_caller_address(core_address);
     
     // Claim when active (should work)
-    start_cheat_block_timestamp(core_address, 86400);
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200);
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     stop_cheat_caller_address(core_address);
@@ -702,7 +710,7 @@ fn test_simulation_state_and_claim_interaction() {
     core.activate_simulation('sim_1');
     stop_cheat_caller_address(core_address);
     
-    start_cheat_block_timestamp(core_address, 86400 * 2);
+    start_cheat_block_timestamp(core_address, 1000 + (86400 * 2) + 25200);
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     stop_cheat_caller_address(core_address);
@@ -783,7 +791,7 @@ fn test_is_simulation_registered() {
     // Register simulation
     registry.add_simulation(simulation_id);
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation(simulation_id, daily_amount);
+    core.register_simulation(simulation_id, daily_amount, 7);
     stop_cheat_caller_address(core_address);
     
     // Now should be registered
@@ -802,7 +810,7 @@ fn test_is_simulation_active() {
     // Register simulation (active by default)
     registry.add_simulation(simulation_id);
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation(simulation_id, daily_amount);
+    core.register_simulation(simulation_id, daily_amount, 7);
     
     // Should be active after registration
     assert(core.is_simulation_active(simulation_id), 'Should be active');
@@ -830,7 +838,7 @@ fn test_activate_deactivate_simulation() {
     // Register simulation
     registry.add_simulation(simulation_id);
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation(simulation_id, daily_amount);
+    core.register_simulation(simulation_id, daily_amount, 7);
     
     // Initially active
     let sim_data = core.get_simulation_data(simulation_id);
@@ -866,9 +874,9 @@ fn test_token_id_autoincrement() {
     registry.add_simulation(simulation_id_3);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation(simulation_id_1, daily_amount);
-    core.register_simulation(simulation_id_2, daily_amount);
-    core.register_simulation(simulation_id_3, daily_amount);
+    core.register_simulation(simulation_id_1, daily_amount, 7);
+    core.register_simulation(simulation_id_2, daily_amount, 7);
+    core.register_simulation(simulation_id_3, daily_amount, 7);
     stop_cheat_caller_address(core_address);
     
     // Verify token IDs are autoincremental starting from 1
@@ -921,7 +929,7 @@ fn test_claim_tokens_from_inactive_simulation() {
     // Register and deactivate simulation
     registry.add_simulation(simulation_id);
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation(simulation_id, daily_amount);
+    core.register_simulation(simulation_id, daily_amount, 7);
     core.add_to_whitelist(simulation_id, user);
     core.deactivate_simulation(simulation_id);
     stop_cheat_caller_address(core_address);
@@ -948,7 +956,7 @@ fn test_spend_tokens_from_inactive_simulation() {
     // Register and setup simulation
     registry.add_simulation(simulation_id);
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation(simulation_id, daily_amount);
+    core.register_simulation(simulation_id, daily_amount, 7);
     stop_cheat_caller_address(core_address);
     
     // Give user some tokens
@@ -978,7 +986,7 @@ fn test_balance_of() {
     stop_cheat_caller_address(registry_address);
     
     start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100);
+    core.register_simulation('sim_1', 100, 7);
     core.add_to_whitelist('sim_1', user);
     stop_cheat_caller_address(core_address);
     
@@ -986,8 +994,8 @@ fn test_balance_of() {
     let initial_balance = core.balance_of('sim_1', user);
     assert(initial_balance == 0, 'Initial balance should be 0');
     
-    // Wait for cooldown and claim tokens
-    start_cheat_block_timestamp(core_address, 86400);
+    // Wait 1 day after vesting_start_time (1000) and claim tokens at 7:00 AM
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200); // vesting_start_time + 1 day + 7 hours
     start_cheat_caller_address(core_address, user);
     core.claim_tokens('sim_1');
     stop_cheat_caller_address(core_address);
@@ -1005,4 +1013,276 @@ fn test_balance_of() {
     // Balance should now be 70
     let balance_after_spend = core.balance_of('sim_1', user);
     assert(balance_after_spend == 70, 'Balance should be 70');
+}
+
+#[test]
+fn test_accumulative_days_system() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    let user: ContractAddress = contract_address_const::<0x456>();
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100, 7); // 100 tokens per day
+    core.add_to_whitelist('sim_1', user);
+    stop_cheat_caller_address(core_address);
+    
+    // Usuario nunca claimea, pasan 3 días
+    start_cheat_block_timestamp(core_address, 1000 + (3 * 86400) + 25200); // vesting_start + 3 days + 7 hours
+    
+    // Claimea → debe recibir 3x daily_amount = 300 tokens
+    start_cheat_caller_address(core_address, user);
+    core.claim_tokens('sim_1');
+    stop_cheat_caller_address(core_address);
+    stop_cheat_block_timestamp(core_address);
+    
+    // Verificar balance final
+    let final_balance = core.balance_of('sim_1', user);
+    assert(final_balance == 300, 'Should receive 3 days worth');
+}
+
+#[test]
+fn test_partial_claim_then_more() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    let user: ContractAddress = contract_address_const::<0x456>();
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100, 7); // 100 tokens per day
+    core.add_to_whitelist('sim_1', user);
+    stop_cheat_caller_address(core_address);
+    
+    // Día 1: Usuario claimea (recibe 1x)
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200); // day 1 at 7:00 AM
+    start_cheat_caller_address(core_address, user);
+    core.claim_tokens('sim_1');
+    stop_cheat_caller_address(core_address);
+    
+    let balance_day1 = core.balance_of('sim_1', user);
+    assert(balance_day1 == 100, 'Should have 100 after day 1');
+    
+    // Día 3: Usuario claimea (debe recibir 2x, días 2 y 3)
+    start_cheat_block_timestamp(core_address, 1000 + (3 * 86400) + 25200); // day 3 at 7:00 AM
+    start_cheat_caller_address(core_address, user);
+    core.claim_tokens('sim_1');
+    stop_cheat_caller_address(core_address);
+    stop_cheat_block_timestamp(core_address);
+    
+    let balance_day3 = core.balance_of('sim_1', user);
+    assert(balance_day3 == 300, 'Should have 300 total');
+}
+
+#[test]
+#[should_panic(expected: ('No tokens available to claim',))]
+fn test_claim_same_day_twice() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    let user: ContractAddress = contract_address_const::<0x456>();
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100, 7);
+    core.add_to_whitelist('sim_1', user);
+    stop_cheat_caller_address(core_address);
+    
+    // Usuario claimea en día 1 a las 7:00 AM
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200); // day 1 + 7 hours
+    start_cheat_caller_address(core_address, user);
+    core.claim_tokens('sim_1');
+    
+    // Intenta claimear de nuevo el día 1 → debe fallar
+    core.claim_tokens('sim_1');
+    stop_cheat_caller_address(core_address);
+    stop_cheat_block_timestamp(core_address);
+}
+
+#[test]
+#[should_panic(expected: ('Claim time not reached',))]
+fn test_claim_before_vesting_start() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    let user: ContractAddress = contract_address_const::<0x456>();
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100, 7);
+    core.add_to_whitelist('sim_1', user);
+    stop_cheat_caller_address(core_address);
+    
+    // vesting_start_time está en el futuro (1000), pero estamos en timestamp 500
+    start_cheat_block_timestamp(core_address, 500);
+    start_cheat_caller_address(core_address, user);
+    
+    // Usuario intenta claimear → debe fallar
+    core.claim_tokens('sim_1');
+    
+    stop_cheat_caller_address(core_address);
+    stop_cheat_block_timestamp(core_address);
+}
+
+#[test]
+fn test_get_time_until_next_claim_can_claim_now() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    let user: ContractAddress = contract_address_const::<0x456>();
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100, 7);
+    core.add_to_whitelist('sim_1', user);
+    stop_cheat_caller_address(core_address);
+    
+    // Usuario puede claimear (día 1 disponible)
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200); // day 1 at 7:00 AM
+    
+    let time_info = core.get_time_until_next_claim('sim_1', user);
+    assert(time_info.can_claim_now == true, 'Should be able to claim now');
+    assert(time_info.seconds_until_next == 0, 'No wait time needed');
+    
+    stop_cheat_block_timestamp(core_address);
+}
+
+#[test]
+fn test_get_time_until_next_claim_cannot_claim() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    let user: ContractAddress = contract_address_const::<0x456>();
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100, 7);
+    core.add_to_whitelist('sim_1', user);
+    stop_cheat_caller_address(core_address);
+    
+    // Usuario ya claimeó hoy
+    start_cheat_block_timestamp(core_address, 1000 + 86400 + 25200); // day 1 at 7:00 AM
+    start_cheat_caller_address(core_address, user);
+    core.claim_tokens('sim_1');
+    stop_cheat_caller_address(core_address);
+    
+    // Verificar que no puede claimear de nuevo
+    let time_info = core.get_time_until_next_claim('sim_1', user);
+    assert(time_info.can_claim_now == false, 'Should not be able to claim');
+    assert(time_info.seconds_until_next > 0, 'Should have wait time');
+    
+    stop_cheat_block_timestamp(core_address);
+}
+
+#[test]
+fn test_get_claimable_tokens_batch_multiple_simulations() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    let user: ContractAddress = contract_address_const::<0x456>();
+    
+    // Setup
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    registry.add_simulation('sim_2');
+    registry.add_simulation('sim_3');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100, 7);
+    core.register_simulation('sim_2', 200, 7);
+    core.register_simulation('sim_3', 300, 7);
+    
+    // Usuario tiene 3 simulaciones, solo está whitelisted en 2
+    core.add_to_whitelist('sim_1', user);
+    core.add_to_whitelist('sim_2', user);
+    // sim_3 no está whitelisted
+    
+    // Solo sim_1 está activa, sim_2 la desactivamos
+    core.deactivate_simulation('sim_2');
+    stop_cheat_caller_address(core_address);
+    
+    // Avanzar 2 días
+    start_cheat_block_timestamp(core_address, 1000 + (2 * 86400) + 25200);
+    
+    let sim_ids = array!['sim_1', 'sim_2', 'sim_3'];
+    let results = core.get_claimable_tokens_batch(user, sim_ids);
+    
+    // Verificar resultados
+    assert(results.len() == 3, 'Should return 3 results');
+    
+    let result1 = *results.at(0);
+    assert(result1.simulation_id == 'sim_1', 'Wrong sim_id for result 1');
+    assert(result1.is_whitelisted == true, 'Should be whitelisted');
+    assert(result1.is_active == true, 'Should be active');
+    assert(result1.claimable_tokens == 200, 'Should have 200 tokens (2 days)');
+    
+    let result2 = *results.at(1);
+    assert(result2.simulation_id == 'sim_2', 'Wrong sim_id for result 2');
+    assert(result2.is_whitelisted == true, 'Should be whitelisted');
+    assert(result2.is_active == false, 'Should be inactive');
+    assert(result2.claimable_tokens == 0, 'Should have 0 tokens (inactive)');
+    
+    let result3 = *results.at(2);
+    assert(result3.simulation_id == 'sim_3', 'Wrong sim_id for result 3');
+    assert(result3.is_whitelisted == false, 'Should not be whitelisted');
+    assert(result3.claimable_tokens == 0, 'Should have 0 tokens');
+    
+    stop_cheat_block_timestamp(core_address);
+}
+
+#[test]
+fn test_first_claim_after_several_days() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    let user: ContractAddress = contract_address_const::<0x456>();
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100, 7); // 100 tokens per day
+    core.add_to_whitelist('sim_1', user);
+    stop_cheat_caller_address(core_address);
+    
+    // Usuario nunca claimeó, ya pasaron 5 días desde vesting_start_time
+    start_cheat_block_timestamp(core_address, 1000 + (5 * 86400) + 25200); // 5 days after vesting start + 7 hours
+    
+    // Debe poder claimear 5 días de golpe
+    start_cheat_caller_address(core_address, user);
+    core.claim_tokens('sim_1');
+    stop_cheat_caller_address(core_address);
+    
+    let final_balance = core.balance_of('sim_1', user);
+    assert(final_balance == 500, 'Should receive 5 days worth');
+    
+    stop_cheat_block_timestamp(core_address);
 }
