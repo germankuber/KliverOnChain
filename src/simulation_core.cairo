@@ -14,7 +14,7 @@ pub struct Simulation {
     pub daily_amount: u256,
     pub active: bool,
     pub release_hour: u8,
-    pub vesting_start_time: u64, // ✅ NUEVO: Timestamp cuando se registró
+    pub vesting_start_time: u64,
 }
 
 #[derive(Drop, Serde, Copy)]
@@ -223,7 +223,6 @@ mod SimulationCore {
             let current_day = self.get_current_day(simulation_id);
             let last_claimed_day = self.last_claim_day.entry((simulation_id, user)).read();
 
-            // Si ya claimeó hoy
             if last_claimed_day == current_day {
                 return 0;
             }
@@ -235,13 +234,20 @@ mod SimulationCore {
             let start_time = sim.vesting_start_time;
             let elapsed = current_time - start_time;
             let seconds_in_current_day = elapsed % ONE_DAY;
+            let can_claim_today = seconds_in_current_day >= release_hour_seconds;
 
-            // Calcular días entre (sin incluir el día del último claim ni hoy todavía)
-            let days_between = if last_claimed_day == 0 {
-                // Primera vez: todos los días desde día 1 hasta ayer
-                if current_day == 0 {
+            // ✅ CASO ESPECIAL: Día 0
+            if current_day == 0 {
+                // En día 0, solo puedes claimear si ya pasó la release_hour
+                if can_claim_today && last_claimed_day == 0 {
+                    return 1; // Puedes claimear 1 día (el día 0)
+                } else {
                     return 0;
                 }
+            }
+
+            // Día 1+: lógica normal
+            let days_between = if last_claimed_day == 0 {
                 current_day - 1
             } else {
                 if current_day <= last_claimed_day {
@@ -250,14 +256,12 @@ mod SimulationCore {
                 current_day - last_claimed_day - 1
             };
 
-            // Verificar si puede incluir hoy
-            let can_claim_today = seconds_in_current_day >= release_hour_seconds;
-
-            days_between + (if can_claim_today {
-                1
-            } else {
-                0
-            })
+            days_between
+                + (if can_claim_today {
+                    1
+                } else {
+                    0
+                })
         }
 
         fn can_claim_now_with_user(
@@ -272,10 +276,6 @@ mod SimulationCore {
             }
 
             let current_day = self.get_current_day(simulation_id);
-            if current_day == 0 {
-                return false;
-            }
-
             let last_claimed_day = self.last_claim_day.entry((simulation_id, user)).read();
 
             // Si ya claimeó hoy, no puede volver a claimear
@@ -284,16 +284,16 @@ mod SimulationCore {
             }
 
             let release_hour_seconds = sim.release_hour.into() * 3600;
-
             let elapsed = current_time - start_time;
             let seconds_in_current_day = elapsed % ONE_DAY;
 
-            // Calcular días ENTRE el último claim y hoy (sin incluir ninguno)
+            // ✅ CASO ESPECIAL: Día 0 - permitir claim si ya pasó release_hour
+            if current_day == 0 {
+                return seconds_in_current_day >= release_hour_seconds;
+            }
+
+            // Día 1+: lógica normal
             let days_between = if last_claimed_day == 0 {
-                // Primera vez: todos los días desde día 1 hasta ayer
-                if current_day == 0 {
-                    return false;
-                }
                 current_day - 1
             } else {
                 if current_day <= last_claimed_day {
@@ -302,15 +302,13 @@ mod SimulationCore {
                 current_day - last_claimed_day - 1
             };
 
-            // Verificar si puede claimear hoy
             let can_claim_today = seconds_in_current_day >= release_hour_seconds;
-
-            // Necesita al menos un día disponible
-            let total_days_available = days_between + (if can_claim_today {
-                1
-            } else {
-                0
-            });
+            let total_days_available = days_between
+                + (if can_claim_today {
+                    1
+                } else {
+                    0
+                });
 
             total_days_available > 0
         }
@@ -322,21 +320,20 @@ mod SimulationCore {
             let release_hour_seconds = sim.release_hour.into() * 3600;
 
             if current_time < start_time {
-                return start_time + ONE_DAY + release_hour_seconds;
+                // ✅ Antes del vesting: próximo release es en día 0 a la release_hour
+                return start_time + release_hour_seconds;
             }
 
             let elapsed = current_time - start_time;
             let days_passed = elapsed / ONE_DAY;
             let seconds_in_current_day = elapsed % ONE_DAY;
 
-            // Día 0 nunca permite claims, siempre saltar a día 1
-            if days_passed == 0 {
-                return start_time + ONE_DAY + release_hour_seconds;
-            }
-
+            // ✅ En día 0 o después
             if seconds_in_current_day < release_hour_seconds {
+                // Antes de release_hour hoy: próximo release es hoy
                 start_time + (days_passed * ONE_DAY) + release_hour_seconds
             } else {
+                // Después de release_hour hoy: próximo release es mañana
                 start_time + ((days_passed + 1) * ONE_DAY) + release_hour_seconds
             }
         }
@@ -351,9 +348,7 @@ mod SimulationCore {
         ) {
             self.only_owner();
 
-            // Prevenir re-registro
             assert(!self.is_simulation_registered(simulation_id), 'Already registered');
-
             assert(release_hour < 24, 'Invalid release hour');
             assert(daily_amount > 0, 'Daily amount must be > 0');
 
@@ -365,7 +360,6 @@ mod SimulationCore {
             let token_id = self.next_token_id.read();
             self.next_token_id.write(token_id + 1);
 
-            // ✅ Capturar timestamp actual como vesting_start_time
             let vesting_start_time = get_block_timestamp();
 
             self
@@ -413,11 +407,8 @@ mod SimulationCore {
             assert(self.whitelist.entry((simulation_id, user)).read(), 'Not whitelisted');
 
             let current_day = self.get_current_day(simulation_id);
-
-            if current_day > 0 {
-                let last_claimed_day = self.last_claim_day.entry((simulation_id, user)).read();
-                assert(last_claimed_day != current_day, 'Already claimed today');
-            }
+            let last_claimed_day = self.last_claim_day.entry((simulation_id, user)).read();
+            assert(last_claimed_day != current_day, 'Already claimed today');
 
             assert(self.can_claim_now_with_user(simulation_id, user), 'Claim time not reached');
 
@@ -553,7 +544,6 @@ mod SimulationCore {
                 };
             }
 
-            // Calcular el próximo release
             let next_release_time = self.get_next_release_timestamp(simulation_id);
             let current_time = get_block_timestamp();
             let sim = self.simulations.entry(simulation_id).read();
