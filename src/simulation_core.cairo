@@ -74,6 +74,7 @@ pub trait ISimulationCore<TContractState> {
     fn is_simulation_active(self: @TContractState, simulation_id: felt252) -> bool;
     fn activate_simulation(ref self: TContractState, simulation_id: felt252);
     fn deactivate_simulation(ref self: TContractState, simulation_id: felt252);
+
     fn balance_of(self: @TContractState, simulation_id: felt252, user: ContractAddress) -> u256;
     fn get_claimable_tokens(
         self: @TContractState, simulation_id: felt252, user: ContractAddress,
@@ -85,8 +86,12 @@ pub trait ISimulationCore<TContractState> {
         self: @TContractState, simulation_id: felt252, user: ContractAddress,
     ) -> TimeUntilClaim;
     fn get_time_until_next_claim_batch(
-        self: @TContractState, user: ContractAddress, simulation_ids: Array<felt252>
+        self: @TContractState, user: ContractAddress, simulation_ids: Array<felt252>,
     ) -> Array<TimeUntilClaim>;
+
+    //////////TODO : DELETE /////////////
+    fn update_release_hour(ref self: TContractState, simulation_id: felt252, new_release_hour: u8);
+    //////////TODO : DELETE /////////////
 
 }
 
@@ -261,12 +266,11 @@ mod SimulationCore {
                 current_day - last_claimed_day - 1
             };
 
-            days_between
-                + (if can_claim_today {
-                    1
-                } else {
-                    0
-                })
+            days_between + (if can_claim_today {
+                1
+            } else {
+                0
+            })
         }
 
         fn can_claim_now_with_user(
@@ -307,12 +311,11 @@ mod SimulationCore {
             };
 
             let can_claim_today = seconds_in_current_day >= release_hour_seconds;
-            let total_days_available = days_between
-                + (if can_claim_today {
-                    1
-                } else {
-                    0
-                });
+            let total_days_available = days_between + (if can_claim_today {
+                1
+            } else {
+                0
+            });
 
             total_days_available > 0
         }
@@ -502,6 +505,24 @@ mod SimulationCore {
             self.emit(SimulationDeactivated { simulation_id });
         }
 
+        fn update_release_hour(
+            ref self: ContractState, simulation_id: felt252, new_release_hour: u8,
+        ) {
+            self.only_owner();
+            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
+            assert(new_release_hour < 24, 'Invalid release hour');
+
+            let sim = self.simulations.entry(simulation_id).read();
+            let updated_sim = super::Simulation {
+                token_id: sim.token_id,
+                daily_amount: sim.daily_amount,
+                active: sim.active,
+                release_hour: new_release_hour,
+                vesting_start_time: sim.vesting_start_time,
+            };
+            self.simulations.entry(simulation_id).write(updated_sim);
+        }
+
         fn balance_of(self: @ContractState, simulation_id: felt252, user: ContractAddress) -> u256 {
             let sim_data = self.simulations.entry(simulation_id).read();
             let token = IKliver1155Dispatcher { contract_address: self.token_address.read() };
@@ -574,7 +595,7 @@ mod SimulationCore {
         }
 
         fn get_time_until_next_claim_batch(
-            self: @ContractState, user: ContractAddress, simulation_ids: Array<felt252>
+            self: @ContractState, user: ContractAddress, simulation_ids: Array<felt252>,
         ) -> Array<super::TimeUntilClaim> {
             let mut results: Array<super::TimeUntilClaim> = ArrayTrait::new();
             let mut i: u32 = 0;

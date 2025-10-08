@@ -9,7 +9,7 @@ import click
 from typing import Optional, List, Dict, Any
 
 from kliver_deploy import ConfigManager, ContractDeployer
-from kliver_deploy.utils import Colors, print_deployment_summary
+from kliver_deploy.utils import Colors, print_deployment_summary, print_deployment_json
 
 
 @click.command()
@@ -31,10 +31,12 @@ from kliver_deploy.utils import Colors, print_deployment_summary
               help='Enable verbose output')
 @click.option('--no-compile', is_flag=True, 
               help='Skip compilation step (use existing compiled contracts)')
+@click.option('--output-json', is_flag=True, 
+              help='Output deployment addresses in JSON format')
 def deploy(environment: str, contract: str, owner: Optional[str], 
            nft_address: Optional[str], registry_address: Optional[str], 
            token_address: Optional[str], verifier_address: Optional[str], 
-           verbose: bool, no_compile: bool):
+           verbose: bool, no_compile: bool, output_json: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration.
     
@@ -107,8 +109,11 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         
         # Show final summary
         if success and deployments:
-            print_deployment_summary(deployments, env_config.network)
-            click.echo(f"\n{Colors.SUCCESS}✅ Deployment completed successfully!{Colors.RESET}")
+            if output_json:
+                print_deployment_json(deployments)
+            else:
+                print_deployment_summary(deployments, env_config.network)
+                click.echo(f"\n{Colors.SUCCESS}✅ Deployment completed successfully!{Colors.RESET}")
             exit(0)
         else:
             click.echo(f"\n{Colors.ERROR}❌ Deployment failed. Check the logs above for details.{Colors.RESET}")

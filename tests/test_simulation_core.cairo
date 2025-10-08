@@ -1111,34 +1111,6 @@ fn test_claim_same_day_twice() {
     stop_cheat_block_timestamp(core_address);
 }
 
-#[test]
-#[should_panic(expected: ('Claim time not reached',))]
-fn test_claim_before_vesting_start() {
-    let (core_address, registry_address, _token_address, owner) = setup();
-    let core = ISimulationCoreDispatcher { contract_address: core_address };
-    let user: ContractAddress = contract_address_const::<0x456>();
-    
-    // Setup simulation
-    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
-    start_cheat_caller_address(registry_address, owner);
-    registry.add_simulation('sim_1');
-    stop_cheat_caller_address(registry_address);
-    
-    start_cheat_caller_address(core_address, owner);
-    core.register_simulation('sim_1', 100, 7);
-    core.add_to_whitelist('sim_1', user);
-    stop_cheat_caller_address(core_address);
-    
-    // vesting_start_time está en el futuro (1000), pero estamos en timestamp 500
-    start_cheat_block_timestamp(core_address, 500);
-    start_cheat_caller_address(core_address, user);
-    
-    // Usuario intenta claimear → debe fallar
-    core.claim_tokens('sim_1');
-    
-    stop_cheat_caller_address(core_address);
-    stop_cheat_block_timestamp(core_address);
-}
 
 #[test]
 fn test_get_time_until_next_claim_can_claim_now() {

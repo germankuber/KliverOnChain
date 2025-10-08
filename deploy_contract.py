@@ -650,8 +650,9 @@ class ContractDeployer:
 @click.option('--token-address', help='Token contract address (required for SimulationCore)')
 @click.option('--verifier-address', help='Verifier contract address (optional for Registry, uses 0x0 if not provided)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+@click.option('--output-json', is_flag=True, help='Output deployment addresses in JSON format')
 def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optional[str], nft_address: Optional[str], 
-           registry_address: Optional[str], token_address: Optional[str], verifier_address: Optional[str], verbose: bool):
+           registry_address: Optional[str], token_address: Optional[str], verifier_address: Optional[str], verbose: bool, output_json: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration
     
@@ -831,8 +832,11 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
         
         # Show final summary
         if success and deployments:
-            print_deployment_summary(deployments, network)
-            click.echo(f"\n{Colors.SUCCESS}✅ Deployment completed successfully!{Colors.RESET}")
+            if output_json:
+                print_deployment_json(deployments)
+            else:
+                print_deployment_summary(deployments, network)
+                click.echo(f"\n{Colors.SUCCESS}✅ Deployment completed successfully!{Colors.RESET}")
             exit(0)
         else:
             click.echo(f"\n{Colors.ERROR}❌ Deployment failed. Check the logs above for details.{Colors.RESET}")
@@ -909,6 +913,30 @@ def print_deployment_summary(deployments: list, network: str):
             print(f"   • {rel}")
     
     print(f"{Colors.BOLD}{'='*80}{Colors.RESET}")
+
+def print_deployment_json(deployments: list):
+    """Print deployment addresses in JSON format"""
+    if not deployments:
+        return
+    
+    # Create a mapping of contract types to addresses
+    json_output = {}
+    
+    for deployment in deployments:
+        contract_name = deployment['contract_name']
+        contract_address = deployment['contract_address']
+        
+        if contract_name == 'KliverNFT':
+            json_output['nft'] = contract_address
+        elif contract_name == 'kliver_registry':
+            json_output['registry'] = contract_address
+        elif contract_name == 'KliverNFT1155':
+            json_output['token'] = contract_address
+        elif contract_name == 'SimulationCore':
+            json_output['simulationCore'] = contract_address
+    
+    # Print the JSON output
+    print(json.dumps(json_output, indent=2))
 
 if __name__ == '__main__':
     deploy()

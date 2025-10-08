@@ -5,6 +5,7 @@ Utility functions for Kliver contract deployment.
 import subprocess
 import time
 import re
+import json
 from pathlib import Path
 from typing import Dict, Any, List
 from colorama import Fore, Style, init
@@ -218,3 +219,28 @@ def print_deployment_summary(deployments: List[Dict[str, Any]], network: str):
     
     print(f"\n{Colors.BOLD}Network: {network.upper()} | Owner: {format_address(deployments[0]['owner'])}{Colors.RESET}")
     print(f"{Colors.BOLD}{'='*70}{Colors.RESET}")
+
+
+def print_deployment_json(deployments: List[Dict[str, Any]]):
+    """Print deployment addresses in JSON format."""
+    if not deployments:
+        return
+    
+    # Create a mapping of contract types to addresses
+    json_output = {}
+    
+    for deployment in deployments:
+        contract_name = deployment['contract_name'].lower()
+        contract_address = deployment['contract_address']
+        
+        if contract_name == 'klivernft':
+            json_output['nft'] = contract_address
+        elif contract_name == 'kliver_registry':
+            json_output['registry'] = contract_address
+        elif contract_name == 'klivernft1155':
+            json_output['token'] = contract_address
+        elif contract_name == 'simulationcore':
+            json_output['simulationCore'] = contract_address
+    
+    # Print the JSON output
+    print(json.dumps(json_output, indent=2))
