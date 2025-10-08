@@ -13,7 +13,8 @@ pub struct Simulation {
     pub token_id: felt252,
     pub daily_amount: u256,
     pub active: bool,
-    pub release_hour: u8 // Hour of day for token release (0-23)
+    pub release_hour: u8,
+    pub vesting_start_time: u64, // ✅ NUEVO: Timestamp cuando se registró
 }
 
 #[derive(Drop, Serde, Copy)]
@@ -77,12 +78,9 @@ pub trait ISimulationCore<TContractState> {
     fn get_claimable_tokens(
         self: @TContractState, simulation_id: felt252, user: ContractAddress,
     ) -> u256;
-
-    // Nuevas funciones
     fn get_time_until_next_claim(
         self: @TContractState, simulation_id: felt252, user: ContractAddress,
     ) -> TimeUntilClaim;
-
     fn get_claimable_tokens_batch(
         self: @TContractState, user: ContractAddress, simulation_ids: Array<felt252>,
     ) -> Array<ClaimableInfo>;
@@ -116,7 +114,6 @@ mod SimulationCore {
         simulations: Map<felt252, super::Simulation>,
         whitelist: Map<(felt252, ContractAddress), bool>,
         last_claim_day: Map<(felt252, ContractAddress), u64>,
-        vesting_start_time: u64,
         next_token_id: felt252,
     }
 
@@ -146,7 +143,6 @@ mod SimulationCore {
         simulation_id: felt252,
         wallet: ContractAddress,
     }
-
 
     #[derive(Drop, starknet::Event)]
     struct Whitelisted {
@@ -187,7 +183,6 @@ mod SimulationCore {
         registry_address: ContractAddress,
         token_address: ContractAddress,
         owner: ContractAddress,
-        vesting_start_time: u64,
     ) {
         assert(!registry_address.is_zero(), 'Invalid registry');
         assert(!token_address.is_zero(), 'Invalid token');
@@ -196,7 +191,6 @@ mod SimulationCore {
         self.owner.write(owner);
         self.registry_address.write(registry_address);
         self.token_address.write(token_address);
-        self.vesting_start_time.write(vesting_start_time);
         self.next_token_id.write(1);
     }
 
@@ -208,9 +202,10 @@ mod SimulationCore {
             assert(get_caller_address() == self.owner.read(), 'Not authorized');
         }
 
-        fn get_current_day(self: @ContractState) -> u64 {
+        fn get_current_day(self: @ContractState, simulation_id: felt252) -> u64 {
             let current_time = get_block_timestamp();
-            let start_time = self.vesting_start_time.read();
+            let sim = self.simulations.entry(simulation_id).read();
+            let start_time = sim.vesting_start_time;
 
             if current_time < start_time {
                 return 0;
@@ -225,7 +220,7 @@ mod SimulationCore {
         fn get_claimable_days(
             self: @ContractState, simulation_id: felt252, user: ContractAddress,
         ) -> u64 {
-            let current_day = self.get_current_day();
+            let current_day = self.get_current_day(simulation_id);
             let last_claimed_day = self.last_claim_day.entry((simulation_id, user)).read();
 
             // Si ya claimeó hoy
@@ -237,7 +232,7 @@ mod SimulationCore {
             let release_hour_seconds = sim.release_hour.into() * 3600;
 
             let current_time = get_block_timestamp();
-            let start_time = self.vesting_start_time.read();
+            let start_time = sim.vesting_start_time;
             let elapsed = current_time - start_time;
             let seconds_in_current_day = elapsed % ONE_DAY;
 
@@ -247,7 +242,7 @@ mod SimulationCore {
                 if current_day == 0 {
                     return 0;
                 }
-                current_day - 1 // ✅ CAMBIO AQUÍ
+                current_day - 1
             } else {
                 if current_day <= last_claimed_day {
                     return 0;
@@ -269,13 +264,14 @@ mod SimulationCore {
             self: @ContractState, simulation_id: felt252, user: ContractAddress,
         ) -> bool {
             let current_time = get_block_timestamp();
-            let start_time = self.vesting_start_time.read();
+            let sim = self.simulations.entry(simulation_id).read();
+            let start_time = sim.vesting_start_time;
 
             if current_time < start_time {
                 return false;
             }
 
-            let current_day = self.get_current_day();
+            let current_day = self.get_current_day(simulation_id);
             if current_day == 0 {
                 return false;
             }
@@ -287,7 +283,6 @@ mod SimulationCore {
                 return false;
             }
 
-            let sim = self.simulations.entry(simulation_id).read();
             let release_hour_seconds = sim.release_hour.into() * 3600;
 
             let elapsed = current_time - start_time;
@@ -299,7 +294,7 @@ mod SimulationCore {
                 if current_day == 0 {
                     return false;
                 }
-                current_day - 1 // ✅ CAMBIO AQUÍ
+                current_day - 1
             } else {
                 if current_day <= last_claimed_day {
                     return false;
@@ -322,9 +317,8 @@ mod SimulationCore {
 
         fn get_next_release_timestamp(self: @ContractState, simulation_id: felt252) -> u64 {
             let current_time = get_block_timestamp();
-            let start_time = self.vesting_start_time.read();
-
             let sim = self.simulations.entry(simulation_id).read();
+            let start_time = sim.vesting_start_time;
             let release_hour_seconds = sim.release_hour.into() * 3600;
 
             if current_time < start_time {
@@ -335,7 +329,7 @@ mod SimulationCore {
             let days_passed = elapsed / ONE_DAY;
             let seconds_in_current_day = elapsed % ONE_DAY;
 
-            // ✅ Día 0 nunca permite claims, siempre saltar a día 1
+            // Día 0 nunca permite claims, siempre saltar a día 1
             if days_passed == 0 {
                 return start_time + ONE_DAY + release_hour_seconds;
             }
@@ -357,7 +351,7 @@ mod SimulationCore {
         ) {
             self.only_owner();
 
-            // ✅ Prevenir re-registro
+            // Prevenir re-registro
             assert(!self.is_simulation_registered(simulation_id), 'Already registered');
 
             assert(release_hour < 24, 'Invalid release hour');
@@ -371,10 +365,17 @@ mod SimulationCore {
             let token_id = self.next_token_id.read();
             self.next_token_id.write(token_id + 1);
 
+            // ✅ Capturar timestamp actual como vesting_start_time
+            let vesting_start_time = get_block_timestamp();
+
             self
                 .simulations
                 .entry(simulation_id)
-                .write(super::Simulation { token_id, daily_amount, active: true, release_hour });
+                .write(
+                    super::Simulation {
+                        token_id, daily_amount, active: true, release_hour, vesting_start_time,
+                    },
+                );
 
             self.emit(SimulationRegistered { simulation_id, token_id, daily_amount });
         }
@@ -387,6 +388,15 @@ mod SimulationCore {
             assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
             self.whitelist.entry((simulation_id, wallet)).write(true);
             self.emit(Whitelisted { simulation_id, wallet });
+        }
+
+        fn remove_from_whitelist(
+            ref self: ContractState, simulation_id: felt252, wallet: ContractAddress,
+        ) {
+            self.only_owner();
+            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
+            self.whitelist.entry((simulation_id, wallet)).write(false);
+            self.emit(WhitelistRemoved { simulation_id, wallet });
         }
 
         fn is_whitelisted(
@@ -402,7 +412,7 @@ mod SimulationCore {
             assert(self.is_simulation_active(simulation_id), 'Simulation not active');
             assert(self.whitelist.entry((simulation_id, user)).read(), 'Not whitelisted');
 
-            let current_day = self.get_current_day();
+            let current_day = self.get_current_day(simulation_id);
 
             if current_day > 0 {
                 let last_claimed_day = self.last_claim_day.entry((simulation_id, user)).read();
@@ -417,10 +427,10 @@ mod SimulationCore {
             let sim = self.simulations.entry(simulation_id).read();
             let tokens_to_mint = sim.daily_amount * days_to_claim.into();
 
-            // ✅ EFFECT: Actualizar state ANTES de external call
+            // EFFECT: Actualizar state ANTES de external call
             self.last_claim_day.entry((simulation_id, user)).write(current_day);
 
-            // ✅ INTERACTION: External call DESPUÉS
+            // INTERACTION: External call DESPUÉS
             let token = IKliver1155Dispatcher { contract_address: self.token_address.read() };
             token.mint(user, sim.token_id, tokens_to_mint);
 
@@ -475,6 +485,7 @@ mod SimulationCore {
                 daily_amount: sim.daily_amount,
                 active: true,
                 release_hour: sim.release_hour,
+                vesting_start_time: sim.vesting_start_time,
             };
             self.simulations.entry(simulation_id).write(updated_sim);
             self.emit(SimulationActivated { simulation_id });
@@ -490,6 +501,7 @@ mod SimulationCore {
                 daily_amount: sim.daily_amount,
                 active: false,
                 release_hour: sim.release_hour,
+                vesting_start_time: sim.vesting_start_time,
             };
             self.simulations.entry(simulation_id).write(updated_sim);
             self.emit(SimulationDeactivated { simulation_id });
@@ -525,13 +537,10 @@ mod SimulationCore {
             sim.daily_amount * days_available.into()
         }
 
-        // ─────────────── Nuevas funciones
-        // ───────────────
-
         fn get_time_until_next_claim(
             self: @ContractState, simulation_id: felt252, user: ContractAddress,
         ) -> super::TimeUntilClaim {
-            let current_day = self.get_current_day();
+            let current_day = self.get_current_day(simulation_id);
             let claimable_days = self.get_claimable_days(simulation_id, user);
             let can_claim_now = self.can_claim_now_with_user(simulation_id, user);
 
@@ -547,7 +556,8 @@ mod SimulationCore {
             // Calcular el próximo release
             let next_release_time = self.get_next_release_timestamp(simulation_id);
             let current_time = get_block_timestamp();
-            let start_time = self.vesting_start_time.read();
+            let sim = self.simulations.entry(simulation_id).read();
+            let start_time = sim.vesting_start_time;
 
             let seconds_until = if next_release_time > current_time {
                 next_release_time - current_time
@@ -568,14 +578,7 @@ mod SimulationCore {
                 current_day: current_day,
             }
         }
-        fn remove_from_whitelist(
-            ref self: ContractState, simulation_id: felt252, wallet: ContractAddress,
-        ) {
-            self.only_owner();
-            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
-            self.whitelist.entry((simulation_id, wallet)).write(false);
-            self.emit(WhitelistRemoved { simulation_id, wallet });
-        }
+
         fn get_claimable_tokens_batch(
             self: @ContractState, user: ContractAddress, simulation_ids: Array<felt252>,
         ) -> Array<super::ClaimableInfo> {

@@ -91,7 +91,7 @@ fn setup() -> (ContractAddress, ContractAddress, ContractAddress, ContractAddres
     constructor_calldata.append(registry_address.into());
     constructor_calldata.append(token_address.into());
     constructor_calldata.append(owner.into());
-    constructor_calldata.append(1000_u64.into()); // vesting_start_time
+    // constructor_calldata.append(1000_u64.into()); // vesting_start_time
     
     let (core_address, _) = core_contract.deploy(@constructor_calldata).unwrap();
     
