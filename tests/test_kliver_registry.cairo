@@ -35,10 +35,12 @@ fn deploy_nft_contract(owner: ContractAddress) -> ContractAddress {
 fn deploy_contract() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ISimulationRegistryDispatcher, IOwnerRegistryDispatcher, ISessionRegistryDispatcher, ContractAddress) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let nft_address = deploy_nft_contract(owner);
+    let verifier_address: ContractAddress = 'verifier'.try_into().unwrap();
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
     constructor_calldata.append(nft_address.into());
+    constructor_calldata.append(verifier_address.into());
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
     (
         ICharacterRegistryDispatcher { contract_address },
@@ -54,10 +56,12 @@ fn deploy_contract() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatch
 fn deploy_contract_with_nft() -> (ICharacterRegistryDispatcher, IScenarioRegistryDispatcher, ISimulationRegistryDispatcher, IOwnerRegistryDispatcher, ISessionRegistryDispatcher, IKliverNFTDispatcher, ContractAddress, ContractAddress) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let nft_address = deploy_nft_contract(owner);
+    let verifier_address: ContractAddress = 'verifier'.try_into().unwrap();
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
     constructor_calldata.append(nft_address.into());
+    constructor_calldata.append(verifier_address.into());
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
     (
         ICharacterRegistryDispatcher { contract_address },
@@ -181,11 +185,13 @@ fn test_constructor_zero_owner() {
 fn test_constructor_zero_nft_address() {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let zero_nft: ContractAddress = 0.try_into().unwrap();
+    let verifier_address: ContractAddress = 'verifier'.try_into().unwrap();
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
     constructor_calldata.append(zero_nft.into());
-    
+    constructor_calldata.append(verifier_address.into());
+
     match contract.deploy(@constructor_calldata) {
         Result::Ok(_) => core::panic_with_felt252('Should have panicked'),
         Result::Err(errors) => {
