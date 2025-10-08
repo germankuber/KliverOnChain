@@ -275,7 +275,7 @@ class ContractDeployer:
             
         print(f"{Colors.SUCCESS}✓ Deployment info saved to: {filename}{Colors.RESET}")
 
-    def deploy_full_flow(self, owner_address: Optional[str] = None, **kwargs) -> Optional[Dict[str, Any]]:
+    def deploy_full_flow(self, owner_address: Optional[str] = None, no_compile: bool = False, **kwargs) -> Optional[Dict[str, Any]]:
         """Execute the complete deployment flow for a single contract."""
         print(f"{Colors.BOLD}🎯 Deploying {self.contract_config.name} to {self.network_config.network}{Colors.RESET}")
         print(f"{Colors.INFO}Account: {self.network_config.account} | Network: {self.network_config.network}{Colors.RESET}")
@@ -302,10 +302,13 @@ class ContractDeployer:
                 if not self.validate_contract(dep_address, dep_contract_type):
                     return None
             
-        # Compile contract
-        if not self.compile_contract():
-            print(f"{Colors.ERROR}✗ Compilation failed{Colors.RESET}")
-            return None
+        # Compile contract (skip if no_compile is True)
+        if not no_compile:
+            if not self.compile_contract():
+                print(f"{Colors.ERROR}✗ Compilation failed{Colors.RESET}")
+                return None
+        else:
+            print(f"{Colors.INFO}⏭️ Skipping compilation (--no-compile flag set){Colors.RESET}")
             
         # Declare contract
         class_hash = self.declare_contract()

@@ -29,10 +29,12 @@ from kliver_deploy.utils import Colors, print_deployment_summary
               help='Verifier contract address (optional for Registry, uses 0x0 if not provided)')
 @click.option('--verbose', '-v', is_flag=True, 
               help='Enable verbose output')
+@click.option('--no-compile', is_flag=True, 
+              help='Skip compilation step (use existing compiled contracts)')
 def deploy(environment: str, contract: str, owner: Optional[str], 
            nft_address: Optional[str], registry_address: Optional[str], 
            token_address: Optional[str], verifier_address: Optional[str], 
-           verbose: bool):
+           verbose: bool, no_compile: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration.
     
@@ -94,13 +96,13 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         
         if contract == 'all':
             success = deploy_all_contracts(
-                config_manager, environment, owner, verifier_address, deployments
+                config_manager, environment, owner, verifier_address, deployments, no_compile
             )
         else:
             success = deploy_single_contract(
                 config_manager, environment, contract, owner, 
                 nft_address, registry_address, token_address, verifier_address,
-                deployments
+                deployments, no_compile
             )
         
         # Show final summary
@@ -125,7 +127,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
 
 def deploy_all_contracts(config_manager: ConfigManager, environment: str, 
                         owner: Optional[str], verifier_address: Optional[str],
-                        deployments: List[Dict[str, Any]]) -> bool:
+                        deployments: List[Dict[str, Any]], no_compile: bool = False) -> bool:
     """Deploy all contracts in the correct order."""
     click.echo(f"\n{Colors.BOLD}🚀 COMPLETE DEPLOYMENT MODE{Colors.RESET}")
     click.echo(f"{Colors.INFO}This will deploy: NFT → Registry → Token1155 → SimulationCore{Colors.RESET}\n")
@@ -138,7 +140,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
     
     # Get base_uri from config
     contract_config = config_manager.get_contract_config(environment, 'nft')
-    nft_result = nft_deployer.deploy_full_flow(owner, base_uri=contract_config.base_uri)
+    nft_result = nft_deployer.deploy_full_flow(owner, no_compile=no_compile, base_uri=contract_config.base_uri)
     
     if nft_result:
         deployments.append(nft_result)
@@ -159,6 +161,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
     
     registry_result = registry_deployer.deploy_full_flow(
         owner, 
+        no_compile=no_compile,
         nft_address=deployed_addresses['nft'],
         verifier_address=verifier_address
     )
@@ -177,7 +180,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
     
     # Get base_uri from config
     token_config = config_manager.get_contract_config(environment, 'kliver_1155')
-    token_result = token_deployer.deploy_full_flow(owner, base_uri=token_config.base_uri)
+    token_result = token_deployer.deploy_full_flow(owner, no_compile=no_compile, base_uri=token_config.base_uri)
     
     if token_result:
         deployments.append(token_result)
@@ -193,6 +196,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
     
     core_result = core_deployer.deploy_full_flow(
         owner,
+        no_compile=no_compile,
         registry_address=deployed_addresses['registry'],
         token_address=deployed_addresses['token']
     )
@@ -210,7 +214,7 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
                           contract: str, owner: Optional[str],
                           nft_address: Optional[str], registry_address: Optional[str], 
                           token_address: Optional[str], verifier_address: Optional[str],
-                          deployments: List[Dict[str, Any]]) -> bool:
+                          deployments: List[Dict[str, Any]], no_compile: bool = False) -> bool:
     """Deploy a single contract."""
     
     deployer = ContractDeployer(environment, contract, config_manager)
@@ -261,7 +265,7 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
         deploy_kwargs['token_address'] = token_address
     
     # Deploy the contract
-    result = deployer.deploy_full_flow(owner, **deploy_kwargs)
+    result = deployer.deploy_full_flow(owner, no_compile=no_compile, **deploy_kwargs)
     
     if result:
         deployments.append(result)
