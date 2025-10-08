@@ -276,7 +276,7 @@ fn test_claim_tokens_inactive_simulation() {
 }
 
 #[test]
-#[should_panic(expected: ('No tokens available to claim',))]
+#[should_panic(expected: ('Already claimed today',))] 
 fn test_claim_tokens_cooldown_not_passed() {
     let (core_address, registry_address, _, owner) = setup();
     let core = ISimulationCoreDispatcher { contract_address: core_address };
@@ -1084,7 +1084,7 @@ fn test_partial_claim_then_more() {
 }
 
 #[test]
-#[should_panic(expected: ('No tokens available to claim',))]
+#[should_panic(expected: ('Already claimed today',))]
 fn test_claim_same_day_twice() {
     let (core_address, registry_address, _token_address, owner) = setup();
     let core = ISimulationCoreDispatcher { contract_address: core_address };
