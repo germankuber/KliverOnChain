@@ -14,7 +14,7 @@ pub mod session_registry;
 // Main contract module
 pub mod kliver_registry;
 pub mod simulation_core;
-
+pub mod sessions_marketplace;
 // NFT modules
 pub mod kliver_nft;
 pub mod kliver_nft_1155;
