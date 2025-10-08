@@ -42,7 +42,6 @@ pub trait ISimulationCore<TContractState> {
     fn is_whitelisted(self: @TContractState, simulation_id: felt252, wallet: ContractAddress) -> bool;
     fn claim_tokens(ref self: TContractState, simulation_id: felt252);
     fn spend_tokens(ref self: TContractState, simulation_id: felt252, amount: u256);
-    fn set_active(ref self: TContractState, simulation_id: felt252, value: bool);
     fn get_simulation_data(self: @TContractState, simulation_id: felt252) -> Simulation;
     fn get_owner(self: @TContractState) -> ContractAddress;
     // New methods for simulation management
@@ -50,6 +49,7 @@ pub trait ISimulationCore<TContractState> {
     fn is_simulation_active(self: @TContractState, simulation_id: felt252) -> bool;
     fn activate_simulation(ref self: TContractState, simulation_id: felt252);
     fn deactivate_simulation(ref self: TContractState, simulation_id: felt252);
+    fn balance_of(self: @TContractState, simulation_id: felt252, user: ContractAddress) -> u256;
 }
 
 // ────────────────────────────────────────────────
@@ -85,6 +85,8 @@ mod SimulationCore {
         Whitelisted: Whitelisted,
         TokensClaimed: TokensClaimed,
         TokensSpent: TokensSpent,
+        SimulationActivated: SimulationActivated,
+        SimulationDeactivated: SimulationDeactivated,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -112,6 +114,16 @@ mod SimulationCore {
         simulation_id: felt252,
         wallet: ContractAddress,
         amount: u256,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct SimulationActivated {
+        simulation_id: felt252,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct SimulationDeactivated {
+        simulation_id: felt252,
     }
 
     // ─────────────── Constructor ───────────────
@@ -212,18 +224,6 @@ mod SimulationCore {
             self.emit(TokensSpent { simulation_id, wallet: user, amount });
         }
 
-        fn set_active(ref self: ContractState, simulation_id: felt252, value: bool) {
-            self.only_owner();
-            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
-            let sim = self.simulations.entry(simulation_id).read();
-            let updated_sim = super::Simulation {
-                token_id: sim.token_id,
-                daily_amount: sim.daily_amount,
-                active: value
-            };
-            self.simulations.entry(simulation_id).write(updated_sim);
-        }
-
         fn get_simulation_data(self: @ContractState, simulation_id: felt252) -> super::Simulation {
             self.simulations.entry(simulation_id).read()
         }
@@ -250,6 +250,7 @@ mod SimulationCore {
                 active: true
             };
             self.simulations.entry(simulation_id).write(updated_sim);
+            self.emit(SimulationActivated { simulation_id });
         }
 
         fn deactivate_simulation(ref self: ContractState, simulation_id: felt252) {
@@ -263,6 +264,18 @@ mod SimulationCore {
                 active: false
             };
             self.simulations.entry(simulation_id).write(updated_sim);
+            self.emit(SimulationDeactivated { simulation_id });
+        }
+
+        fn balance_of(self: @ContractState, simulation_id: felt252, user: ContractAddress) -> u256 {
+            // Get the simulation data to obtain the token_id
+            let sim_data = self.simulations.entry(simulation_id).read();
+            
+            // Get the token contract
+            let token = IKliver1155Dispatcher { contract_address: self.token_address.read() };
+            
+            // Call balance_of on the token contract with the token_id
+            token.balance_of(user, sim_data.token_id)
         }
 
         fn get_owner(self: @ContractState) -> ContractAddress {

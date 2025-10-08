@@ -264,7 +264,7 @@ fn test_claim_tokens_inactive_simulation() {
     start_cheat_caller_address(core_address, owner);
     core.register_simulation('sim_1', 100);
     core.add_to_whitelist('sim_1', user);
-    core.set_active('sim_1', false); // Deactivate
+    core.deactivate_simulation('sim_1'); // Deactivate
     stop_cheat_caller_address(core_address);
     
     // Try to claim
@@ -428,7 +428,7 @@ fn test_spend_tokens_inactive_simulation() {
     
     // Deactivate simulation
     start_cheat_caller_address(core_address, owner);
-    core.set_active('sim_1', false);
+    core.deactivate_simulation('sim_1');
     stop_cheat_caller_address(core_address);
     
     // Try to spend
@@ -438,7 +438,7 @@ fn test_spend_tokens_inactive_simulation() {
 }
 
 #[test]
-fn test_set_active() {
+fn test_simulation_state_change() {
     let (core_address, registry_address, _, owner) = setup();
     let core = ISimulationCoreDispatcher { contract_address: core_address };
     
@@ -452,16 +452,16 @@ fn test_set_active() {
     core.register_simulation('sim_1', 100);
     
     // Deactivate
-    core.set_active('sim_1', false);
+    core.deactivate_simulation('sim_1');
     
     // Reactivate
-    core.set_active('sim_1', true);
+    core.activate_simulation('sim_1');
     stop_cheat_caller_address(core_address);
 }
 
 #[test]
 #[should_panic(expected: ('Not authorized',))]
-fn test_set_active_not_owner() {
+fn test_deactivate_simulation_not_owner() {
     let (core_address, registry_address, _, owner) = setup();
     let core = ISimulationCoreDispatcher { contract_address: core_address };
     let non_owner: ContractAddress = contract_address_const::<0x999>();
@@ -476,9 +476,9 @@ fn test_set_active_not_owner() {
     core.register_simulation('sim_1', 100);
     stop_cheat_caller_address(core_address);
     
-    // Try to set active as non-owner
+    // Try to deactivate as non-owner
     start_cheat_caller_address(core_address, non_owner);
-    core.set_active('sim_1', false);
+    core.deactivate_simulation('sim_1');
     stop_cheat_caller_address(core_address);
 }
 
@@ -669,7 +669,7 @@ fn test_spend_tokens_different_simulations() {
 }
 
 #[test]
-fn test_set_active_and_claim_interaction() {
+fn test_simulation_state_and_claim_interaction() {
     let (core_address, registry_address, token_address, owner) = setup();
     let core = ISimulationCoreDispatcher { contract_address: core_address };
     let user: ContractAddress = contract_address_const::<0x456>();
@@ -693,13 +693,13 @@ fn test_set_active_and_claim_interaction() {
     
     // Deactivate
     start_cheat_caller_address(core_address, owner);
-    core.set_active('sim_1', false);
+    core.deactivate_simulation('sim_1');
     stop_cheat_caller_address(core_address);
     
     // Try to claim when inactive (should fail - tested in another test)
     // Reactivate and claim again
     start_cheat_caller_address(core_address, owner);
-    core.set_active('sim_1', true);
+    core.activate_simulation('sim_1');
     stop_cheat_caller_address(core_address);
     
     start_cheat_block_timestamp(core_address, 86400 * 2);
@@ -730,13 +730,13 @@ fn test_add_to_whitelist_unregistered_simulation() {
 
 #[test]
 #[should_panic(expected: ('Simulation not registered',))]
-fn test_set_active_unregistered_simulation() {
+fn test_deactivate_simulation_unregistered() {
     let (core_address, _, _, owner) = setup();
     let core = ISimulationCoreDispatcher { contract_address: core_address };
     
     start_cheat_caller_address(core_address, owner);
-    // Try to set active for unregistered simulation
-    core.set_active('unregistered_sim', false);
+    // Try to deactivate unregistered simulation
+    core.deactivate_simulation('unregistered_sim');
     stop_cheat_caller_address(core_address);
 }
 
@@ -963,4 +963,46 @@ fn test_spend_tokens_from_inactive_simulation() {
     start_cheat_caller_address(core_address, user);
     core.spend_tokens(simulation_id, 25_u256);
     stop_cheat_caller_address(core_address);
+}
+
+#[test]
+fn test_balance_of() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    let user: ContractAddress = contract_address_const::<0x456>();
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100);
+    core.add_to_whitelist('sim_1', user);
+    stop_cheat_caller_address(core_address);
+    
+    // Initial balance should be 0
+    let initial_balance = core.balance_of('sim_1', user);
+    assert(initial_balance == 0, 'Initial balance should be 0');
+    
+    // Wait for cooldown and claim tokens
+    start_cheat_block_timestamp(core_address, 86400);
+    start_cheat_caller_address(core_address, user);
+    core.claim_tokens('sim_1');
+    stop_cheat_caller_address(core_address);
+    stop_cheat_block_timestamp(core_address);
+    
+    // Balance should now be 100
+    let balance_after_claim = core.balance_of('sim_1', user);
+    assert(balance_after_claim == 100, 'Balance should be 100');
+    
+    // Spend some tokens
+    start_cheat_caller_address(core_address, user);
+    core.spend_tokens('sim_1', 30);
+    stop_cheat_caller_address(core_address);
+    
+    // Balance should now be 70
+    let balance_after_spend = core.balance_of('sim_1', user);
+    assert(balance_after_spend == 70, 'Balance should be 70');
 }
