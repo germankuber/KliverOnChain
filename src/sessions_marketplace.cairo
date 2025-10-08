@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 #[starknet::contract]
 mod SessionsMarketplace {
-    use starknet::{ContractAddress, get_caller_address};
-    use starknet::storage::{Map, StoragePathEntry};
-    use core::num::traits::Zero;
+    use starknet::{ContractAddress, get_caller_address, get_contract_address};
+    use core::starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess};
+    use super::super::simulation_registry::{
+        ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait
+    };
+    use super::super::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
 
     // Estados posibles de un listing
     #[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
-    #[allow(starknet::store_no_default_variant)]
     enum ListingStatus {
         Open,
         Purchased,
@@ -29,10 +31,15 @@ mod SessionsMarketplace {
 
     #[storage]
     struct Storage {
+        // Direcciones de los contratos
         registry: ContractAddress,
         verifier: ContractAddress,
+        
+        // Gestión de listings
         listings: Map<u256, Listing>,
         listing_counter: u256,
+        
+        // Mapeo de session_id a listing_id
         session_to_listing: Map<felt252, u256>,
     }
 
@@ -102,36 +109,50 @@ mod SessionsMarketplace {
     }
 
     #[abi(embed_v0)]
-    impl SessionsMarketplaceImpl of ISessionsMarketplace<ContractState> {
+    impl MarketplaceImpl of super::IMarketplace<ContractState> {
+        // ============ SELLER FUNCTIONS ============
+
+        // Crear un nuevo listing
         fn create_listing(
             ref self: ContractState,
             session_id: felt252,
-            root: felt252,
             price: u256
         ) -> u256 {
             let caller = get_caller_address();
             
-            let existing = self.session_to_listing.entry(session_id).read();
+            // Verificar que no exista un listing para esta sesión
+            let existing = self.session_to_listing.read(session_id);
             assert(existing == 0, 'Listing already exists');
-            assert(root != 0, 'Invalid root');
 
+            // Obtener el root del registry
+            let registry = ISimulationRegistryDispatcher {
+                contract_address: self.registry.read()
+            };
+            let root = registry.get_root(session_id);
+            assert(root != 0, 'Session not found in registry');
+
+            // Verificar que el caller sea el owner de la sesión
+            let session_owner = registry.get_owner(session_id);
+            assert(caller == session_owner, 'Not session owner');
+
+            // Crear el listing
             let listing_id = self.listing_counter.read() + 1;
             self.listing_counter.write(listing_id);
 
-            let zero_address: ContractAddress = Zero::zero();
             let listing = Listing {
                 session_id,
                 root,
                 seller: caller,
-                buyer: zero_address,
+                buyer: starknet::contract_address_const::<0>(),
                 status: ListingStatus::Open,
                 challenge: 0,
                 price,
             };
 
-            self.listings.entry(listing_id).write(listing);
-            self.session_to_listing.entry(session_id).write(listing_id);
+            self.listings.write(listing_id, listing);
+            self.session_to_listing.write(session_id, listing_id);
 
+            // Emitir evento
             self.emit(ListingCreated {
                 listing_id,
                 seller: caller,
@@ -143,43 +164,56 @@ mod SessionsMarketplace {
             listing_id
         }
 
+        // Cancelar un listing (solo seller)
         fn cancel_listing(ref self: ContractState, listing_id: u256) {
             let caller = get_caller_address();
-            let mut listing = self.listings.entry(listing_id).read();
+            let mut listing = self.listings.read(listing_id);
 
             assert(listing.seller == caller, 'Not the seller');
             assert(listing.status == ListingStatus::Open, 'Cannot cancel');
 
             listing.status = ListingStatus::Cancelled;
-            self.listings.entry(listing_id).write(listing);
+            self.listings.write(listing_id, listing);
 
             self.emit(ListingCancelled { listing_id });
         }
 
+        // ============ BUYER FUNCTIONS ============
+
+        // Abrir una compra y establecer el challenge
         fn open_purchase(
             ref self: ContractState,
             listing_id: u256,
             challenge: felt252
         ) {
             let caller = get_caller_address();
-            let mut listing = self.listings.entry(listing_id).read();
+            let mut listing = self.listings.read(listing_id);
 
+            // Validaciones
             assert(listing.status == ListingStatus::Open, 'Listing not open');
             assert(challenge != 0, 'Invalid challenge');
-            assert(caller != listing.seller, 'Seller cannot buy');
+            assert(caller != listing.seller, 'Seller cannot buy own listing');
 
+            // Actualizar el listing
             listing.buyer = caller;
             listing.challenge = challenge;
             listing.status = ListingStatus::Purchased;
-            self.listings.entry(listing_id).write(listing);
+            self.listings.write(listing_id, listing);
 
+            // Emitir evento
             self.emit(PurchaseOpened {
                 listing_id,
                 buyer: caller,
                 challenge,
             });
+
+            // TODO: Aquí podrías agregar lógica de pago/escrow
+            // Por ejemplo, transferir fondos a un contrato de escrow
         }
 
+        // ============ PROOF SUBMISSION (On-chain) ============
+
+        // Verificación on-chain completa
         fn submit_proof_and_verify(
             ref self: ContractState,
             listing_id: u256,
@@ -187,11 +221,13 @@ mod SessionsMarketplace {
             public_inputs: Span<felt252>
         ) {
             let caller = get_caller_address();
-            let mut listing = self.listings.entry(listing_id).read();
+            let mut listing = self.listings.read(listing_id);
 
+            // Validaciones
             assert(listing.seller == caller, 'Not the seller');
             assert(listing.status == ListingStatus::Purchased, 'Not in purchased state');
             
+            // Verificar que los public inputs coincidan
             assert(public_inputs.len() >= 2, 'Invalid public inputs');
             let session_root = *public_inputs.at(0);
             let challenge = *public_inputs.at(1);
@@ -199,32 +235,41 @@ mod SessionsMarketplace {
             assert(session_root == listing.root, 'Root mismatch');
             assert(challenge == listing.challenge, 'Challenge mismatch');
 
-            // Verificación simplificada - integra con tu verifier real
-            let is_valid = self._verify_proof(proof, public_inputs);
+            // Llamar al verifier
+            let mut verifier = IVerifierDispatcher {
+                contract_address: self.verifier.read()
+            };
+            let is_valid = verifier.verify(proof, public_inputs);
 
+            // Emitir evento de proof
             self.emit(ProofSubmitted {
                 listing_id,
                 verified: is_valid,
             });
 
+            // Si la prueba es válida, marcar como vendido
             if is_valid {
                 listing.status = ListingStatus::Sold;
-                self.listings.entry(listing_id).write(listing);
+                self.listings.write(listing_id, listing);
 
                 self.emit(Sold {
                     listing_id,
                     seller: listing.seller,
                     buyer: listing.buyer,
                 });
+
+                // TODO: Aquí se liberaría el pago del escrow al seller
             }
         }
 
+        // ============ VIEW FUNCTIONS ============
+
         fn get_listing(self: @ContractState, listing_id: u256) -> Listing {
-            self.listings.entry(listing_id).read()
+            self.listings.read(listing_id)
         }
 
         fn get_listing_status(self: @ContractState, listing_id: u256) -> ListingStatus {
-            let listing = self.listings.entry(listing_id).read();
+            let listing = self.listings.read(listing_id);
             listing.status
         }
 
@@ -241,55 +286,36 @@ mod SessionsMarketplace {
         }
 
         fn get_listing_by_session(self: @ContractState, session_id: felt252) -> u256 {
-            self.session_to_listing.entry(session_id).read()
-        }
-    }
-
-    #[generate_trait]
-    impl InternalImpl of InternalTrait {
-        fn _verify_proof(
-            self: @ContractState,
-            proof: Span<felt252>,
-            public_inputs: Span<felt252>
-        ) -> bool {
-            // Verificaciones básicas
-            if proof.len() < 4 {
-                return false;
-            }
-
-            let session_root = *public_inputs.at(0);
-            let challenge = *public_inputs.at(1);
-
-            if session_root == 0 || challenge == 0 {
-                return false;
-            }
-
-            // Aquí integrarías con tu verifier real
-            // Por ahora retornamos true para testing
-            true
+            self.session_to_listing.read(session_id)
         }
     }
 
     #[starknet::interface]
-    trait ISessionsMarketplace<TContractState> {
+    trait IMarketplace<TContractState> {
+        // Seller functions
         fn create_listing(
             ref self: TContractState,
             session_id: felt252,
-            root: felt252,
             price: u256
         ) -> u256;
         fn cancel_listing(ref self: TContractState, listing_id: u256);
+        
+        // Buyer functions
         fn open_purchase(
             ref self: TContractState,
             listing_id: u256,
             challenge: felt252
         );
+        
+        // Proof submission
         fn submit_proof_and_verify(
             ref self: TContractState,
             listing_id: u256,
             proof: Span<felt252>,
             public_inputs: Span<felt252>
         );
+        
+        // View functions
         fn get_listing(self: @TContractState, listing_id: u256) -> Listing;
         fn get_listing_status(self: @TContractState, listing_id: u256) -> ListingStatus;
         fn get_listing_count(self: @TContractState) -> u256;
