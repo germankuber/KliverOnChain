@@ -23,18 +23,11 @@ pub trait IKliverNFT1155<TContractState> {
     );
 
     /// Check if a user has a specific token type
-    fn user_has_token(
-        self: @TContractState, 
-        user: ContractAddress, 
+    fn has_token(
+        self: @TContractState,
+        user: ContractAddress,
         token_id: u256
     ) -> bool;
-
-    /// Get user's balance for a specific token type
-    fn get_user_balance(
-        self: @TContractState, 
-        user: ContractAddress, 
-        token_id: u256
-    ) -> u256;
 
     /// Burn tokens from a user (only owner, respects soulbound rules)
     fn burn_user_tokens(
@@ -443,20 +436,12 @@ pub mod KliverNFT1155 {
             }
         }
 
-        fn user_has_token(
-            self: @ContractState, 
-            user: ContractAddress, 
+        fn has_token(
+            self: @ContractState,
+            user: ContractAddress,
             token_id: u256
         ) -> bool {
             self.erc1155.balance_of(user, token_id) > 0
-        }
-
-        fn get_user_balance(
-            self: @ContractState, 
-            user: ContractAddress, 
-            token_id: u256
-        ) -> u256 {
-            self.erc1155.balance_of(user, token_id)
         }
 
         fn burn_user_tokens(
