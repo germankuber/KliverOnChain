@@ -78,12 +78,16 @@ pub trait ISimulationCore<TContractState> {
     fn get_claimable_tokens(
         self: @TContractState, simulation_id: felt252, user: ContractAddress,
     ) -> u256;
-    fn get_time_until_next_claim(
-        self: @TContractState, simulation_id: felt252, user: ContractAddress,
-    ) -> TimeUntilClaim;
     fn get_claimable_tokens_batch(
         self: @TContractState, user: ContractAddress, simulation_ids: Array<felt252>,
     ) -> Array<ClaimableInfo>;
+    fn get_time_until_next_claim(
+        self: @TContractState, simulation_id: felt252, user: ContractAddress,
+    ) -> TimeUntilClaim;
+    fn get_time_until_next_claim_batch(
+        self: @TContractState, user: ContractAddress, simulation_ids: Array<felt252>
+    ) -> Array<TimeUntilClaim>;
+
 }
 
 // ────────────────────────────────────────────────
@@ -279,7 +283,6 @@ mod SimulationCore {
             let current_day = self.get_current_day(simulation_id);
             let last_claimed_day = self.last_claim_day.entry((simulation_id, user)).read();
 
-            // Si ya claimeó hoy, no puede volver a claimear
             if last_claimed_day == current_day {
                 return false;
             }
@@ -568,6 +571,22 @@ mod SimulationCore {
                 next_claim_day: next_day,
                 current_day: current_day,
             }
+        }
+
+        fn get_time_until_next_claim_batch(
+            self: @ContractState, user: ContractAddress, simulation_ids: Array<felt252>
+        ) -> Array<super::TimeUntilClaim> {
+            let mut results: Array<super::TimeUntilClaim> = ArrayTrait::new();
+            let mut i: u32 = 0;
+
+            while i < simulation_ids.len() {
+                let simulation_id = *simulation_ids.at(i);
+                let time_until_claim = self.get_time_until_next_claim(simulation_id, user);
+                results.append(time_until_claim);
+                i += 1;
+            }
+
+            results
         }
 
         fn get_claimable_tokens_batch(
