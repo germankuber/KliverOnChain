@@ -41,8 +41,8 @@ mod KliverRC1155 {
         token_info: Map<u256, TokenInfo>,
         next_token_id: u256,
         simulations: Map<felt252, Simulation>,
-        // (token_id, wallet) -> simulation_id
-        whitelist: Map<(u256, ContractAddress), felt252>,
+        // (token_id, simulation_id, wallet) -> bool (whitelisted or not)
+        whitelist: Map<(u256, felt252, ContractAddress), bool>,
         // (token_id, simulation_id, wallet) -> last_claim_timestamp
         last_claim_timestamp: Map<(u256, felt252, ContractAddress), u64>,
         // session_id -> SessionPayment
@@ -219,13 +219,15 @@ mod KliverRC1155 {
         assert(simulation.token_id == token_id, 'Simulation not for this token');
 
         // Add to whitelist
-        self.whitelist.entry((token_id, wallet)).write(simulation_id);
+        self.whitelist.entry((token_id, simulation_id, wallet)).write(true);
 
         self.emit(AddedToWhitelist { token_id, wallet, simulation_id });
     }
 
     #[external(v0)]
-    fn remove_from_whitelist(ref self: ContractState, token_id: u256, wallet: ContractAddress) {
+    fn remove_from_whitelist(
+        ref self: ContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252,
+    ) {
         // Only owner can remove from whitelist
         self._assert_only_owner();
 
@@ -235,23 +237,17 @@ mod KliverRC1155 {
             token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist',
         );
 
-        // Remove from whitelist (set to 0)
-        self.whitelist.entry((token_id, wallet)).write(0);
+        // Remove from whitelist (set to false)
+        self.whitelist.entry((token_id, simulation_id, wallet)).write(false);
 
         self.emit(RemovedFromWhitelist { token_id, wallet });
     }
 
     #[external(v0)]
-    fn is_whitelisted(self: @ContractState, token_id: u256, wallet: ContractAddress) -> bool {
-        let simulation_id = self.whitelist.entry((token_id, wallet)).read();
-        simulation_id != 0
-    }
-
-    #[external(v0)]
-    fn get_whitelist_simulation(
-        self: @ContractState, token_id: u256, wallet: ContractAddress,
-    ) -> felt252 {
-        self.whitelist.entry((token_id, wallet)).read()
+    fn is_whitelisted(
+        self: @ContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress,
+    ) -> bool {
+        self.whitelist.entry((token_id, simulation_id, wallet)).read()
     }
 
     #[external(v0)]
@@ -273,8 +269,8 @@ mod KliverRC1155 {
         assert(simulation.token_id == token_id, 'Simulation not for this token');
 
         // 4. Verify user is whitelisted for this token and simulation
-        let whitelisted_sim = self.whitelist.entry((token_id, caller)).read();
-        assert(whitelisted_sim == simulation_id, 'Not whitelisted');
+        let is_whitelisted = self.whitelist.entry((token_id, simulation_id, caller)).read();
+        assert(is_whitelisted, 'Not whitelisted');
 
         // 5. Check if simulation is expired
         let current_time = starknet::get_block_timestamp();
@@ -388,8 +384,8 @@ mod KliverRC1155 {
         let token_id = simulation.token_id;
 
         // 3. Verify caller is whitelisted for this simulation
-        let whitelisted_sim = self.whitelist.entry((token_id, caller)).read();
-        assert(whitelisted_sim == simulation_id, 'Not whitelisted');
+        let is_whitelisted = self.whitelist.entry((token_id, simulation_id, caller)).read();
+        assert(is_whitelisted, 'Not whitelisted');
 
         // 4. Verify simulation has not expired
         let current_time = starknet::get_block_timestamp();
@@ -440,8 +436,8 @@ mod KliverRC1155 {
         let token_id = simulation.token_id;
 
         // 3. Verify caller is whitelisted for this simulation
-        let whitelisted_sim = self.whitelist.entry((token_id, caller)).read();
-        assert(whitelisted_sim == simulation_id, 'Not whitelisted');
+        let is_whitelisted = self.whitelist.entry((token_id, simulation_id, caller)).read();
+        assert(is_whitelisted, 'Not whitelisted');
 
         // 4. Verify simulation has not expired
         let current_time = starknet::get_block_timestamp();

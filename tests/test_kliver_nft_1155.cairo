@@ -51,9 +51,8 @@ trait IKliverRC1155<TContractState> {
     fn get_simulation(self: @TContractState, simulation_id: felt252) -> kliver_on_chain::kliver_1155_types::Simulation;
     fn is_simulation_expired(self: @TContractState, simulation_id: felt252) -> bool;
     fn add_to_whitelist(ref self: TContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252);
-    fn remove_from_whitelist(ref self: TContractState, token_id: u256, wallet: ContractAddress);
-    fn is_whitelisted(self: @TContractState, token_id: u256, wallet: ContractAddress) -> bool;
-    fn get_whitelist_simulation(self: @TContractState, token_id: u256, wallet: ContractAddress) -> felt252;
+    fn remove_from_whitelist(ref self: TContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252);
+    fn is_whitelisted(self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> bool;
     fn claim(ref self: TContractState, token_id: u256, simulation_id: felt252);
     fn get_claimable_amount(self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> u256;
     fn pay_for_session(ref self: TContractState, simulation_id: felt252, session_id: felt252, amount: u256);
@@ -553,12 +552,9 @@ fn test_add_to_whitelist_success() {
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
 
-    // Check that wallet is whitelisted
-    let is_whitelisted = dispatcher.is_whitelisted(token_id, wallet);
+    // Check that wallet is whitelisted for simulation 123
+    let is_whitelisted = dispatcher.is_whitelisted(token_id, 123, wallet);
     assert(is_whitelisted, 'Should be whitelisted');
-
-    let whitelist_simulation = dispatcher.get_whitelist_simulation(token_id, wallet);
-    assert(whitelist_simulation == 123, 'Wrong simulation ID');
 }
 
 #[test]
@@ -634,15 +630,12 @@ fn test_remove_from_whitelist_success() {
     dispatcher.add_to_whitelist(token_id, wallet, 123);
 
     // Remove from whitelist
-    dispatcher.remove_from_whitelist(token_id, wallet);
+    dispatcher.remove_from_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
 
-    // Check that wallet is not whitelisted
-    let is_whitelisted = dispatcher.is_whitelisted(token_id, wallet);
+    // Check that wallet is not whitelisted for simulation 123
+    let is_whitelisted = dispatcher.is_whitelisted(token_id, 123, wallet);
     assert(!is_whitelisted, 'Should not be whitelisted');
-
-    let whitelist_simulation = dispatcher.get_whitelist_simulation(token_id, wallet);
-    assert(whitelist_simulation == 0, 'Should be 0');
 }
 
 #[test]
@@ -655,10 +648,14 @@ fn test_is_whitelisted_false() {
     let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
     let token_id = dispatcher.create_token(token_data);
+    
+    // Register a simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
     stop_cheat_caller_address(dispatcher.contract_address);
 
-    // Check that wallet is not whitelisted
-    let is_whitelisted = dispatcher.is_whitelisted(token_id, wallet);
+    // Check that wallet is not whitelisted for simulation 123
+    let is_whitelisted = dispatcher.is_whitelisted(token_id, 123, wallet);
     assert(!is_whitelisted, 'Should not be whitelisted');
 }
 
