@@ -4,6 +4,43 @@ use starknet::ContractAddress;
 // Import structs from the types file
 use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenDataToCreateTrait, SimulationDataToCreate, SimulationDataToCreateTrait, SessionPayment};
 
+// Mock ERC1155 Receiver contract for testing using OpenZeppelin's component
+#[starknet::contract]
+mod MockERC1155Receiver {
+    use openzeppelin::introspection::src5::SRC5Component;
+    use openzeppelin::token::erc1155::ERC1155ReceiverComponent;
+
+    component!(path: ERC1155ReceiverComponent, storage: erc1155_receiver, event: ERC1155ReceiverEvent);
+    component!(path: SRC5Component, storage: src5, event: SRC5Event);
+
+    // ERC1155Receiver Mixin
+    #[abi(embed_v0)]
+    impl ERC1155ReceiverMixinImpl = ERC1155ReceiverComponent::ERC1155ReceiverMixinImpl<ContractState>;
+    impl ERC1155ReceiverInternalImpl = ERC1155ReceiverComponent::InternalImpl<ContractState>;
+
+    #[storage]
+    struct Storage {
+        #[substorage(v0)]
+        erc1155_receiver: ERC1155ReceiverComponent::Storage,
+        #[substorage(v0)]
+        src5: SRC5Component::Storage
+    }
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        #[flat]
+        ERC1155ReceiverEvent: ERC1155ReceiverComponent::Event,
+        #[flat]
+        SRC5Event: SRC5Component::Event
+    }
+
+    #[constructor]
+    fn constructor(ref self: ContractState) {
+        self.erc1155_receiver.initializer();
+    }
+}
+
 // Define the interface for testing
 #[starknet::interface]
 trait IKliverRC1155<TContractState> {
@@ -34,6 +71,14 @@ fn deploy_contract(owner: ContractAddress) -> IKliverRC1155Dispatcher {
     Serde::serialize(@base_uri, ref constructor_calldata);
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
     IKliverRC1155Dispatcher { contract_address }
+}
+
+/// Helper function to deploy a mock ERC1155 receiver contract
+fn deploy_mock_receiver() -> ContractAddress {
+    let contract = declare("MockERC1155Receiver").unwrap().contract_class();
+    let constructor_calldata = ArrayTrait::new();
+    let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
+    contract_address
 }
 
 #[test]
@@ -285,7 +330,7 @@ fn test_time_until_release_success() {
 fn test_pay_for_session_success() {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let dispatcher = deploy_contract(owner);
-    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+    let wallet: ContractAddress = deploy_mock_receiver(); // Use mock contract instead of simple address
 
     // Create a token first
     let token_data = TokenDataToCreateTrait::new(12, 1000);
