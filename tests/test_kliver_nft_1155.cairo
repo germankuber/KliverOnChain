@@ -2,7 +2,7 @@ use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_c
 use starknet::ContractAddress;
 
 // Import structs from the types file
-use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenCreated};
+use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenCreated, TokenDataToCreateTrait};
 
 // Define the interface for testing
 #[starknet::interface]
@@ -28,10 +28,7 @@ fn deploy_contract(owner: ContractAddress) -> IKliverRC1155Dispatcher {
 fn test_create_token_success() {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let dispatcher = deploy_contract(owner);
-    let token_data = TokenDataToCreate {
-        release_hour: 12345,
-        release_amount: 1000000000000000000, // 1 ETH in wei
-    };
+    let token_data = TokenDataToCreateTrait::new(12345, 1000000000000000000); // 1 ETH in wei
 
     start_cheat_caller_address(dispatcher.contract_address, owner);
     let token_id = dispatcher.create_token(token_data);
@@ -47,10 +44,7 @@ fn test_create_token_storage() {
     let dispatcher = deploy_contract(owner);
     let release_hour: u64 = 12345;
     let release_amount: u256 = 1000000000000000000;
-    let token_data = TokenDataToCreate {
-        release_hour,
-        release_amount,
-    };
+    let token_data = TokenDataToCreateTrait::new(release_hour, release_amount);
 
     start_cheat_caller_address(dispatcher.contract_address, owner);
     let token_id = dispatcher.create_token(token_data);
@@ -71,11 +65,11 @@ fn test_create_token_next_id_increment() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Create first token
-    let token_data_1 = TokenDataToCreate { release_hour: 1000, release_amount: 1000 };
+    let token_data_1 = TokenDataToCreateTrait::new(1000, 1000);
     let token_id_1 = dispatcher.create_token(token_data_1);
 
     // Create second token
-    let token_data_2 = TokenDataToCreate { release_hour: 2000, release_amount: 2000 };
+    let token_data_2 = TokenDataToCreateTrait::new(2000, 2000);
     let token_id_2 = dispatcher.create_token(token_data_2);
 
     stop_cheat_caller_address(dispatcher.contract_address);
@@ -92,13 +86,13 @@ fn test_get_token_info_multiple_tokens() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Create multiple tokens
-    let token_data_1 = TokenDataToCreate { release_hour: 1000, release_amount: 1000 };
+    let token_data_1 = TokenDataToCreateTrait::new(1000, 1000);
     let token_id_1 = dispatcher.create_token(token_data_1);
 
-    let token_data_2 = TokenDataToCreate { release_hour: 2000, release_amount: 2000 };
+    let token_data_2 = TokenDataToCreateTrait::new(2000, 2000);
     let token_id_2 = dispatcher.create_token(token_data_2);
 
-    let token_data_3 = TokenDataToCreate { release_hour: 3000, release_amount: 3000 };
+    let token_data_3 = TokenDataToCreateTrait::new(3000, 3000);
     let token_id_3 = dispatcher.create_token(token_data_3);
 
     stop_cheat_caller_address(dispatcher.contract_address);
@@ -126,11 +120,11 @@ fn test_create_token_different_callers() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Create token with owner
-    let token_data_1 = TokenDataToCreate { release_hour: 1000, release_amount: 1000 };
+    let token_data_1 = TokenDataToCreateTrait::new(1000, 1000);
     let token_id_1 = dispatcher.create_token(token_data_1);
 
     // Create token with owner again
-    let token_data_2 = TokenDataToCreate { release_hour: 2000, release_amount: 2000 };
+    let token_data_2 = TokenDataToCreateTrait::new(2000, 2000);
     let token_id_2 = dispatcher.create_token(token_data_2);
 
     stop_cheat_caller_address(dispatcher.contract_address);
@@ -156,7 +150,7 @@ fn test_create_token_non_owner_should_fail() {
     let dispatcher = deploy_contract(owner);
     let non_owner: ContractAddress = 'non_owner'.try_into().unwrap();
 
-    let token_data = TokenDataToCreate { release_hour: 1000, release_amount: 1000 };
+    let token_data = TokenDataToCreateTrait::new(1000, 1000);
 
     start_cheat_caller_address(dispatcher.contract_address, non_owner);
 
@@ -172,7 +166,7 @@ fn test_time_until_release_success() {
     let dispatcher = deploy_contract(owner);
 
     // Create a token with release_hour = 12 (noon)
-    let token_data = TokenDataToCreate { release_hour: 12, release_amount: 1000 };
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
 
     start_cheat_caller_address(dispatcher.contract_address, owner);
     let token_id = dispatcher.create_token(token_data);
@@ -195,7 +189,7 @@ fn test_time_until_release_tomorrow() {
     let dispatcher = deploy_contract(owner);
 
     // Create a token with release_hour = 6 (6 AM)
-    let token_data = TokenDataToCreate { release_hour: 6, release_amount: 1000 };
+    let token_data = TokenDataToCreateTrait::new(6, 1000);
 
     start_cheat_caller_address(dispatcher.contract_address, owner);
     let token_id = dispatcher.create_token(token_data);
