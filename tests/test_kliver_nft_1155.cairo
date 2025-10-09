@@ -89,7 +89,7 @@ fn deploy_mock_receiver() -> ContractAddress {
 fn test_create_token_success() {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let dispatcher = deploy_contract(owner);
-    let token_data = TokenDataToCreateTrait::new(12345, 1000000000000000000); // 1 ETH in wei
+    let token_data = TokenDataToCreateTrait::new(1, 1000000000000000000); // 1 ETH in wei
 
     start_cheat_caller_address(dispatcher.contract_address, owner);
     let token_id = dispatcher.create_token(token_data);
@@ -103,7 +103,7 @@ fn test_create_token_success() {
 fn test_create_token_storage() {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let dispatcher = deploy_contract(owner);
-    let release_hour: u64 = 12345;
+    let release_hour: u64 = 1;
     let release_amount: u256 = 1000000000000000000;
     let token_data = TokenDataToCreateTrait::new(release_hour, release_amount);
 
@@ -126,11 +126,11 @@ fn test_create_token_next_id_increment() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Create first token
-    let token_data_1 = TokenDataToCreateTrait::new(1000, 1000);
+    let token_data_1 = TokenDataToCreateTrait::new(1, 1000);
     let token_id_1 = dispatcher.create_token(token_data_1);
 
     // Create second token
-    let token_data_2 = TokenDataToCreateTrait::new(2000, 2000);
+    let token_data_2 = TokenDataToCreateTrait::new(2, 2000);
     let token_id_2 = dispatcher.create_token(token_data_2);
 
     stop_cheat_caller_address(dispatcher.contract_address);
@@ -147,13 +147,13 @@ fn test_get_token_info_multiple_tokens() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Create multiple tokens
-    let token_data_1 = TokenDataToCreateTrait::new(1000, 1000);
+    let token_data_1 = TokenDataToCreateTrait::new(1, 1000);
     let token_id_1 = dispatcher.create_token(token_data_1);
 
-    let token_data_2 = TokenDataToCreateTrait::new(2000, 2000);
+    let token_data_2 = TokenDataToCreateTrait::new(2, 2000);
     let token_id_2 = dispatcher.create_token(token_data_2);
 
-    let token_data_3 = TokenDataToCreateTrait::new(3000, 3000);
+    let token_data_3 = TokenDataToCreateTrait::new(3, 3000);
     let token_id_3 = dispatcher.create_token(token_data_3);
 
     stop_cheat_caller_address(dispatcher.contract_address);
@@ -164,13 +164,13 @@ fn test_get_token_info_multiple_tokens() {
     let info_3 = dispatcher.get_token_info(token_id_3);
 
     assert(info_1.release_hour == 1000, 'Token 1 release hour');
-    assert(info_1.release_amount == 1000, 'Token 1 release amount');
+    assert(info_1.release_amount == 1, 'Token 1 release amount');
 
     assert(info_2.release_hour == 2000, 'Token 2 release hour');
-    assert(info_2.release_amount == 2000, 'Token 2 release amount');
+    assert(info_2.release_amount == 2, 'Token 2 release amount');
 
     assert(info_3.release_hour == 3000, 'Token 3 release hour');
-    assert(info_3.release_amount == 3000, 'Token 3 release amount');
+    assert(info_3.release_amount == 3, 'Token 3 release amount');
 }
 
 #[test]
@@ -181,11 +181,11 @@ fn test_create_token_different_callers() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Create token with owner
-    let token_data_1 = TokenDataToCreateTrait::new(1000, 1000);
+    let token_data_1 = TokenDataToCreateTrait::new(1, 1000);
     let token_id_1 = dispatcher.create_token(token_data_1);
 
     // Create token with owner again
-    let token_data_2 = TokenDataToCreateTrait::new(2000, 2000);
+    let token_data_2 = TokenDataToCreateTrait::new(2, 2000);
     let token_id_2 = dispatcher.create_token(token_data_2);
 
     stop_cheat_caller_address(dispatcher.contract_address);
@@ -198,9 +198,9 @@ fn test_create_token_different_callers() {
     let info_1 = dispatcher.get_token_info(token_id_1);
     let info_2 = dispatcher.get_token_info(token_id_2);
 
-    assert(info_1.release_hour == 1000, 'Token 1 release hour');
+    assert(info_1.release_hour == 1, 'Token 1 release hour');
     assert(info_1.release_amount == 1000, 'Token 1 release amount');
-    assert(info_2.release_hour == 2000, 'Token 2 release hour');
+    assert(info_2.release_hour == 2, 'Token 2 release hour');
     assert(info_2.release_amount == 2000, 'Token 2 release amount');
 }
 
@@ -1378,6 +1378,191 @@ fn test_claim_three_consecutive() {
     dispatcher.claim(token_id, 123);
     let balance3 = dispatcher.balance_of(wallet, token_id);
     assert(balance3 == 3500, 'Claim 3: 3500');
+    
+    stop_cheat_caller_address(dispatcher.contract_address);
+    stop_cheat_block_timestamp_global();
+}
+
+// ============= VALIDATION TESTS FOR CREATE_TOKEN =============
+
+// Test 1: Should fail with invalid release_hour >= 24
+#[test]
+#[should_panic(expected: ('Invalid release hour', ))]
+fn test_create_token_invalid_release_hour_too_high() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    // Try to create token with release_hour = 24 (invalid)
+    let token_data = TokenDataToCreateTrait::new_with_special_release(24, 1000, 500);
+    
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    dispatcher.create_token(token_data); // Should panic
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+// Test 2: Should fail with invalid release_hour = 25
+#[test]
+#[should_panic(expected: ('Invalid release hour', ))]
+fn test_create_token_invalid_release_hour_25() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    // Try to create token with release_hour = 25 (way too high)
+    let token_data = TokenDataToCreateTrait::new_with_special_release(25, 1000, 0);
+    
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    dispatcher.create_token(token_data); // Should panic
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+// Test 3: Should succeed with release_hour = 23 (max valid)
+#[test]
+fn test_create_token_release_hour_23_valid() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    // Create token with release_hour = 23 (11 PM, valid)
+    let token_data = TokenDataToCreateTrait::new_with_special_release(23, 1000, 500);
+    
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify it was created
+    let token_info = dispatcher.get_token_info(token_id);
+    assert(token_info.release_hour == 23, 'Should be 23');
+    assert(token_id == 1, 'Should be token 1');
+}
+
+// Test 4: Should succeed with release_hour = 0 (midnight, valid)
+#[test]
+fn test_create_token_release_hour_0_valid() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    // Create token with release_hour = 0 (midnight, valid)
+    let token_data = TokenDataToCreateTrait::new_with_special_release(0, 1000, 0);
+    
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify it was created
+    let token_info = dispatcher.get_token_info(token_id);
+    assert(token_info.release_hour == 0, 'Should be 0');
+}
+
+// Test 5: Should fail with both release_amount and special_release = 0
+#[test]
+#[should_panic(expected: ('No release amount set', ))]
+fn test_create_token_no_release_mechanism() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    // Try to create token with both amounts = 0
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 0, 0);
+    
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    dispatcher.create_token(token_data); // Should panic
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+// Test 6: Should succeed with release_amount = 0 but special_release > 0
+#[test]
+fn test_create_token_only_special_release() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    // Create token with only special_release (no daily release)
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 0, 1000);
+    
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify it was created
+    let token_info = dispatcher.get_token_info(token_id);
+    assert(token_info.release_amount == 0, 'Release amount should be 0');
+    assert(token_info.special_release == 1000, 'Special should be 1000');
+}
+
+// Test 7: Should succeed with special_release = 0 but release_amount > 0
+#[test]
+fn test_create_token_only_daily_release() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    // Create token with only daily release (no special)
+    let token_data = TokenDataToCreateTrait::new(14, 1000);
+    
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify it was created
+    let token_info = dispatcher.get_token_info(token_id);
+    assert(token_info.release_amount == 1000, 'Release amount should be 1000');
+    assert(token_info.special_release == 0, 'Special should be 0');
+}
+
+// Test 8: Claim with token that has only special_release (no daily)
+#[test]
+fn test_claim_only_special_release_token() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token with ONLY special_release, no daily release
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 0, 2000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Claim after several days
+    start_cheat_block_timestamp_global(3 * 86400 + 16 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Should only receive special_release (2000), no daily amounts
+    let balance = dispatcher.balance_of(wallet, token_id);
+    assert(balance == 2000, 'Should only have special');
+    
+    stop_cheat_block_timestamp_global();
+}
+
+// Test 9: Second claim with only special_release token should fail
+#[test]
+#[should_panic(expected: ('Nothing to claim yet', ))]
+fn test_claim_second_time_only_special_token_fails() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token with ONLY special_release
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 0, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // First claim
+    start_cheat_block_timestamp_global(16 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    
+    // Try to claim again - should fail (no daily release)
+    start_cheat_block_timestamp_global(2 * 86400 + 16 * 3600);
+    dispatcher.claim(token_id, 123); // Should panic
     
     stop_cheat_caller_address(dispatcher.contract_address);
     stop_cheat_block_timestamp_global();

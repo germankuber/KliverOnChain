@@ -79,6 +79,15 @@ mod KliverRC1155 {
     fn create_token(ref self: ContractState, token_data: TokenDataToCreate) -> u256 {
         self._assert_only_owner();
 
+        // Validate release_hour is valid (0-23)
+        assert(token_data.release_hour < 24, 'Invalid release hour');
+
+        // Validate at least one release mechanism exists
+        assert(
+            token_data.release_amount > 0 || token_data.special_release > 0,
+            'No release amount set',
+        );
+
         let token_id = self.next_token_id.read();
 
         let token_info = TokenInfo {
@@ -144,20 +153,24 @@ mod KliverRC1155 {
     ) -> felt252 {
         self._assert_only_owner();
 
-        // Check if token exists by verifying token info is not zero
+        // Check if token exists
         let token_info = self.token_info.entry(simulation_data.token_id).read();
         assert(
             token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist',
         );
 
         let caller = get_caller_address();
-
         let current_time = starknet::get_block_timestamp();
+
+        // NORMALIZE TO MIDNIGHT (00:00 of the current day)
+        let seconds_per_day: u64 = 86400;
+        let creation_timestamp_midnight = (current_time / seconds_per_day) * seconds_per_day;
+
         let simulation = SimulationTrait::new(
             simulation_data.simulation_id,
             simulation_data.token_id,
             caller,
-            current_time,
+            creation_timestamp_midnight, // ← SIEMPRE medianoche
             simulation_data.expiration_timestamp,
         );
 
