@@ -233,19 +233,23 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
     if not deployments:
         return
     
-    # Create a mapping of contract types to addresses
-    json_output = {}
+    # Create a mapping of contract types to addresses with the specified keys
+    json_output = {
+        "Nft": "",
+        "Registry": "",
+        "TokensCore": ""
+    }
     
     for deployment in deployments:
         contract_name = deployment['contract_name'].lower()
         contract_address = deployment['contract_address']
         
         if contract_name == 'klivernft':
-            json_output['nft'] = contract_address
+            json_output['Nft'] = contract_address
         elif contract_name == 'kliver_registry':
-            json_output['registry'] = contract_address
+            json_output['Registry'] = contract_address
         elif contract_name == 'kliverrc1155':
-            json_output['token'] = contract_address
+            json_output['TokensCore'] = contract_address
 
     
     # Print the JSON output
