@@ -87,3 +87,21 @@ pub struct TokensClaimed {
     pub claimer: ContractAddress,
     pub amount: u256,
 }
+
+#[derive(Drop, Serde, starknet::Store)]
+pub struct SessionPayment {
+    pub session_id: felt252,
+    pub simulation_id: felt252,
+    pub payer: ContractAddress,
+    pub amount: u256,
+    pub timestamp: u64,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct SessionPaid {
+    pub session_id: felt252,
+    pub simulation_id: felt252,
+    pub payer: ContractAddress,
+    pub amount: u256,
+    pub token_id: u256,
+}

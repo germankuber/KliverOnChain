@@ -1,4 +1,4 @@
-use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed};
+use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed, SessionPayment, SessionPaid};
 
 #[starknet::contract]
 mod KliverRC1155 {
@@ -8,7 +8,7 @@ mod KliverRC1155 {
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
-    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed};
+    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed, SessionPayment, SessionPaid};
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -37,6 +37,8 @@ mod KliverRC1155 {
         whitelist: Map<(u256, ContractAddress), felt252>,
         // (token_id, simulation_id, wallet) -> last_claim_timestamp
         last_claim_timestamp: Map<(u256, felt252, ContractAddress), u64>,
+        // session_id -> SessionPayment
+        paid_sessions: Map<felt252, SessionPayment>,
     }
 
     #[event]
@@ -51,6 +53,7 @@ mod KliverRC1155 {
         AddedToWhitelist: AddedToWhitelist,
         RemovedFromWhitelist: RemovedFromWhitelist,
         TokensClaimed: TokensClaimed,
+        SessionPaid: SessionPaid,
     }
 
     #[constructor]
@@ -334,6 +337,71 @@ mod KliverRC1155 {
 
         // Return total tokens claimable, not days
         token_info.release_amount * claimable_days
+    }
+
+    #[external(v0)]
+    fn pay_for_session(
+        ref self: ContractState,
+        simulation_id: felt252,
+        session_id: felt252,
+        amount: u256,
+    ) {
+        let caller = get_caller_address();
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+
+        // 1. Verify simulation exists
+        let simulation = self.simulations.entry(simulation_id).read();
+        assert(simulation.creator != zero_address, 'Simulation does not exist');
+
+        // 2. Get token_id from simulation
+        let token_id = simulation.token_id;
+
+        // 3. Verify caller is whitelisted for this simulation
+        let whitelisted_sim = self.whitelist.entry((token_id, caller)).read();
+        assert(whitelisted_sim == simulation_id, 'Not whitelisted');
+
+        // 4. Verify simulation has not expired
+        let current_time = starknet::get_block_timestamp();
+        assert(current_time < simulation.expiration_timestamp, 'Simulation has expired');
+
+        // 5. Check caller has sufficient balance
+        let balance = self.erc1155.balance_of(caller, token_id);
+        assert(balance >= amount, 'Insufficient balance');
+
+        // 6. Burn tokens from caller
+        self.erc1155.burn(caller, token_id, amount);
+
+        // 7. Record session as paid
+        let session_payment = SessionPayment {
+            session_id,
+            simulation_id,
+            payer: caller,
+            amount,
+            timestamp: current_time,
+        };
+        self.paid_sessions.entry(session_id).write(session_payment);
+
+        // 8. Emit event
+        self.emit(SessionPaid {
+            session_id,
+            simulation_id,
+            payer: caller,
+            amount,
+            token_id,
+        });
+    }
+
+    #[external(v0)]
+    fn is_session_paid(self: @ContractState, session_id: felt252) -> bool {
+        let session = self.paid_sessions.entry(session_id).read();
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+        // If payer is not zero address, session is paid
+        session.payer != zero_address
+    }
+
+    #[external(v0)]
+    fn get_session_payment(self: @ContractState, session_id: felt252) -> SessionPayment {
+        self.paid_sessions.entry(session_id).read()
     }
 
     #[external(v0)]

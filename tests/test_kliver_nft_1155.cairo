@@ -2,7 +2,7 @@ use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_c
 use starknet::ContractAddress;
 
 // Import structs from the types file
-use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenDataToCreateTrait, SimulationDataToCreate, SimulationDataToCreateTrait};
+use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenDataToCreateTrait, SimulationDataToCreate, SimulationDataToCreateTrait, SessionPayment};
 
 // Define the interface for testing
 #[starknet::interface]
@@ -19,6 +19,9 @@ trait IKliverRC1155<TContractState> {
     fn get_whitelist_simulation(self: @TContractState, token_id: u256, wallet: ContractAddress) -> felt252;
     fn claim(ref self: TContractState, token_id: u256, simulation_id: felt252);
     fn get_claimable_amount(self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> u256;
+    fn pay_for_session(ref self: TContractState, simulation_id: felt252, session_id: felt252, amount: u256);
+    fn is_session_paid(self: @TContractState, session_id: felt252) -> bool;
+    fn get_session_payment(self: @TContractState, session_id: felt252) -> SessionPayment;
     fn get_owner(self: @TContractState) -> ContractAddress;
 }
 
@@ -276,6 +279,108 @@ fn test_time_until_release_success() {
     assert(time_until_release == 21600, 'Should be 6 hours until release');
 
     stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_pay_for_session_success() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+
+    // Add to whitelist
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+
+    // Fast forward time to allow claiming
+    start_cheat_block_timestamp_global(86400 * 3); // 3 days later
+
+    // Mint some tokens to the wallet for payment
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123); // This should mint tokens to wallet
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Pay for session
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.pay_for_session(123, 456, 500); // Pay 500 tokens for session 456
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Check session is marked as paid
+    let is_paid = dispatcher.is_session_paid(456);
+    assert(is_paid, 'Session should be paid');
+
+    // Check payment details
+    let payment = dispatcher.get_session_payment(456);
+    assert(payment.session_id == 456, 'Session ID should match');
+    assert(payment.simulation_id == 123, 'Simulation ID should match');
+    assert(payment.payer == wallet, 'Payer should match');
+    assert(payment.amount == 500, 'Amount should match');
+}
+
+#[test]
+#[should_panic(expected: ('Not whitelisted', ))]
+fn test_pay_for_session_not_whitelisted() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Try to pay without being whitelisted
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.pay_for_session(123, 456, 500);
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Insufficient balance', ))]
+fn test_pay_for_session_insufficient_balance() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+
+    // Add to whitelist
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Try to pay more than available balance (wallet has 0 tokens)
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.pay_for_session(123, 456, 500);
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
+fn test_is_session_paid_false() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    // Check unpaid session
+    let is_paid = dispatcher.is_session_paid(999);
+    assert(!is_paid, 'Session should not be paid');
 }
 
 #[test]
