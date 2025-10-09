@@ -105,7 +105,7 @@ class ContractDeployer:
         ]
         
         result = CommandRunner.run_command(command, f"Declaring {self.contract_config.name} to {self.network_config.network}")
-        
+        print(command)
         # Handle both success and "already declared" cases
         all_output = result.get("stdout", "") + result.get("stderr", "")
         
