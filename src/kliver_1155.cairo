@@ -1,4 +1,4 @@
-use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed, SessionPayment, SessionPaid};
+use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed, SessionPayment, SessionPaid, HintPayment, HintPaid};
 
 #[starknet::contract]
 mod KliverRC1155 {
@@ -8,7 +8,7 @@ mod KliverRC1155 {
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
-    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed, SessionPayment, SessionPaid};
+    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed, SessionPayment, SessionPaid, HintPayment, HintPaid};
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -39,6 +39,8 @@ mod KliverRC1155 {
         last_claim_timestamp: Map<(u256, felt252, ContractAddress), u64>,
         // session_id -> SessionPayment
         paid_sessions: Map<felt252, SessionPayment>,
+        // hint_id -> HintPayment
+        paid_hints: Map<felt252, HintPayment>,
     }
 
     #[event]
@@ -54,6 +56,7 @@ mod KliverRC1155 {
         RemovedFromWhitelist: RemovedFromWhitelist,
         TokensClaimed: TokensClaimed,
         SessionPaid: SessionPaid,
+        HintPaid: HintPaid,
     }
 
     #[constructor]
@@ -402,6 +405,71 @@ mod KliverRC1155 {
     #[external(v0)]
     fn get_session_payment(self: @ContractState, session_id: felt252) -> SessionPayment {
         self.paid_sessions.entry(session_id).read()
+    }
+
+    #[external(v0)]
+    fn pay_for_hint(
+        ref self: ContractState,
+        simulation_id: felt252,
+        hint_id: felt252,
+        amount: u256,
+    ) {
+        let caller = get_caller_address();
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+
+        // 1. Verify simulation exists
+        let simulation = self.simulations.entry(simulation_id).read();
+        assert(simulation.creator != zero_address, 'Simulation does not exist');
+
+        // 2. Get token_id from simulation
+        let token_id = simulation.token_id;
+
+        // 3. Verify caller is whitelisted for this simulation
+        let whitelisted_sim = self.whitelist.entry((token_id, caller)).read();
+        assert(whitelisted_sim == simulation_id, 'Not whitelisted');
+
+        // 4. Verify simulation has not expired
+        let current_time = starknet::get_block_timestamp();
+        assert(current_time < simulation.expiration_timestamp, 'Simulation has expired');
+
+        // 5. Check caller has sufficient balance
+        let balance = self.erc1155.balance_of(caller, token_id);
+        assert(balance >= amount, 'Insufficient balance');
+
+        // 6. Burn tokens from caller
+        self.erc1155.burn(caller, token_id, amount);
+
+        // 7. Record hint as paid
+        let hint_payment = HintPayment {
+            hint_id,
+            simulation_id,
+            payer: caller,
+            amount,
+            timestamp: current_time,
+        };
+        self.paid_hints.entry(hint_id).write(hint_payment);
+
+        // 8. Emit event
+        self.emit(HintPaid {
+            hint_id,
+            simulation_id,
+            payer: caller,
+            amount,
+            token_id,
+        });
+    }
+
+    #[external(v0)]
+    fn is_hint_paid(self: @ContractState, hint_id: felt252) -> bool {
+        let hint = self.paid_hints.entry(hint_id).read();
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+        // If payer is not zero address, hint is paid
+        hint.payer != zero_address
+    }
+
+    #[external(v0)]
+    fn get_hint_payment(self: @ContractState, hint_id: felt252) -> HintPayment {
+        self.paid_hints.entry(hint_id).read()
     }
 
     #[external(v0)]

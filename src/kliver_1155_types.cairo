@@ -105,3 +105,21 @@ pub struct SessionPaid {
     pub amount: u256,
     pub token_id: u256,
 }
+
+#[derive(Drop, Serde, starknet::Store)]
+pub struct HintPayment {
+    pub hint_id: felt252,
+    pub simulation_id: felt252,
+    pub payer: ContractAddress,
+    pub amount: u256,
+    pub timestamp: u64,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct HintPaid {
+    pub hint_id: felt252,
+    pub simulation_id: felt252,
+    pub payer: ContractAddress,
+    pub amount: u256,
+    pub token_id: u256,
+}
