@@ -47,13 +47,14 @@ pub struct Simulation {
     pub simulation_id: felt252,
     pub token_id: u256,
     pub creator: ContractAddress,
+    pub creation_timestamp: u64,
     pub expiration_timestamp: u64,
 }
 
 #[generate_trait]
 pub impl SimulationImpl of SimulationTrait {
-    fn new(simulation_id: felt252, token_id: u256, creator: ContractAddress, expiration_timestamp: u64) -> Simulation {
-        Simulation { simulation_id, token_id, creator, expiration_timestamp }
+    fn new(simulation_id: felt252, token_id: u256, creator: ContractAddress, creation_timestamp: u64, expiration_timestamp: u64) -> Simulation {
+        Simulation { simulation_id, token_id, creator, creation_timestamp, expiration_timestamp }
     }
 }
 
@@ -77,4 +78,12 @@ pub struct AddedToWhitelist {
 pub struct RemovedFromWhitelist {
     pub token_id: u256,
     pub wallet: ContractAddress,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct TokensClaimed {
+    pub token_id: u256,
+    pub simulation_id: felt252,
+    pub claimer: ContractAddress,
+    pub amount: u256,
 }

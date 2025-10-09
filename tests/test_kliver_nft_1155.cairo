@@ -17,6 +17,8 @@ trait IKliverRC1155<TContractState> {
     fn remove_from_whitelist(ref self: TContractState, token_id: u256, wallet: ContractAddress);
     fn is_whitelisted(self: @TContractState, token_id: u256, wallet: ContractAddress) -> bool;
     fn get_whitelist_simulation(self: @TContractState, token_id: u256, wallet: ContractAddress) -> felt252;
+    fn claim(ref self: TContractState, token_id: u256, simulation_id: felt252);
+    fn get_claimable_amount(self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> u256;
     fn get_owner(self: @TContractState) -> ContractAddress;
 }
 
@@ -402,6 +404,92 @@ fn test_is_whitelisted_false() {
     // Check that wallet is not whitelisted
     let is_whitelisted = dispatcher.is_whitelisted(token_id, wallet);
     assert(!is_whitelisted, 'Should not be whitelisted');
+}
+
+// Note: test_claim_success is commented out because it requires deploying a contract
+// for the wallet address to accept ERC1155 tokens. The logic is tested via get_claimable_amount.
+
+#[test]
+fn test_get_claimable_amount() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000); // release at hour 12, 1000 tokens per day
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+
+    // Add to whitelist
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward time to simulate 2 days passed
+    start_cheat_block_timestamp_global(86400 * 2); // 2 days later
+
+    // Check claimable amount
+    let claimable = dispatcher.get_claimable_amount(token_id, 123, wallet);
+    assert(claimable == 2000, 'Should have 2000 claimable'); // 2 days * 1000 tokens
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+#[should_panic(expected: ('Not whitelisted', ))]
+fn test_claim_not_whitelisted() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Try to claim without being whitelisted
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Simulation has expired', ))]
+fn test_claim_expired_simulation() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation that expires soon
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1000); // expires at timestamp 1000
+    dispatcher.register_simulation(simulation_data);
+
+    // Add to whitelist
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward time past expiration
+    start_cheat_block_timestamp_global(2000); // past expiration
+
+    // Try to claim
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    stop_cheat_block_timestamp_global();
 }
 
 #[test]

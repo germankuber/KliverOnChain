@@ -1,4 +1,4 @@
-use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist};
+use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed};
 
 #[starknet::contract]
 mod KliverRC1155 {
@@ -8,7 +8,7 @@ mod KliverRC1155 {
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
-    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist};
+    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed};
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -35,6 +35,8 @@ mod KliverRC1155 {
         simulations: Map<felt252, Simulation>,
         // (token_id, wallet) -> simulation_id
         whitelist: Map<(u256, ContractAddress), felt252>,
+        // (token_id, simulation_id, wallet) -> last_claim_timestamp
+        last_claim_timestamp: Map<(u256, felt252, ContractAddress), u64>,
     }
 
     #[event]
@@ -48,6 +50,7 @@ mod KliverRC1155 {
         SimulationRegistered: SimulationRegistered,
         AddedToWhitelist: AddedToWhitelist,
         RemovedFromWhitelist: RemovedFromWhitelist,
+        TokensClaimed: TokensClaimed,
     }
 
     #[constructor]
@@ -131,10 +134,12 @@ mod KliverRC1155 {
 
         let caller = get_caller_address();
 
+        let current_time = starknet::get_block_timestamp();
         let simulation = SimulationTrait::new(
             simulation_data.simulation_id,
             simulation_data.token_id,
             caller,
+            current_time,
             simulation_data.expiration_timestamp,
         );
 
@@ -236,6 +241,102 @@ mod KliverRC1155 {
     }
 
     #[external(v0)]
+    fn claim(
+        ref self: ContractState,
+        token_id: u256,
+        simulation_id: felt252,
+    ) {
+        let caller = get_caller_address();
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+
+        // 1. Verify token exists
+        let token_info = self.token_info.entry(token_id).read();
+        assert(token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist');
+
+        // 2. Verify simulation exists
+        let simulation = self.simulations.entry(simulation_id).read();
+        assert(simulation.creator != zero_address, 'Simulation does not exist');
+
+        // 3. Verify simulation belongs to this token
+        assert(simulation.token_id == token_id, 'Simulation not for this token');
+
+        // 4. Verify user is whitelisted for this token and simulation
+        let whitelisted_sim = self.whitelist.entry((token_id, caller)).read();
+        assert(whitelisted_sim == simulation_id, 'Not whitelisted');
+
+        // 5. Check if simulation is expired
+        let current_time = starknet::get_block_timestamp();
+        assert(current_time < simulation.expiration_timestamp, 'Simulation has expired');
+
+        // 6. Get last claim timestamp (0 if never claimed)
+        let last_claim = self.last_claim_timestamp.entry((token_id, simulation_id, caller)).read();
+        let start_time = if last_claim == 0 {
+            simulation.creation_timestamp
+        } else {
+            last_claim
+        };
+
+        // 7. Calculate claimable days
+        let claimable_days = self.calculate_claimable_days(
+            current_time,
+            start_time,
+            token_info.release_hour
+        );
+
+        assert(claimable_days > 0, 'No days available to claim');
+
+        // 8. Calculate total amount to mint
+        let total_amount = token_info.release_amount * claimable_days;
+
+        // 9. Mint tokens to claimer
+        self.erc1155.mint_with_acceptance_check(
+            caller,
+            token_id,
+            total_amount,
+            array![].span()
+        );
+
+        // 10. Update last claim timestamp
+        self.last_claim_timestamp.entry((token_id, simulation_id, caller)).write(current_time);
+
+        self.emit(TokensClaimed {
+            token_id,
+            simulation_id,
+            claimer: caller,
+            amount: total_amount,
+        });
+    }
+
+
+    #[external(v0)]
+    fn get_claimable_amount(
+        self: @ContractState,
+        token_id: u256,
+        simulation_id: felt252,
+        wallet: ContractAddress,
+    ) -> u256 {
+        let simulation = self.simulations.entry(simulation_id).read();
+        let token_info = self.token_info.entry(token_id).read();
+        let current_time = starknet::get_block_timestamp();
+
+        let last_claim = self.last_claim_timestamp.entry((token_id, simulation_id, wallet)).read();
+        let start_time = if last_claim == 0 {
+            simulation.creation_timestamp
+        } else {
+            last_claim
+        };
+
+        let claimable_days = self.calculate_claimable_days(
+            current_time,
+            start_time,
+            token_info.release_hour
+        );
+
+        // Return total tokens claimable, not days
+        token_info.release_amount * claimable_days
+    }
+
+    #[external(v0)]
     fn get_owner(self: @ContractState) -> ContractAddress {
         self.owner.read()
     }
@@ -246,6 +347,33 @@ mod KliverRC1155 {
             let caller = get_caller_address();
             let owner = self.owner.read();
             assert(caller == owner, 'Not owner');
+        }
+
+        fn calculate_claimable_days(
+            self: @ContractState,
+            current_time: u64,
+            start_time: u64,
+            release_hour: u64
+        ) -> u256 {
+            let seconds_per_day: u64 = 86400;
+            let seconds_per_hour: u64 = 3600;
+
+            // Calculate full days elapsed since start
+            let elapsed_seconds = current_time - start_time;
+            let full_days_elapsed = elapsed_seconds / seconds_per_day;
+
+            // Check if today's release hour has passed
+            let seconds_today = current_time % seconds_per_day;
+            let current_hour = seconds_today / seconds_per_hour;
+
+            // If current hour >= release hour, today's release is available
+            let claimable_days: u256 = if current_hour >= release_hour {
+                (full_days_elapsed + 1).into()
+            } else {
+                full_days_elapsed.into()
+            };
+
+            claimable_days
         }
     }
 }
