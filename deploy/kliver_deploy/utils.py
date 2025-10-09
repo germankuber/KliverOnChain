@@ -244,7 +244,7 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
             json_output['nft'] = contract_address
         elif contract_name == 'kliver_registry':
             json_output['registry'] = contract_address
-        elif contract_name == 'klivernft1155':
+        elif contract_name == 'kliverrc1155':
             json_output['token'] = contract_address
 
     

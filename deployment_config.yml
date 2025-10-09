@@ -15,7 +15,7 @@ environments:
       registry:
         name: "kliver_registry"
         sierra_file: "target/dev/kliver_on_chain_kliver_registry.contract_class.json"
-        verifier_address: "0x0"  # TODO: Replace with actual verifier contract address
+        verifier_address: "0x04db2418fe71fd10e3127a3052e0781fe458b50490c7411ebc49bf60565df6d1"  # TODO: Replace with actual verifier contract address
       nft:
         name: "KliverNFT"
         sierra_file: "target/dev/kliver_on_chain_KliverNFT.contract_class.json"
