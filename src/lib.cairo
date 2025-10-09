@@ -3,6 +3,7 @@
 
 // Common types module
 pub mod types;
+pub mod kliver_1155_types;
 
 // Registry interface modules - separated by functionality
 pub mod character_registry;
@@ -17,7 +18,8 @@ pub mod simulation_core;
 pub mod sessions_marketplace;
 // NFT modules
 pub mod kliver_nft;
-pub mod kliver_nft_1155;
+pub mod kliver_1155;
+
 
 // Re-export key types for easier access
 pub use types::VerificationResult;
