@@ -1,7 +1,6 @@
 use super::kliver_1155_types::{
     AddedToWhitelist, HintPaid, HintPayment, RemovedFromWhitelist, SessionPaid, SessionPayment,
-    Simulation, SimulationDataToCreate, SimulationRegistered, SimulationTrait, TokenCreated,
-    TokenDataToCreate, TokenInfo, TokensClaimed,
+    Simulation, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo, TokensClaimed,
 };
 
 #[starknet::contract]
@@ -14,8 +13,7 @@ mod KliverRC1155 {
     use starknet::{ContractAddress, get_caller_address};
     use super::{
         AddedToWhitelist, HintPaid, HintPayment, RemovedFromWhitelist, SessionPaid, SessionPayment,
-        Simulation, SimulationDataToCreate, SimulationRegistered, SimulationTrait, TokenCreated,
-        TokenDataToCreate, TokenInfo, TokensClaimed,
+        Simulation, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo, TokensClaimed,
     };
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
@@ -76,24 +74,24 @@ mod KliverRC1155 {
     }
 
     #[external(v0)]
-    fn create_token(ref self: ContractState, token_data: TokenDataToCreate) -> u256 {
+    fn create_token(ref self: ContractState, release_hour: u64, release_amount: u256, special_release: u256) -> u256 {
         self._assert_only_owner();
 
         // Validate release_hour is valid (0-23)
-        assert(token_data.release_hour < 24, 'Invalid release hour');
+        assert(release_hour < 24, 'Invalid release hour');
 
         // Validate at least one release mechanism exists
         assert(
-            token_data.release_amount > 0 || token_data.special_release > 0,
+            release_amount > 0 || special_release > 0,
             'No release amount set',
         );
 
         let token_id = self.next_token_id.read();
 
         let token_info = TokenInfo {
-            release_hour: token_data.release_hour,
-            release_amount: token_data.release_amount,
-            special_release: token_data.special_release,
+            release_hour,
+            release_amount,
+            special_release,
         };
 
         self.token_info.entry(token_id).write(token_info);
@@ -104,9 +102,9 @@ mod KliverRC1155 {
                 TokenCreated {
                     token_id,
                     creator: get_caller_address(),
-                    release_hour: token_data.release_hour,
-                    release_amount: token_data.release_amount,
-                    special_release: token_data.special_release,
+                    release_hour,
+                    release_amount,
+                    special_release,
                 },
             );
 
@@ -149,12 +147,12 @@ mod KliverRC1155 {
 
     #[external(v0)]
     fn register_simulation(
-        ref self: ContractState, simulation_data: SimulationDataToCreate,
+        ref self: ContractState, simulation_id: felt252, token_id: u256, expiration_timestamp: u64,
     ) -> felt252 {
         self._assert_only_owner();
 
         // Check if token exists
-        let token_info = self.token_info.entry(simulation_data.token_id).read();
+        let token_info = self.token_info.entry(token_id).read();
         assert(
             token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist',
         );
@@ -167,26 +165,26 @@ mod KliverRC1155 {
         let creation_timestamp_midnight = (current_time / seconds_per_day) * seconds_per_day;
 
         let simulation = SimulationTrait::new(
-            simulation_data.simulation_id,
-            simulation_data.token_id,
+            simulation_id,
+            token_id,
             caller,
             creation_timestamp_midnight, // ← SIEMPRE medianoche
-            simulation_data.expiration_timestamp,
+            expiration_timestamp,
         );
 
-        self.simulations.entry(simulation_data.simulation_id).write(simulation);
+        self.simulations.entry(simulation_id).write(simulation);
 
         self
             .emit(
                 SimulationRegistered {
-                    simulation_id: simulation_data.simulation_id,
-                    token_id: simulation_data.token_id,
+                    simulation_id,
+                    token_id,
                     creator: caller,
-                    expiration_timestamp: simulation_data.expiration_timestamp,
+                    expiration_timestamp,
                 },
             );
 
-        simulation_data.simulation_id
+        simulation_id
     }
 
     #[external(v0)]

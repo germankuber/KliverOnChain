@@ -2,7 +2,7 @@ use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_c
 use starknet::ContractAddress;
 
 // Import structs from the types file
-use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenDataToCreateTrait, SimulationDataToCreate, SimulationDataToCreateTrait, SessionPayment, HintPayment};
+use kliver_on_chain::kliver_1155_types::{TokenInfo, SessionPayment, HintPayment};
 
 // Mock ERC1155 Receiver contract for testing using OpenZeppelin's component
 #[starknet::contract]
@@ -44,10 +44,10 @@ mod MockERC1155Receiver {
 // Define the interface for testing
 #[starknet::interface]
 trait IKliverRC1155<TContractState> {
-    fn create_token(ref self: TContractState, token_data: TokenDataToCreate) -> u256;
+    fn create_token(ref self: TContractState, release_hour: u64, release_amount: u256, special_release: u256) -> u256;
     fn get_token_info(self: @TContractState, token_id: u256) -> TokenInfo;
     fn time_until_release(self: @TContractState, token_id: u256) -> u64;
-    fn register_simulation(ref self: TContractState, simulation_data: SimulationDataToCreate) -> felt252;
+    fn register_simulation(ref self: TContractState, simulation_id: felt252, token_id: u256, expiration_timestamp: u64) -> felt252;
     fn get_simulation(self: @TContractState, simulation_id: felt252) -> kliver_on_chain::kliver_1155_types::Simulation;
     fn is_simulation_expired(self: @TContractState, simulation_id: felt252) -> bool;
     fn add_to_whitelist(ref self: TContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252);
@@ -88,10 +88,9 @@ fn deploy_mock_receiver() -> ContractAddress {
 fn test_create_token_success() {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let dispatcher = deploy_contract(owner);
-    let token_data = TokenDataToCreateTrait::new(1, 1000000000000000000); // 1 ETH in wei
 
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(1, 1000000000000000000, 0); // 1 ETH in wei, no special
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Assert the returned token_id is 1 (first token)
@@ -104,10 +103,9 @@ fn test_create_token_storage() {
     let dispatcher = deploy_contract(owner);
     let release_hour: u64 = 1;
     let release_amount: u256 = 1000000000000000000;
-    let token_data = TokenDataToCreateTrait::new(release_hour, release_amount);
 
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(release_hour, release_amount, 0);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Check storage using get_token_info
@@ -125,12 +123,10 @@ fn test_create_token_next_id_increment() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Create first token
-    let token_data_1 = TokenDataToCreateTrait::new(1, 1000);
-    let token_id_1 = dispatcher.create_token(token_data_1);
+    let token_id_1 = dispatcher.create_token(1, 1000, 0);
 
     // Create second token
-    let token_data_2 = TokenDataToCreateTrait::new(2, 2000);
-    let token_id_2 = dispatcher.create_token(token_data_2);
+    let token_id_2 = dispatcher.create_token(2, 2000, 0);
 
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -146,14 +142,11 @@ fn test_get_token_info_multiple_tokens() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Create multiple tokens
-    let token_data_1 = TokenDataToCreateTrait::new(1, 1000);
-    let token_id_1 = dispatcher.create_token(token_data_1);
+    let token_id_1 = dispatcher.create_token(1, 1000, 0);
 
-    let token_data_2 = TokenDataToCreateTrait::new(2, 2000);
-    let token_id_2 = dispatcher.create_token(token_data_2);
+    let token_id_2 = dispatcher.create_token(2, 2000, 0);
 
-    let token_data_3 = TokenDataToCreateTrait::new(3, 3000);
-    let token_id_3 = dispatcher.create_token(token_data_3);
+    let token_id_3 = dispatcher.create_token(3, 3000, 0);
 
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -180,12 +173,10 @@ fn test_create_token_different_callers() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Create token with owner
-    let token_data_1 = TokenDataToCreateTrait::new(1, 1000);
-    let token_id_1 = dispatcher.create_token(token_data_1);
+    let token_id_1 = dispatcher.create_token(1, 1000, 0);
 
     // Create token with owner again
-    let token_data_2 = TokenDataToCreateTrait::new(2, 2000);
-    let token_id_2 = dispatcher.create_token(token_data_2);
+    let token_id_2 = dispatcher.create_token(2, 2000, 0);
 
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -209,14 +200,12 @@ fn test_register_simulation_success() {
     let dispatcher = deploy_contract(owner);
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 0);
 
     // Register a simulation
     let simulation_id: felt252 = 123;
-    let simulation_data = SimulationDataToCreateTrait::new(simulation_id, token_id, 1735689600); // 2025-01-01 00:00:00 UTC
-    let returned_id = dispatcher.register_simulation(simulation_data);
+    let returned_id = dispatcher.register_simulation(simulation_id, token_id, 1735689600); // 2025-01-01 00:00:00 UTC
     assert(returned_id == simulation_id, 'Returned ID should match');
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -237,8 +226,7 @@ fn test_register_simulation_invalid_token() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Try to register simulation with non-existent token
-    let simulation_data = SimulationDataToCreateTrait::new(123, 999, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, 999, 1735689600);
 
     stop_cheat_caller_address(dispatcher.contract_address);
 }
@@ -249,14 +237,12 @@ fn test_get_simulation() {
     let dispatcher = deploy_contract(owner);
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 0);
 
     // Register a simulation
     let simulation_id: felt252 = 456;
-    let simulation_data = SimulationDataToCreateTrait::new(simulation_id, token_id, 1735689600);
-    let returned_id = dispatcher.register_simulation(simulation_data);
+    let returned_id = dispatcher.register_simulation(simulation_id, token_id, 1735689600);
     assert(returned_id == simulation_id, 'Returned ID should match');
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -277,15 +263,13 @@ fn test_register_simulation_non_owner_should_fail() {
     let non_owner: ContractAddress = 'non_owner'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Try to register simulation as non-owner
     start_cheat_caller_address(dispatcher.contract_address, non_owner);
-    let simulation_data = SimulationDataToCreateTrait::new(456, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(456, token_id, 1735689600);
     stop_cheat_caller_address(dispatcher.contract_address);
 }
 
@@ -296,12 +280,10 @@ fn test_create_token_non_owner_should_fail() {
     let dispatcher = deploy_contract(owner);
     let non_owner: ContractAddress = 'non_owner'.try_into().unwrap();
 
-    let token_data = TokenDataToCreateTrait::new(1000, 1000);
-
     start_cheat_caller_address(dispatcher.contract_address, non_owner);
 
     // This should fail because non_owner is not the owner
-    dispatcher.create_token(token_data);
+    dispatcher.create_token(1000, 1000, 0);
 
     stop_cheat_caller_address(dispatcher.contract_address);
 }
@@ -312,10 +294,8 @@ fn test_time_until_release_success() {
     let dispatcher = deploy_contract(owner);
 
     // Create a token with release_hour = 12 (noon)
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
-
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Mock current time to be 6 AM (6 hours before release)
@@ -336,13 +316,11 @@ fn test_pay_for_session_success() {
     let wallet: ContractAddress = deploy_mock_receiver(); // Use mock contract instead of simple address
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -380,13 +358,11 @@ fn test_pay_for_session_not_whitelisted() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(2, 1000, 0 );
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Try to pay without being whitelisted
@@ -403,13 +379,11 @@ fn test_pay_for_session_insufficient_balance() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -438,13 +412,11 @@ fn test_pay_for_hint_success() {
     let wallet: ContractAddress = deploy_mock_receiver(); // Use mock contract instead of simple address
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -482,13 +454,11 @@ fn test_pay_for_hint_not_whitelisted() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Try to pay without being whitelisted
@@ -505,13 +475,11 @@ fn test_pay_for_hint_insufficient_balance() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -540,13 +508,11 @@ fn test_add_to_whitelist_success() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -578,9 +544,9 @@ fn test_add_to_whitelist_invalid_simulation() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Try to add to whitelist with simulation for different token
     dispatcher.add_to_whitelist(token_id, wallet, 999);
@@ -596,13 +562,11 @@ fn test_add_to_whitelist_non_owner() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Try to add to whitelist as non-owner
@@ -618,13 +582,11 @@ fn test_remove_from_whitelist_success() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -645,13 +607,11 @@ fn test_is_whitelisted_false() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
     
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Check that wallet is not whitelisted for simulation 123
@@ -669,13 +629,11 @@ fn test_get_claimable_amount() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000); // release at hour 12, 1000 tokens per day
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0); // release at hour 12, 1000 tokens per day, no special
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -698,13 +656,12 @@ fn test_first_claim_before_release_hour_with_special() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation at day 0, 00:00
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -726,13 +683,12 @@ fn test_first_claim_after_release_hour_with_special() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation at day 0, 00:00
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -754,13 +710,12 @@ fn test_first_claim_multiple_days_later_with_special() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation at day 0, 00:00
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -787,13 +742,12 @@ fn test_second_claim_no_special() {
     let wallet: ContractAddress = deploy_mock_receiver(); // Use mock receiver
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -829,13 +783,12 @@ fn test_accumulated_days_second_claim() {
     let wallet: ContractAddress = deploy_mock_receiver(); // Use mock receiver
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -870,13 +823,12 @@ fn test_no_special_release() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
     
     // Create token: release_hour=14, release_amount=1000, special_release=0 (no special)
-    let token_data = TokenDataToCreateTrait::new(14, 1000 );
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -897,13 +849,12 @@ fn test_exactly_at_release_hour() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -923,13 +874,11 @@ fn test_claim_not_whitelisted() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Try to claim without being whitelisted
@@ -946,13 +895,12 @@ fn test_claim_expired_simulation() {
     let wallet: ContractAddress = 'wallet'.try_into().unwrap();
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation that expires soon
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1000); // expires at timestamp 1000
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1000); // expires at timestamp 1000
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -975,10 +923,10 @@ fn test_time_until_release_tomorrow() {
     let dispatcher = deploy_contract(owner);
 
     // Create a token with release_hour = 6 (6 AM)
-    let token_data = TokenDataToCreateTrait::new(6, 1000);
+    // removed token_data creation
 
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(6, 1000, 0);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Mock current time to be 8 AM (2 hours after release time)
@@ -1008,14 +956,13 @@ fn test_is_simulation_expired_false() {
     let dispatcher = deploy_contract(owner);
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation with future expiration
     let future_timestamp: u64 = 1735689600; // 2025-01-01 00:00:00 UTC
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, future_timestamp);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, future_timestamp);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Check that simulation is not expired
@@ -1029,14 +976,13 @@ fn test_is_simulation_expired_true() {
     let dispatcher = deploy_contract(owner);
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation with past expiration
     let past_timestamp: u64 = 0; // Timestamp 0 is always in the past
-    let simulation_data = SimulationDataToCreateTrait::new(456, token_id, past_timestamp);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(456, token_id, past_timestamp);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Check that simulation is expired
@@ -1050,14 +996,13 @@ fn test_is_simulation_expired_at_exactly_expiration_time() {
     let dispatcher = deploy_contract(owner);
 
     // Create a token first
-    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
     let expiration_timestamp: u64 = 1735689600; // 2025-01-01 00:00:00 UTC
-    let simulation_data = SimulationDataToCreateTrait::new(789, token_id, expiration_timestamp);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(789, token_id, expiration_timestamp);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Mock time to exactly the expiration timestamp
@@ -1079,13 +1024,12 @@ fn test_claim_first_before_release_hour_only_special() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation at day 0, 00:00
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1110,13 +1054,12 @@ fn test_claim_first_after_release_hour_with_special() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1141,13 +1084,12 @@ fn test_claim_first_multiple_days_with_special() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1173,13 +1115,12 @@ fn test_claim_second_no_special() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1213,13 +1154,12 @@ fn test_claim_accumulated_days() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1252,13 +1192,12 @@ fn test_claim_no_special_release() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token with NO special_release
-    let token_data = TokenDataToCreateTrait::new(14, 1000);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 0);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1283,13 +1222,12 @@ fn test_claim_exactly_at_release_hour() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1316,13 +1254,12 @@ fn test_claim_before_release_hour_second_time_fails() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1347,13 +1284,12 @@ fn test_claim_three_consecutive() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token: release_hour=14, release_amount=1000, special_release=500
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    // removed token_data creation
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1390,10 +1326,8 @@ fn test_create_token_invalid_release_hour_too_high() {
     let dispatcher = deploy_contract(owner);
     
     // Try to create token with release_hour = 24 (invalid)
-    let token_data = TokenDataToCreateTrait::new_with_special_release(24, 1000, 500);
-    
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    dispatcher.create_token(token_data); // Should panic
+    dispatcher.create_token(24, 1000, 500); // Should panic
     stop_cheat_caller_address(dispatcher.contract_address);
 }
 
@@ -1405,10 +1339,8 @@ fn test_create_token_invalid_release_hour_25() {
     let dispatcher = deploy_contract(owner);
     
     // Try to create token with release_hour = 25 (way too high)
-    let token_data = TokenDataToCreateTrait::new_with_special_release(25, 1000, 0);
-    
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    dispatcher.create_token(token_data); // Should panic
+    dispatcher.create_token(25, 1000, 0); // Should panic
     stop_cheat_caller_address(dispatcher.contract_address);
 }
 
@@ -1419,10 +1351,8 @@ fn test_create_token_release_hour_23_valid() {
     let dispatcher = deploy_contract(owner);
     
     // Create token with release_hour = 23 (11 PM, valid)
-    let token_data = TokenDataToCreateTrait::new_with_special_release(23, 1000, 500);
-    
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(23, 1000, 500);
     stop_cheat_caller_address(dispatcher.contract_address);
     
     // Verify it was created
@@ -1438,10 +1368,8 @@ fn test_create_token_release_hour_0_valid() {
     let dispatcher = deploy_contract(owner);
     
     // Create token with release_hour = 0 (midnight, valid)
-    let token_data = TokenDataToCreateTrait::new_with_special_release(0, 1000, 0);
-    
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(0, 1000, 0);
     stop_cheat_caller_address(dispatcher.contract_address);
     
     // Verify it was created
@@ -1457,10 +1385,8 @@ fn test_create_token_no_release_mechanism() {
     let dispatcher = deploy_contract(owner);
     
     // Try to create token with both amounts = 0
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 0, 0);
-    
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    dispatcher.create_token(token_data); // Should panic
+    dispatcher.create_token(14, 0, 0); // Should panic
     stop_cheat_caller_address(dispatcher.contract_address);
 }
 
@@ -1471,10 +1397,8 @@ fn test_create_token_only_special_release() {
     let dispatcher = deploy_contract(owner);
     
     // Create token with only special_release (no daily release)
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 0, 1000);
-    
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 0, 1000);
     stop_cheat_caller_address(dispatcher.contract_address);
     
     // Verify it was created
@@ -1490,10 +1414,10 @@ fn test_create_token_only_daily_release() {
     let dispatcher = deploy_contract(owner);
     
     // Create token with only daily release (no special)
-    let token_data = TokenDataToCreateTrait::new(14, 1000);
+    // removed token_data creation
     
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 1000, 0);
     stop_cheat_caller_address(dispatcher.contract_address);
     
     // Verify it was created
@@ -1510,13 +1434,11 @@ fn test_claim_only_special_release_token() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token with ONLY special_release, no daily release
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 0, 2000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 0, 2000);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1542,13 +1464,11 @@ fn test_claim_second_time_only_special_token_fails() {
     let wallet: ContractAddress = deploy_mock_receiver();
     
     // Create token with ONLY special_release
-    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 0, 1000);
     start_cheat_caller_address(dispatcher.contract_address, owner);
-    let token_id = dispatcher.create_token(token_data);
+    let token_id = dispatcher.create_token(14, 0, 1000);
     
     // Register simulation
-    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
-    dispatcher.register_simulation(simulation_data);
+    dispatcher.register_simulation(123, token_id, 1735689600);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
