@@ -163,14 +163,14 @@ fn test_get_token_info_multiple_tokens() {
     let info_2 = dispatcher.get_token_info(token_id_2);
     let info_3 = dispatcher.get_token_info(token_id_3);
 
-    assert(info_1.release_hour == 1000, 'Token 1 release hour');
-    assert(info_1.release_amount == 1, 'Token 1 release amount');
+    assert(info_1.release_hour == 1, 'Token 1 release hour');
+    assert(info_1.release_amount == 1000, 'Token 1 release amount');
 
-    assert(info_2.release_hour == 2000, 'Token 2 release hour');
-    assert(info_2.release_amount == 2, 'Token 2 release amount');
+    assert(info_2.release_hour == 2, 'Token 2 release hour');
+    assert(info_2.release_amount == 2000, 'Token 2 release amount');
 
-    assert(info_3.release_hour == 3000, 'Token 3 release hour');
-    assert(info_3.release_amount == 3, 'Token 3 release amount');
+    assert(info_3.release_hour == 3, 'Token 3 release hour');
+    assert(info_3.release_amount == 3000, 'Token 3 release amount');
 }
 
 #[test]
@@ -1538,7 +1538,7 @@ fn test_claim_only_special_release_token() {
 
 // Test 9: Second claim with only special_release token should fail
 #[test]
-#[should_panic(expected: ('Nothing to claim yet', ))]
+#[should_panic(expected: ('Nothing to claim', ))] 
 fn test_claim_second_time_only_special_token_fails() {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let dispatcher = deploy_contract(owner);
