@@ -1499,3 +1499,238 @@ fn test_get_time_until_next_claim_batch_different_release_hours() {
     
     stop_cheat_block_timestamp(core_address);
 }
+
+// ========== NEW TESTS: get_whitelisted_wallets ==========
+
+#[test] 
+fn test_get_whitelisted_wallets_empty_list() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('simulation_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('simulation_1', 100, 7);
+    stop_cheat_caller_address(core_address);
+    
+    // Test with empty candidate list
+    let candidates = array![];
+    let whitelisted = core.get_whitelisted_wallets('simulation_1', candidates);
+    
+    assert(whitelisted.len() == 0, 'Empty result');
+}
+
+#[test]
+fn test_get_whitelisted_wallets_no_whitelisted() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('simulation_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('simulation_1', 100, 7);
+    stop_cheat_caller_address(core_address);
+    
+    // Test with candidates but none whitelisted
+    let user1: ContractAddress = contract_address_const::<0x111>();
+    let user2: ContractAddress = contract_address_const::<0x222>();
+    let candidates = array![user1, user2];
+    
+    let whitelisted = core.get_whitelisted_wallets('simulation_1', candidates);
+    
+    assert(whitelisted.len() == 0, 'Empty result');
+}
+
+#[test]
+fn test_get_whitelisted_wallets_some_whitelisted() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('simulation_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('simulation_1', 100, 7);
+    
+    // Whitelist some users
+    let user1: ContractAddress = contract_address_const::<0x111>();
+    let user2: ContractAddress = contract_address_const::<0x222>();
+    let user3: ContractAddress = contract_address_const::<0x333>();
+    
+    core.add_to_whitelist('simulation_1', user1);
+    core.add_to_whitelist('simulation_1', user3);
+    stop_cheat_caller_address(core_address);
+    
+    // Test with mix of whitelisted and non-whitelisted
+    let candidates = array![user1, user2, user3];
+    let whitelisted = core.get_whitelisted_wallets('simulation_1', candidates);
+    
+    assert(whitelisted.len() == 2, 'Should return 2 users');
+    assert(*whitelisted.at(0) == user1, 'Should include user1');
+    assert(*whitelisted.at(1) == user3, 'Should include user3');
+}
+
+#[test]
+fn test_get_whitelisted_wallets_all_whitelisted() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('simulation_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('simulation_1', 100, 7);
+    
+    // Whitelist all users
+    let user1: ContractAddress = contract_address_const::<0x111>();
+    let user2: ContractAddress = contract_address_const::<0x222>();
+    let user3: ContractAddress = contract_address_const::<0x333>();
+    
+    core.add_to_whitelist('simulation_1', user1);
+    core.add_to_whitelist('simulation_1', user2);
+    core.add_to_whitelist('simulation_1', user3);
+    stop_cheat_caller_address(core_address);
+    
+    // Test with all whitelisted users
+    let candidates = array![user1, user2, user3];
+    let whitelisted = core.get_whitelisted_wallets('simulation_1', candidates);
+    
+    assert(whitelisted.len() == 3, 'Should return all 3 users');
+    assert(*whitelisted.at(0) == user1, 'Should include user1');
+    assert(*whitelisted.at(1) == user2, 'Should include user2');
+    assert(*whitelisted.at(2) == user3, 'Should include user3');
+}
+
+#[test]
+fn test_get_whitelisted_wallets_after_removal() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('simulation_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('simulation_1', 100, 7);
+    
+    // Whitelist users
+    let user1: ContractAddress = contract_address_const::<0x111>();
+    let user2: ContractAddress = contract_address_const::<0x222>();
+    
+    core.add_to_whitelist('simulation_1', user1);
+    core.add_to_whitelist('simulation_1', user2);
+    
+    // Remove one user from whitelist
+    core.remove_from_whitelist('simulation_1', user1);
+    stop_cheat_caller_address(core_address);
+    
+    // Test that removed user is not in results
+    let candidates = array![user1, user2];
+    let whitelisted = core.get_whitelisted_wallets('simulation_1', candidates);
+    
+    assert(whitelisted.len() == 1, 'Should return 1 user');
+    assert(*whitelisted.at(0) == user2, 'Should only include user2');
+}
+
+#[test]
+fn test_get_whitelisted_wallets_multiple_simulations() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    
+    // Setup simulations
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('sim_1');
+    registry.add_simulation('sim_2');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('sim_1', 100, 7);
+    core.register_simulation('sim_2', 200, 8);
+    
+    // Whitelist users differently for each simulation
+    let user1: ContractAddress = contract_address_const::<0x111>();
+    let user2: ContractAddress = contract_address_const::<0x222>();
+    
+    core.add_to_whitelist('sim_1', user1);
+    core.add_to_whitelist('sim_2', user2);
+    stop_cheat_caller_address(core_address);
+    
+    // Test sim_1
+    let candidates1 = array![user1, user2];
+    let whitelisted_sim1 = core.get_whitelisted_wallets('sim_1', candidates1);
+    assert(whitelisted_sim1.len() == 1, 'sim_1 should have 1 user');
+    assert(*whitelisted_sim1.at(0) == user1, 'sim_1 should include user1');
+    
+    // Test sim_2
+    let candidates2 = array![user1, user2];
+    let whitelisted_sim2 = core.get_whitelisted_wallets('sim_2', candidates2);
+    assert(whitelisted_sim2.len() == 1, 'sim_2 should have 1 user');
+    assert(*whitelisted_sim2.at(0) == user2, 'sim_2 should include user2');
+}
+
+#[test]
+#[should_panic(expected: ('Simulation not registered',))]
+fn test_get_whitelisted_wallets_unregistered_simulation() {
+    let (core_address, _registry_address, _token_address, _owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    
+    let user: ContractAddress = contract_address_const::<0x111>();
+    let candidates = array![user];
+    
+    // Should panic for unregistered simulation
+    core.get_whitelisted_wallets('nonexistent', candidates);
+}
+
+#[test]
+fn test_get_whitelisted_wallets_large_list() {
+    let (core_address, registry_address, _token_address, owner) = setup();
+    let core = ISimulationCoreDispatcher { contract_address: core_address };
+    
+    // Setup simulation
+    let registry = IMockRegistryHelperDispatcher { contract_address: registry_address };
+    start_cheat_caller_address(registry_address, owner);
+    registry.add_simulation('simulation_1');
+    stop_cheat_caller_address(registry_address);
+    
+    start_cheat_caller_address(core_address, owner);
+    core.register_simulation('simulation_1', 100, 7);
+    
+    // Create specific users
+    let user1: ContractAddress = contract_address_const::<0x111>();
+    let user2: ContractAddress = contract_address_const::<0x222>();
+    let user3: ContractAddress = contract_address_const::<0x333>();
+    let user4: ContractAddress = contract_address_const::<0x444>();
+    let user5: ContractAddress = contract_address_const::<0x555>();
+    
+    // Whitelist some users (user1, user3, user5)
+    core.add_to_whitelist('simulation_1', user1);
+    core.add_to_whitelist('simulation_1', user3);
+    core.add_to_whitelist('simulation_1', user5);
+    stop_cheat_caller_address(core_address);
+    
+    // Test with all candidates
+    let candidates = array![user1, user2, user3, user4, user5];
+    let whitelisted = core.get_whitelisted_wallets('simulation_1', candidates);
+    
+    assert(whitelisted.len() == 3, 'Should return 3 users');
+    assert(*whitelisted.at(0) == user1, 'Should include user1');
+    assert(*whitelisted.at(1) == user3, 'Should include user3');
+    assert(*whitelisted.at(2) == user5, 'Should include user5');
+}

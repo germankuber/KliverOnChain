@@ -89,6 +89,13 @@ pub trait ISimulationCore<TContractState> {
         self: @TContractState, user: ContractAddress, simulation_ids: Array<felt252>,
     ) -> Array<TimeUntilClaim>;
 
+    // ✅ NEW: Get whitelisted wallets for a simulation
+    fn get_whitelisted_wallets(
+        self: @TContractState, 
+        simulation_id: felt252,
+        candidate_wallets: Array<ContractAddress>
+    ) -> Array<ContractAddress>;
+
     //////////TODO : DELETE /////////////
     fn update_release_hour(ref self: TContractState, simulation_id: felt252, new_release_hour: u8);
     //////////TODO : DELETE /////////////
@@ -656,6 +663,27 @@ mod SimulationCore {
             }
 
             results
+        }
+
+        fn get_whitelisted_wallets(
+            self: @ContractState, 
+            simulation_id: felt252,
+            candidate_wallets: Array<ContractAddress>
+        ) -> Array<ContractAddress> {
+            assert(self.is_simulation_registered(simulation_id), 'Simulation not registered');
+            
+            let mut whitelisted: Array<ContractAddress> = ArrayTrait::new();
+            let mut i: u32 = 0;
+            
+            while i < candidate_wallets.len() {
+                let wallet = *candidate_wallets.at(i);
+                if self.whitelist.entry((simulation_id, wallet)).read() {
+                    whitelisted.append(wallet);
+                }
+                i += 1;
+            }
+            
+            whitelisted
         }
     }
 }
