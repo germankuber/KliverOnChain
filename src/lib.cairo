@@ -14,7 +14,6 @@ pub mod session_registry;
 
 // Main contract module
 pub mod kliver_registry;
-pub mod simulation_core;
 pub mod sessions_marketplace;
 // NFT modules
 pub mod kliver_nft;
@@ -24,15 +23,3 @@ pub mod kliver_1155;
 // Re-export key types for easier access
 pub use types::VerificationResult;
 
-// Re-export simulation_core interfaces for tests and external usage
-pub use simulation_core::{
-    ISimulationCore, 
-    ISimulationCoreDispatcher, 
-    ISimulationCoreDispatcherTrait,
-    IKliverRegistry, 
-    IKliverRegistryDispatcher, 
-    IKliverRegistryDispatcherTrait,
-    IKliver1155, 
-    IKliver1155Dispatcher, 
-    IKliver1155DispatcherTrait
-};
