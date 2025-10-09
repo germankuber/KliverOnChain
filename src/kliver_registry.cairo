@@ -32,7 +32,7 @@ pub mod kliver_registry {
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
-        CharacterVersionRegistered: CharacterVersionRegistered,
+        CharacterRegistered: CharacterRegistered,
         ScenarioRegistered: ScenarioMetadata,
         SimulationRegistered: SimulationRegistered,
         SessionRegistered: SessionMetadata,
@@ -40,10 +40,10 @@ pub mod kliver_registry {
     }
 
     #[derive(Drop, starknet::Event)]
-    pub struct CharacterVersionRegistered {
+    pub struct CharacterRegistered {
         #[key]
-        pub character_version_id: felt252,
-        pub character_version_hash: felt252,
+        pub character_id: felt252,
+        pub character_hash: felt252,
         pub registered_by: ContractAddress,
     }
 
@@ -63,10 +63,10 @@ pub mod kliver_registry {
         paused: bool,
         nft_address: ContractAddress,
         verifier_address: ContractAddress,
-        /// Maps character version ID to its hash
-        character_versions: Map<felt252, felt252>,
+        /// Maps character ID to its hash
+        characters: Map<felt252, felt252>,
         // Character metadata:
-        character_authors: Map<felt252, ContractAddress>,        // character_version_id -> author
+        character_authors: Map<felt252, ContractAddress>,        // character_id -> author
         /// Maps scenario ID to its hash
         scenarios: Map<felt252, felt252>,
         // Scenario metadata:
@@ -119,118 +119,118 @@ pub mod kliver_registry {
     // Character Registry Implementation
     #[abi(embed_v0)]
     impl CharacterRegistryImpl of ICharacterRegistry<ContractState> {
-        fn register_character_version(ref self: ContractState, metadata: CharacterMetadata) {
+        fn register_character(ref self: ContractState, metadata: CharacterMetadata) {
             // Check if contract is paused
             self._assert_not_paused();
-            // Only owner can register character versions
+            // Only owner can register characters
             self._assert_only_owner();
 
             // Extract values from metadata
-            let character_version_id = metadata.character_version_id;
-            let character_version_hash = metadata.character_version_hash;
+            let character_id = metadata.character_id;
+            let character_hash = metadata.character_hash;
             let author = metadata.author;
 
             // Validate inputs
-            assert(character_version_id != 0, 'Version ID cannot be zero');
-            assert(character_version_hash != 0, 'Version hash cannot be zero');
+            assert(character_id != 0, 'Character ID cannot be zero');
+            assert(character_hash != 0, 'Character hash cannot be zero');
             assert(!author.is_zero(), 'Author cannot be zero');
 
             // Validate that author has a Kliver NFT
             self._assert_author_has_nft(author);
 
-            // Check if character version ID is already registered
-            let existing_hash = self.character_versions.read(character_version_id);
-            assert(existing_hash == 0, 'Version ID already registered');
+            // Check if character ID is already registered
+            let existing_hash = self.characters.read(character_id);
+            assert(existing_hash == 0, 'Character ID already registered');
 
-            // Save the character version and metadata
-            self.character_versions.write(character_version_id, character_version_hash);
-            self.character_authors.write(character_version_id, author);
+            // Save the character and metadata
+            self.characters.write(character_id, character_hash);
+            self.character_authors.write(character_id, author);
 
             // Emit event
-            self.emit(CharacterVersionRegistered {
-                character_version_id,
-                character_version_hash,
+            self.emit(CharacterRegistered {
+                character_id,
+                character_hash,
                 registered_by: get_caller_address()
             });
         }
 
-        fn verify_character_version(self: @ContractState, character_version_id: felt252, character_version_hash: felt252) -> VerificationResult {
+        fn verify_character(self: @ContractState, character_id: felt252, character_hash: felt252) -> VerificationResult {
             // Validate inputs
-            assert(character_version_id != 0, 'Version ID cannot be zero');
-            assert(character_version_hash != 0, 'Version hash cannot be zero');
+            assert(character_id != 0, 'Character ID cannot be zero');
+            assert(character_hash != 0, 'Character hash cannot be zero');
 
-            // Get the stored hash for this character version ID
-            let stored_hash = self.character_versions.read(character_version_id);
+            // Get the stored hash for this character ID
+            let stored_hash = self.characters.read(character_id);
 
             // Determine verification result based on stored data
             if stored_hash == 0 {
                 VerificationResult::NotFound  // ID no existe
-            } else if stored_hash == character_version_hash {
+            } else if stored_hash == character_hash {
                 VerificationResult::Match     // ID existe y hash coincide
             } else {
                 VerificationResult::Mismatch  // ID existe pero hash no coincide
             }
         }
 
-        fn batch_verify_character_versions(self: @ContractState, character_versions: Array<CharacterMetadata>) -> Array<(felt252, VerificationResult)> {
+        fn batch_verify_characters(self: @ContractState, characters: Array<CharacterMetadata>) -> Array<(felt252, VerificationResult)> {
             let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
-            let len = character_versions.len();
+            let len = characters.len();
 
             while i != len {
-                let metadata = *character_versions.at(i);
-                let character_version_id = metadata.character_version_id;
-                let character_version_hash = metadata.character_version_hash;
+                let metadata = *characters.at(i);
+                let character_id = metadata.character_id;
+                let character_hash = metadata.character_hash;
 
                 // For batch operations, handle zero values gracefully instead of panicking
-                let verification_result = if character_version_id == 0 || character_version_hash == 0 {
+                let verification_result = if character_id == 0 || character_hash == 0 {
                     VerificationResult::NotFound  // Treat invalid inputs as NotFound
                 } else {
-                    let stored_hash = self.character_versions.read(character_version_id);
+                    let stored_hash = self.characters.read(character_id);
 
                     if stored_hash == 0 {
                         VerificationResult::NotFound  // ID no existe
-                    } else if stored_hash == character_version_hash {
+                    } else if stored_hash == character_hash {
                         VerificationResult::Match     // ID existe y hash coincide
                     } else {
                         VerificationResult::Mismatch  // ID existe pero hash no coincide
                     }
                 };
 
-                results.append((character_version_id, verification_result));
+                results.append((character_id, verification_result));
                 i += 1;
             };
 
             results
         }
 
-        fn get_character_version_hash(self: @ContractState, character_version_id: felt252) -> felt252 {
+        fn get_character_hash(self: @ContractState, character_id: felt252) -> felt252 {
             // Validate input
-            assert(character_version_id != 0, 'Version ID cannot be zero');
+            assert(character_id != 0, 'Character ID cannot be zero');
 
-            // Get the stored hash for this character version ID
-            let stored_hash = self.character_versions.read(character_version_id);
+            // Get the stored hash for this character ID
+            let stored_hash = self.characters.read(character_id);
 
             // If no hash is stored, panic with error
-            assert(stored_hash != 0, 'Character version not found');
+            assert(stored_hash != 0, 'Character not found');
 
             stored_hash
         }
 
-        fn get_character_version_info(self: @ContractState, character_version_id: felt252) -> CharacterMetadata {
+        fn get_character_info(self: @ContractState, character_id: felt252) -> CharacterMetadata {
             // Validate input
-            assert(character_version_id != 0, 'Version ID cannot be zero');
+            assert(character_id != 0, 'Character ID cannot be zero');
 
-            // Get the stored data for this character version ID
-            let character_version_hash = self.character_versions.read(character_version_id);
-            assert(character_version_hash != 0, 'Character version not found');
+            // Get the stored data for this character ID
+            let character_hash = self.characters.read(character_id);
+            assert(character_hash != 0, 'Character not found');
 
-            let author = self.character_authors.read(character_version_id);
+            let author = self.character_authors.read(character_id);
 
             // Return the complete metadata
             CharacterMetadata {
-                character_version_id,
-                character_version_hash,
+                character_id,
+                character_hash,
                 author,
             }
         }
@@ -372,7 +372,7 @@ pub mod kliver_registry {
             self._assert_author_has_nft(metadata.author);
 
             // Validate that character exists
-            let character_hash = self.character_versions.read(metadata.character_id);
+            let character_hash = self.characters.read(metadata.character_id);
             assert(character_hash != 0, Errors::CHARACTER_NOT_FOUND);
 
             // Validate that scenario exists

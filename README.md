@@ -104,9 +104,9 @@ trait IKliverNFT {
 
 #### Character Registry
 ```cairo
-fn register_character_version(character_version_id: felt252, character_version_hash: felt252)
-fn verify_character_version(character_version_id: felt252, character_version_hash: felt252) -> VerificationResult
-fn batch_verify_character_versions(character_versions: Array<(felt252, felt252)>) -> Array<(felt252, VerificationResult)>
+fn register_character(character_id: felt252, character_hash: felt252)
+fn verify_character(character_id: felt252, character_hash: felt252) -> VerificationResult
+fn batch_verify_characters(characters: Array<(felt252, felt252)>) -> Array<(felt252, VerificationResult)>
 ```
 
 #### Scenario Registry  
@@ -449,15 +449,15 @@ The project includes comprehensive tests covering:
 
 ```cairo
 // 1. Register a character version (owner only)
-registry.register_character_version('char_v1', 'hash123');
+registry.register_character('char_v1', 'hash123');
 
 // 2. Verify character version  
-let result = registry.verify_character_version('char_v1', 'hash123');
+let result = registry.verify_character('char_v1', 'hash123');
 // Returns: VerificationResult::Valid
 
 // 3. Batch verification
 let versions = array![('char_v1', 'hash123'), ('char_v2', 'hash456')];
-let results = registry.batch_verify_character_versions(versions);
+let results = registry.batch_verify_characters(versions);
 ```
 
 ### NFT Operations
@@ -501,8 +501,8 @@ let metadata_uri = nft.token_uri(token_id);
 
 ```cairo
 struct CharacterVersionRegistered {
-    character_version_id: felt252,
-    character_version_hash: felt252,
+    character_id: felt252,
+    character_hash: felt252,
     registered_by: ContractAddress,
 }
 
