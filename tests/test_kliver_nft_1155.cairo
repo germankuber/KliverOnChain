@@ -1,4 +1,4 @@
-use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address, stop_cheat_caller_address};
+use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address, stop_cheat_caller_address, start_cheat_block_timestamp_global, stop_cheat_block_timestamp_global};
 use starknet::{ContractAddress, syscalls::{call_contract_syscall}};
 use core::array::ArrayTrait;
 use core::traits::TryInto;
@@ -45,6 +45,18 @@ fn call_get_token_info(contract_address: ContractAddress, token_id: u256) -> (u6
     let release_amount = u256 { low: release_amount_low, high: release_amount_high };
 
     (release_hour, release_amount)
+}
+
+/// Helper function to call time_until_release
+fn call_time_until_release(contract_address: ContractAddress, token_id: u256) -> u64 {
+    let mut calldata = ArrayTrait::new();
+    calldata.append(token_id.low.into());
+    calldata.append(token_id.high.into());
+
+    let result = call_contract_syscall(contract_address, selector!("time_until_release"), calldata.span()).unwrap();
+    let time_until_release: u64 = (*result.at(0)).try_into().unwrap();
+
+    time_until_release
 }
 
 #[test]
@@ -173,5 +185,62 @@ fn test_create_token_non_owner_should_fail() {
     let result = call_contract_syscall(contract_address, selector!("create_token"), calldata.span());
 
     // The call should fail
+    assert(result.is_err(), 'Call should have failed');
+}
+
+#[test]
+fn test_time_until_release_success() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let contract_address = deploy_contract(owner);
+
+    // Create a token with release_hour = 12 (noon)
+    let token_data = TokenDataToCreate { release_hour: 12, release_amount: 1000 };
+    let token_id = call_create_token(contract_address, owner, token_data);
+
+    // Mock current time to be 6 AM (6 hours before release)
+    start_cheat_block_timestamp_global(6 * 3600); // 6 AM
+
+    let time_until_release = call_time_until_release(contract_address, token_id);
+
+    // Should be 6 hours = 21600 seconds
+    assert(time_until_release == 21600, 'Should be 6 hours until release');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_time_until_release_tomorrow() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let contract_address = deploy_contract(owner);
+
+    // Create a token with release_hour = 6 (6 AM)
+    let token_data = TokenDataToCreate { release_hour: 6, release_amount: 1000 };
+    let token_id = call_create_token(contract_address, owner, token_data);
+
+    // Mock current time to be 8 AM (2 hours after release time)
+    start_cheat_block_timestamp_global(8 * 3600); // 8 AM
+
+    let time_until_release = call_time_until_release(contract_address, token_id);
+
+    // Should be 22 hours until next release (24 - 2 = 22 hours = 79200 seconds)
+    assert(time_until_release == 79200, '22 hours until release');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_time_until_release_nonexistent_token() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let contract_address = deploy_contract(owner);
+
+    // Try to get time until release for a token that doesn't exist
+    let mut calldata = ArrayTrait::new();
+    let nonexistent_token_id: u256 = 999;
+    calldata.append(nonexistent_token_id.low.into());
+    calldata.append(nonexistent_token_id.high.into());
+
+    let result = call_contract_syscall(contract_address, selector!("time_until_release"), calldata.span());
+
+    // The call should fail because token doesn't exist
     assert(result.is_err(), 'Call should have failed');
 }

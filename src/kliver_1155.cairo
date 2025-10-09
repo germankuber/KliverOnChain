@@ -79,6 +79,33 @@ mod KliverRC1155 {
         token_id
     }
 
+     #[external(v0)]
+     fn time_until_release(self: @ContractState, token_id: u256) -> u64 {
+         // First validate that the token exists
+         let token_info = self.token_info.entry(token_id).read();
+         assert(token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist');
+
+         let current_time = starknet::get_block_timestamp();
+
+         // Seconds in a day and in an hour
+         let seconds_per_day: u64 = 86400;
+         let seconds_per_hour: u64 = 3600;
+
+         // Calculate seconds elapsed since start of current day
+         let seconds_today = current_time % seconds_per_day;
+
+         // Calculate seconds until release hour
+         let release_seconds = token_info.release_hour * seconds_per_hour;
+
+         if seconds_today < release_seconds {
+             // Release is today
+             release_seconds - seconds_today
+         } else {
+             // Release is tomorrow
+             seconds_per_day - seconds_today + release_seconds
+         }
+     }
+
     #[external(v0)]
     fn get_token_info(self: @ContractState, token_id: u256) -> TokenInfo {
         self.token_info.entry(token_id).read()
