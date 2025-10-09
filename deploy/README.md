@@ -52,10 +52,6 @@ poetry run python -m kliver_deploy.deploy --environment dev --contract kliver_11
 
 # Deploy Registry (requires NFT address)
 poetry run python -m kliver_deploy.deploy --environment dev --contract registry --nft-address 0x123...
-
-# Deploy SimulationCore (requires Registry + Token addresses)
-poetry run python -m kliver_deploy.deploy --environment dev --contract simulation_core \
-  --registry-address 0x456... --token-address 0x789...
 ```
 
 ### Alternative Script Usage
@@ -93,14 +89,12 @@ environments:
 - **KliverNFT**: No dependencies
 - **KliverNFT1155**: No dependencies
 - **KliverRegistry**: Requires NFT address + optional verifier address
-- **SimulationCore**: Requires Registry address + Token1155 address
 
 ## 🔍 Deployment Order (--contract all)
 
 1. **KliverNFT** → Base ERC721 contract
 2. **KliverRegistry** → Uses NFT for validation
-3. **KliverNFT1155** → ERC1155 token contract  
-4. **SimulationCore** → Uses Registry + Token1155
+3. **KliverNFT1155** → ERC1155 token contract
 
 ## 🧪 Development
 
@@ -155,7 +149,7 @@ poetry run isort .
 
 ```
 🚀 COMPLETE DEPLOYMENT MODE
-This will deploy: NFT → Registry → Token1155 → SimulationCore
+This will deploy: NFT → Registry → Token1155
 
 Step 1/4: Deploying NFT Contract
 🎯 Deploying KliverNFT to sepolia

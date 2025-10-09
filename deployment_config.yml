@@ -21,12 +21,9 @@ environments:
         sierra_file: "target/dev/kliver_on_chain_KliverNFT.contract_class.json"
         base_uri: "https://api-dev.kliver.ai/api/nft/metadata"
       kliver_1155:
-        name: "KliverNFT1155"
-        sierra_file: "target/dev/kliver_on_chain_KliverNFT1155.contract_class.json"
+        name: "KliverRC1155"
+        sierra_file: "target/dev/kliver_on_chain_KliverRC1155.contract_class.json"
         base_uri: "https://api-dev.kliver.ai/api/metadata/"
-      simulation_core:
-        name: "SimulationCore"
-        sierra_file: "target/dev/kliver_on_chain_SimulationCore.contract_class.json"
     deployment_settings:
       wait_timeout: 120
       retry_interval: 2
@@ -43,20 +40,17 @@ environments:
     build_target: "dev"
     contracts:
       registry:
-        name: "kliver_on_chain_KliverRegistry"
-        sierra_file: "target/dev/kliver_on_chain_KliverRegistry.contract_class.json"
+        name: "kliver_registry"
+        sierra_file: "target/dev/kliver_on_chain_kliver_registry.contract_class.json"
         verifier_address: "0x04db2418fe71fd10e3127a3052e0781fe458b50490c7411ebc49bf60565df6d1"  # TODO: Replace with actual verifier contract address
       nft:
-        name: "kliver_on_chain_KliverNFT"
+        name: "KliverNFT"
         sierra_file: "target/dev/kliver_on_chain_KliverNFT.contract_class.json"
         base_uri: "https://83df86aa2352.ngrok-free.app/api/nft/metadata"
       kliver_1155:
-        name: "kliver_on_chain_KliverNFT1155"
-        sierra_file: "target/dev/kliver_on_chain_KliverNFT1155.contract_class.json"
+        name: "KliverRC1155"
+        sierra_file: "target/dev/kliver_on_chain_KliverRC1155.contract_class.json"
         base_uri: "https://83df86aa2352.ngrok-free.app/api/metadata/"
-      simulation_core:
-        name: "kliver_on_chain_SimulationCore"
-        sierra_file: "target/dev/kliver_on_chain_SimulationCore.contract_class.json"
     deployment_settings:
       wait_timeout: 180
       retry_interval: 3
@@ -73,20 +67,17 @@ environments:
     build_target: "release"
     contracts:
       registry:
-        name: "kliver_on_chain_KliverRegistry"
-        sierra_file: "target/release/kliver_on_chain_KliverRegistry.contract_class.json"
+        name: "kliver_registry"
+        sierra_file: "target/release/kliver_on_chain_kliver_registry.contract_class.json"
         verifier_address: "0x04db2418fe71fd10e3127a3052e0781fe458b50490c7411ebc49bf60565df6d1"  # TODO: Replace with actual verifier contract address
       nft:
-        name: "kliver_on_chain_KliverNFT"
+        name: "KliverNFT"
         sierra_file: "target/release/kliver_on_chain_KliverNFT.contract_class.json"
         base_uri: "https://api.kliver.ai/api/nft/metadata"
       kliver_1155:
-        name: "kliver_on_chain_KliverNFT1155"
-        sierra_file: "target/release/kliver_on_chain_KliverNFT1155.contract_class.json"
+        name: "KliverRC1155"
+        sierra_file: "target/release/kliver_on_chain_KliverRC1155.contract_class.json"
         base_uri: "https://api.kliver.ai/api/metadata/"
-      simulation_core:
-        name: "kliver_on_chain_SimulationCore"
-        sierra_file: "target/release/kliver_on_chain_SimulationCore.contract_class.json"
     deployment_settings:
       wait_timeout: 300
       retry_interval: 5

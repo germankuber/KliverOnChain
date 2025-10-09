@@ -112,10 +112,7 @@ class ContractDeployer:
                 "name": "KliverNFT1155",
                 "class_name": "KliverNFT1155"
             },
-            "simulation_core": {
-                "name": "SimulationCore",
-                "class_name": "SimulationCore"
-            }
+
         }
         
     def _get_default_rpc_url(self, network: str) -> str:
@@ -397,18 +394,7 @@ class ContractDeployer:
                 base_uri_calldata = self._string_to_bytearray_calldata("https://api.kliver.io/metadata/")
             
             constructor_calldata = [owner_address] + base_uri_calldata
-        elif self.contract_type == "simulation_core":
-            # SimulationCore requires: registry_address + token_address + owner
-            if not registry_address:
-                print(f"{Colors.ERROR}✗ Registry address is required for SimulationCore deployment{Colors.RESET}")
-                return None
-            if not token_address:
-                print(f"{Colors.ERROR}✗ Token address is required for SimulationCore deployment{Colors.RESET}")
-                return None
-            
-            print(f"{Colors.INFO}📋 Using Registry address: {registry_address}{Colors.RESET}")
-            print(f"{Colors.INFO}📋 Using Token address: {token_address}{Colors.RESET}")
-            constructor_calldata = [registry_address, token_address, owner_address]
+
         else:
             # Other contracts require only owner
             constructor_calldata = [owner_address]
@@ -580,20 +566,7 @@ class ContractDeployer:
             if not self.validate_nft_contract(nft_address):
                 return None
         
-        elif self.contract_type == "simulation_core":
-            if not registry_address:
-                print(f"{Colors.ERROR}✗ Registry address is required for SimulationCore deployment{Colors.RESET}")
-                print(f"{Colors.INFO}Use --registry-address option or deploy with --contract all{Colors.RESET}")
-                return None
-            if not token_address:
-                print(f"{Colors.ERROR}✗ Token address is required for SimulationCore deployment{Colors.RESET}")
-                print(f"{Colors.INFO}Use --token-address option or deploy with --contract all{Colors.RESET}")
-                return None
-            
-            if not self.validate_registry_contract(registry_address):
-                return None
-            if not self.validate_token_contract(token_address):
-                return None
+
             
         # Compile contract
         if not self.compile_contract():
@@ -642,12 +615,11 @@ class ContractDeployer:
 
 @click.command()
 @click.option('--environment', '-e', required=True, help='Environment to deploy to: dev, qa, or prod')
-@click.option('--contract', '-c', default='registry', help='Contract to deploy: registry, nft, kliver_1155, simulation_core, or all')
+@click.option('--contract', '-c', default='registry', help='Contract to deploy: registry, nft, kliver_1155, or all')
 @click.option('--rpc-url', '-r', help='Custom RPC URL (optional - overrides environment config)')
 @click.option('--owner', '-o', help='Owner address for the contract (uses account address if not specified)')
 @click.option('--nft-address', '-n', help='NFT contract address (required when deploying registry separately)')
-@click.option('--registry-address', help='Registry contract address (required for SimulationCore)')
-@click.option('--token-address', help='Token contract address (required for SimulationCore)')
+
 @click.option('--verifier-address', help='Verifier contract address (optional for Registry, uses 0x0 if not provided)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.option('--output-json', is_flag=True, help='Output deployment addresses in JSON format')
@@ -666,25 +638,23 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
     
     DEPLOYMENT MODES:
     
-    1. Deploy Everything (NFT + Registry + Token1155 + SimulationCore):
+    1. Deploy Everything (NFT + Registry + Token1155):
         python deploy_contract.py --environment dev --contract all
-        This will deploy in order: NFT → Registry → Token1155 → SimulationCore
+        This will deploy in order: NFT → Registry → Token1155
     
     2. Deploy Individual Contracts:
         python deploy_contract.py --environment dev --contract nft
         python deploy_contract.py --environment dev --contract kliver_1155
         python deploy_contract.py --environment dev --contract registry --nft-address 0x456...
-        python deploy_contract.py --environment dev --contract simulation_core --registry-address 0x123... --token-address 0x789...
     
     3. Contract Dependencies:
         - NFT: No dependencies
         - Token1155: No dependencies  
         - Registry: Requires NFT address
-        - SimulationCore: Requires Registry + Token1155 addresses
     
     Example usage:
         python deploy_contract.py --environment dev --contract all
-        python deploy_contract.py --environment qa --contract simulation_core --registry-address 0x123... --token-address 0x789...
+        python deploy_contract.py --environment qa --contract registry --nft-address 0x123...
         python deploy_contract.py --environment prod --contract kliver_1155
     """
     
@@ -707,8 +677,8 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
             click.echo(f"{Colors.ERROR}❌ Failed to load environment config: {str(e)}{Colors.RESET}")
             exit(1)
         
-        if contract not in ['registry', 'nft', 'kliver_1155', 'simulation_core', 'all']:
-            click.echo(f"{Colors.ERROR}❌ Invalid contract type. Use: registry, nft, kliver_1155, simulation_core, or all{Colors.RESET}")
+        if contract not in ['registry', 'nft', 'kliver_1155', 'all']:
+            click.echo(f"{Colors.ERROR}❌ Invalid contract type. Use: registry, nft, kliver_1155, or all{Colors.RESET}")
             exit(1)
             
         deployments = []
@@ -716,10 +686,10 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
         
         if contract == 'all':
             click.echo(f"\n{Colors.BOLD}🚀 COMPLETE DEPLOYMENT MODE{Colors.RESET}")
-            click.echo(f"{Colors.INFO}This will deploy: NFT → Registry → Token1155 → SimulationCore{Colors.RESET}\n")
+            click.echo(f"{Colors.INFO}This will deploy: NFT → Registry → Token1155{Colors.RESET}\n")
             
             # Step 1: Deploy NFT first
-            click.echo(f"{Colors.BOLD}Step 1/4: Deploying NFT Contract{Colors.RESET}")
+            click.echo(f"{Colors.BOLD}Step 1/3: Deploying NFT Contract{Colors.RESET}")
             deployer_nft = ContractDeployer(account, network, 'nft', rpc_url, env_config)
             nft_result = deployer_nft.deploy_full_flow(owner)
             if nft_result:
@@ -732,7 +702,7 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
 
             # Step 2: Deploy Registry using NFT address
             if success:
-                click.echo(f"{Colors.BOLD}Step 2/4: Deploying Registry Contract{Colors.RESET}")
+                click.echo(f"{Colors.BOLD}Step 2/3: Deploying Registry Contract{Colors.RESET}")
                 deployer_registry = ContractDeployer(account, network, 'registry', rpc_url, env_config)
                 registry_result = deployer_registry.deploy_full_flow(owner, nft_deployed_address, verifier_address=verifier_address)
                 if registry_result:
@@ -745,7 +715,7 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
 
             # Step 3: Deploy Token1155
             if success:
-                click.echo(f"{Colors.BOLD}Step 3/4: Deploying Token1155 Contract{Colors.RESET}")
+                click.echo(f"{Colors.BOLD}Step 3/3: Deploying Token1155 Contract{Colors.RESET}")
                 deployer_token = ContractDeployer(account, network, 'kliver_1155', rpc_url, env_config)
                 token_result = deployer_token.deploy_full_flow(owner)
                 if token_result:
@@ -756,21 +726,7 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
                     success = False
                     click.echo(f"\n{Colors.ERROR}✗ Token1155 deployment failed. Aborting.{Colors.RESET}")
 
-            # Step 4: Deploy SimulationCore
-            if success:
-                click.echo(f"{Colors.BOLD}Step 4/4: Deploying SimulationCore Contract{Colors.RESET}")
-                deployer_core = ContractDeployer(account, network, 'simulation_core', rpc_url, env_config)
-                core_result = deployer_core.deploy_full_flow(
-                    owner, 
-                    registry_address=registry_deployed_address,
-                    token_address=token_deployed_address
-                )
-                if core_result:
-                    deployments.append(core_result)
-                    click.echo(f"\n{Colors.SUCCESS}✓ SimulationCore deployed successfully{Colors.RESET}\n")
-                else:
-                    success = False
-                    click.echo(f"\n{Colors.ERROR}✗ SimulationCore deployment failed{Colors.RESET}")
+
         
         elif contract == 'registry':
             # Deploying registry separately - requires NFT address
@@ -784,28 +740,6 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
             
             deployer = ContractDeployer(account, network, contract, rpc_url, env_config)
             result = deployer.deploy_full_flow(owner, nft_address, verifier_address=verifier_address)
-            if result:
-                deployments.append(result)
-            else:
-                success = False
-
-        elif contract == 'simulation_core':
-            # Deploying SimulationCore separately - requires Registry and Token addresses
-            if not registry_address:
-                click.echo(f"\n{Colors.ERROR}❌ Registry address is required for SimulationCore{Colors.RESET}")
-                click.echo(f"{Colors.INFO}Use: --registry-address 0x... or deploy with --contract all{Colors.RESET}\n")
-                exit(1)
-            if not token_address:
-                click.echo(f"\n{Colors.ERROR}❌ Token address is required for SimulationCore{Colors.RESET}")
-                click.echo(f"{Colors.INFO}Use: --token-address 0x... or deploy with --contract all{Colors.RESET}\n")
-                exit(1)
-            
-            click.echo(f"\n{Colors.BOLD}🎯 SEPARATE SIMULATIONCORE DEPLOYMENT{Colors.RESET}")
-            click.echo(f"{Colors.INFO}Using Registry contract at: {registry_address}{Colors.RESET}")
-            click.echo(f"{Colors.INFO}Using Token contract at: {token_address}{Colors.RESET}\n")
-            
-            deployer = ContractDeployer(account, network, contract, rpc_url, env_config)
-            result = deployer.deploy_full_flow(owner, registry_address=registry_address, token_address=token_address)
             if result:
                 deployments.append(result)
             else:
@@ -862,7 +796,6 @@ def print_deployment_summary(deployments: list, network: str):
     nft_address = None
     registry_address = None
     token_address = None
-    simulation_core_deployment = None
     
     for i, deployment in enumerate(deployments, 1):
         contract_name = deployment['contract_name']
@@ -875,8 +808,7 @@ def print_deployment_summary(deployments: list, network: str):
             registry_address = contract_address
         elif contract_name == "KliverNFT1155":
             token_address = contract_address
-        elif contract_name == "SimulationCore":
-            simulation_core_deployment = deployment
+
         
         print(f"\n{Colors.BOLD}{i}. {contract_name.upper()}{Colors.RESET}")
         print(f"   Address:    {Colors.SUCCESS}{Colors.BOLD}{contract_address}{Colors.RESET}")
@@ -892,11 +824,7 @@ def print_deployment_summary(deployments: list, network: str):
         # Show dependencies for each contract
         if contract_name == "kliver_registry" and deployment.get('nft_address'):
             print(f"   Uses NFT:   {Colors.WARNING}{deployment['nft_address'][:10]}...{deployment['nft_address'][-8:]}{Colors.RESET}")
-        elif contract_name == "SimulationCore":
-            if deployment.get('registry_address'):
-                print(f"   Registry:   {Colors.WARNING}{deployment['registry_address'][:10]}...{deployment['registry_address'][-8:]}{Colors.RESET}")
-            if deployment.get('token_address'):
-                print(f"   Token:      {Colors.WARNING}{deployment['token_address'][:10]}...{deployment['token_address'][-8:]}{Colors.RESET}")
+
     
     print(f"\n{Colors.BOLD}Network: {network.upper()} | Owner: {deployments[0]['owner'][:10]}...{deployments[0]['owner'][-4:]}{Colors.RESET}")
     
@@ -904,8 +832,7 @@ def print_deployment_summary(deployments: list, network: str):
     relationships = []
     if nft_address and registry_address:
         relationships.append(f"Registry → NFT (for author validation)")
-    if registry_address and token_address and simulation_core_deployment:
-        relationships.append(f"SimulationCore → Registry + Token1155 (for simulation management)")
+
     
     if relationships:
         print(f"\n{Colors.INFO}📋 Contract Relationships:{Colors.RESET}")

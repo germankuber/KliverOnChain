@@ -105,46 +105,11 @@ class KliverNFT1155(BaseContract):
         return True
 
 
-class SimulationCore(BaseContract):
-    """Simulation Core contract."""
-    
-    def __init__(self):
-        super().__init__("SimulationCore", "SimulationCore")
-    
-    def get_constructor_calldata(self, owner_address: str, registry_address: str, 
-                               token_address: str, **kwargs) -> List[str]:
-        """SimulationCore requires: registry_address + token_address + owner"""
-        print(f"{Colors.INFO}📋 Using Registry address: {registry_address}{Colors.RESET}")
-        print(f"{Colors.INFO}📋 Using Token address: {token_address}{Colors.RESET}")
-        
-        return [registry_address, token_address, owner_address]
-    
-    def validate_dependencies(self, registry_address: str = None, token_address: str = None, **kwargs) -> bool:
-        """SimulationCore requires both Registry and Token addresses."""
-        if not registry_address:
-            print(f"{Colors.ERROR}✗ Registry address is required for SimulationCore deployment{Colors.RESET}")
-            return False
-        if not token_address:
-            print(f"{Colors.ERROR}✗ Token address is required for SimulationCore deployment{Colors.RESET}")
-            return False
-        return True
-    
-    def get_dependency_info(self, registry_address: str = None, token_address: str = None, **kwargs) -> List[str]:
-        """Get dependency information."""
-        deps = []
-        if registry_address:
-            deps.append(f"Registry Contract: {registry_address}")
-        if token_address:
-            deps.append(f"Token Contract: {token_address}")
-        return deps
-
-
 # Contract factory
 CONTRACTS = {
     "nft": KliverNFT,
     "registry": KliverRegistry,
-    "kliver_1155": KliverNFT1155,
-    "simulation_core": SimulationCore
+    "kliver_1155": KliverNFT1155
 }
 
 

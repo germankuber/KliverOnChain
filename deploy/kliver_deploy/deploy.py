@@ -16,15 +16,11 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.option('--environment', '-e', required=True, 
               help='Environment to deploy to: dev, qa, or prod')
 @click.option('--contract', '-c', default='registry', 
-              help='Contract to deploy: registry, nft, kliver_1155, simulation_core, or all')
+              help='Contract to deploy: registry, nft, kliver_1155, or all')
 @click.option('--owner', '-o', 
               help='Owner address for the contract (uses account address if not specified)')
 @click.option('--nft-address', '-n', 
               help='NFT contract address (required when deploying registry separately)')
-@click.option('--registry-address', 
-              help='Registry contract address (required for SimulationCore)')
-@click.option('--token-address', 
-              help='Token contract address (required for SimulationCore)')
 @click.option('--verifier-address', 
               help='Verifier contract address (optional for Registry, uses 0x0 if not provided)')
 @click.option('--verbose', '-v', is_flag=True, 
@@ -34,8 +30,7 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.option('--output-json', is_flag=True, 
               help='Output deployment addresses in JSON format')
 def deploy(environment: str, contract: str, owner: Optional[str], 
-           nft_address: Optional[str], registry_address: Optional[str], 
-           token_address: Optional[str], verifier_address: Optional[str], 
+           nft_address: Optional[str], verifier_address: Optional[str], 
            verbose: bool, no_compile: bool, output_json: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration.
@@ -48,24 +43,22 @@ def deploy(environment: str, contract: str, owner: Optional[str],
     
     DEPLOYMENT MODES:
     
-    1. Deploy Everything (NFT → Registry → Token1155 → SimulationCore):
+    1. Deploy Everything (NFT → Registry → Token1155):
         python deploy.py --environment dev --contract all
     
     2. Deploy Individual Contracts:
         python deploy.py --environment dev --contract nft
         python deploy.py --environment dev --contract kliver_1155
         python deploy.py --environment dev --contract registry --nft-address 0x456...
-        python deploy.py --environment dev --contract simulation_core --registry-address 0x123... --token-address 0x789...
     
     3. Contract Dependencies:
         - NFT: No dependencies
         - Token1155: No dependencies  
         - Registry: Requires NFT address
-        - SimulationCore: Requires Registry + Token1155 addresses
     
     Example usage:
         python deploy.py --environment dev --contract all
-        python deploy.py --environment qa --contract simulation_core --registry-address 0x123... --token-address 0x789...
+        python deploy.py --environment qa --contract registry --nft-address 0x123...
         python deploy.py --environment prod --contract kliver_1155
     """
     
@@ -103,7 +96,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         else:
             success = deploy_single_contract(
                 config_manager, environment, contract, owner, 
-                nft_address, registry_address, token_address, verifier_address,
+                nft_address, None, None, verifier_address,
                 deployments, no_compile
             )
         
@@ -135,7 +128,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                         deployments: List[Dict[str, Any]], no_compile: bool = False) -> bool:
     """Deploy all contracts in the correct order."""
     click.echo(f"\n{Colors.BOLD}🚀 COMPLETE DEPLOYMENT MODE{Colors.RESET}")
-    click.echo(f"{Colors.INFO}This will deploy: NFT → Registry → Token1155 → SimulationCore{Colors.RESET}\n")
+    click.echo(f"{Colors.INFO}This will deploy: NFT → Registry → Token1155{Colors.RESET}\n")
     
     deployed_addresses = {}
     
@@ -180,7 +173,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         return False
 
     # Step 3: Deploy Token1155
-    click.echo(f"{Colors.BOLD}Step 3/4: Deploying Token1155 Contract{Colors.RESET}")
+    click.echo(f"{Colors.BOLD}Step 3/3: Deploying Token1155 Contract{Colors.RESET}")
     token_deployer = ContractDeployer(environment, 'kliver_1155', config_manager)
     
     # Get base_uri from config
@@ -191,27 +184,9 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         deployments.append(token_result)
         deployed_addresses['token'] = token_result['contract_address']
         click.echo(f"\n{Colors.SUCCESS}✓ Token1155 deployed successfully at: {deployed_addresses['token']}{Colors.RESET}\n")
-    else:
-        click.echo(f"\n{Colors.ERROR}✗ Token1155 deployment failed. Aborting.{Colors.RESET}")
-        return False
-
-    # Step 4: Deploy SimulationCore
-    click.echo(f"{Colors.BOLD}Step 4/4: Deploying SimulationCore Contract{Colors.RESET}")
-    core_deployer = ContractDeployer(environment, 'simulation_core', config_manager)
-    
-    core_result = core_deployer.deploy_full_flow(
-        owner,
-        no_compile=no_compile,
-        registry_address=deployed_addresses['registry'],
-        token_address=deployed_addresses['token']
-    )
-    
-    if core_result:
-        deployments.append(core_result)
-        click.echo(f"\n{Colors.SUCCESS}✓ SimulationCore deployed successfully{Colors.RESET}\n")
         return True
     else:
-        click.echo(f"\n{Colors.ERROR}✗ SimulationCore deployment failed{Colors.RESET}")
+        click.echo(f"\n{Colors.ERROR}✗ Token1155 deployment failed. Aborting.{Colors.RESET}")
         return False
 
 
@@ -251,23 +226,6 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.BOLD}🎯 TOKEN1155-ONLY DEPLOYMENT{Colors.RESET}\n")
         contract_config = config_manager.get_contract_config(environment, contract)
         deploy_kwargs['base_uri'] = contract_config.base_uri
-        
-    elif contract == 'simulation_core':
-        if not registry_address:
-            click.echo(f"\n{Colors.ERROR}❌ Registry address is required for SimulationCore{Colors.RESET}")
-            click.echo(f"{Colors.INFO}Use: --registry-address 0x... or deploy with --contract all{Colors.RESET}\n")
-            return False
-        if not token_address:
-            click.echo(f"\n{Colors.ERROR}❌ Token address is required for SimulationCore{Colors.RESET}")
-            click.echo(f"{Colors.INFO}Use: --token-address 0x... or deploy with --contract all{Colors.RESET}\n")
-            return False
-        
-        click.echo(f"\n{Colors.BOLD}🎯 SEPARATE SIMULATIONCORE DEPLOYMENT{Colors.RESET}")
-        click.echo(f"{Colors.INFO}Using Registry contract at: {registry_address}{Colors.RESET}")
-        click.echo(f"{Colors.INFO}Using Token contract at: {token_address}{Colors.RESET}\n")
-        
-        deploy_kwargs['registry_address'] = registry_address
-        deploy_kwargs['token_address'] = token_address
     
     # Deploy the contract
     result = deployer.deploy_full_flow(owner, no_compile=no_compile, **deploy_kwargs)

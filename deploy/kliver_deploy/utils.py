@@ -31,12 +31,19 @@ class CommandRunner:
     def run_command(command: List[str], description: str, show_output: bool = False) -> Dict[str, Any]:
         """Execute a shell command and return the result."""
         try:
+            # Find project root by looking for Scarb.toml
+            project_root = Path.cwd()
+            while project_root != project_root.parent:
+                if (project_root / "Scarb.toml").exists():
+                    break
+                project_root = project_root.parent
+            
             result = subprocess.run(
                 command,
                 capture_output=True,
                 text=True,
                 check=True,
-                cwd=Path.cwd().parent  # Run from project root
+                cwd=project_root  # Run from project root
             )
             
             if show_output and result.stdout.strip():
@@ -239,8 +246,7 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
             json_output['registry'] = contract_address
         elif contract_name == 'klivernft1155':
             json_output['token'] = contract_address
-        elif contract_name == 'simulationcore':
-            json_output['simulationCore'] = contract_address
+
     
     # Print the JSON output
     print(json.dumps(json_output, indent=2))
