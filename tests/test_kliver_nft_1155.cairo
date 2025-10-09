@@ -2,7 +2,7 @@ use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_c
 use starknet::ContractAddress;
 
 // Import structs from the types file
-use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenDataToCreateTrait};
+use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenDataToCreateTrait, Simulation};
 
 // Define the interface for testing
 #[starknet::interface]
@@ -10,6 +10,8 @@ trait IKliverRC1155<TContractState> {
     fn create_token(ref self: TContractState, token_data: TokenDataToCreate) -> u256;
     fn get_token_info(self: @TContractState, token_id: u256) -> TokenInfo;
     fn time_until_release(self: @TContractState, token_id: u256) -> u64;
+    fn register_simulation(ref self: TContractState, simulation_id: u256, token_id: u256);
+    fn get_simulation(self: @TContractState, simulation_id: u256) -> kliver_on_chain::kliver_1155_types::Simulation;
     fn get_owner(self: @TContractState) -> ContractAddress;
 }
 
@@ -141,6 +143,67 @@ fn test_create_token_different_callers() {
     assert(info_1.release_amount == 1000, 'Token 1 release amount');
     assert(info_2.release_hour == 2000, 'Token 2 release hour');
     assert(info_2.release_amount == 2000, 'Token 2 release amount');
+}
+
+#[test]
+fn test_register_simulation_success() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation
+    let simulation_id: u256 = 123;
+    dispatcher.register_simulation(simulation_id, token_id);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Verify simulation was registered
+    let simulation = dispatcher.get_simulation(simulation_id);
+    assert(simulation.simulation_id == simulation_id, 'Simulation ID mismatch');
+    assert(simulation.token_id == token_id, 'Token ID mismatch');
+    assert(simulation.creator == owner, 'Creator mismatch');
+}
+
+#[test]
+#[should_panic(expected: ('Token does not exist', ))]
+fn test_register_simulation_invalid_token() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+
+    // Try to register simulation with non-existent token
+    let simulation_id: u256 = 123;
+    let invalid_token_id: u256 = 999;
+    dispatcher.register_simulation(simulation_id, invalid_token_id);
+
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
+fn test_get_simulation() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation
+    let simulation_id: u256 = 456;
+    dispatcher.register_simulation(simulation_id, token_id);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Get simulation info
+    let simulation = dispatcher.get_simulation(simulation_id);
+
+    assert(simulation.simulation_id == simulation_id, 'Simulation ID should match');
+    assert(simulation.token_id == token_id, 'Token ID should match');
+    assert(simulation.creator == owner, 'Creator should match');
 }
 
 #[test]

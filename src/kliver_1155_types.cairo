@@ -27,3 +27,18 @@ pub struct TokenCreated {
     pub release_hour: u64,
     pub release_amount: u256,
 }
+
+#[derive(Drop, Serde, starknet::Store)]
+pub struct Simulation {
+    pub simulation_id: u256,
+    pub token_id: u256,
+    pub creator: ContractAddress,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct SimulationRegistered {
+    #[key]
+    pub simulation_id: u256,
+    pub token_id: u256,
+    pub creator: ContractAddress,
+}
