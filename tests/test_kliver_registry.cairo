@@ -708,7 +708,7 @@ fn test_register_simulation_success() {
 #[test]
 #[should_panic(expected: ('Character not found', ))]
 fn test_register_simulation_invalid_character() {
-    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    let (dispatcher, _char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
     
     // Only register scenario, not character
     let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
@@ -731,7 +731,7 @@ fn test_register_simulation_invalid_character() {
 #[test]
 #[should_panic(expected: ('Scenario not found', ))]
 fn test_register_simulation_invalid_scenario() {
-    let (dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
+    let (dispatcher, char_dispatcher, _scenario_dispatcher, contract_address, owner) = deploy_for_simulations();
     
     // Only register character, not scenario
     let character_id = register_test_character(char_dispatcher, contract_address, owner);

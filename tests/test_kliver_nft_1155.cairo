@@ -63,6 +63,7 @@ trait IKliverRC1155<TContractState> {
     fn is_hint_paid(self: @TContractState, hint_id: felt252) -> bool;
     fn get_hint_payment(self: @TContractState, hint_id: felt252) -> HintPayment;
     fn get_owner(self: @TContractState) -> ContractAddress;
+    fn balance_of(self: @TContractState, account: ContractAddress, token_id: u256) -> u256;
 }
 
 /// Helper function to deploy the KliverRC1155 contract
@@ -1069,5 +1070,315 @@ fn test_is_simulation_expired_at_exactly_expiration_time() {
     let is_expired = dispatcher.is_simulation_expired(789);
     assert(is_expired, 'Expired at exact time');
 
+    stop_cheat_block_timestamp_global();
+}
+// ============= CLAIM TESTS WITH SPECIAL RELEASE =============
+
+// Test 1: First claim with special_release before release_hour - mints only special
+#[test]
+fn test_claim_first_before_release_hour_only_special() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token: release_hour=14, release_amount=1000, special_release=500
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation at day 0, 00:00
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Claim at day 0, 10:00 (before release_hour 14:00)
+    start_cheat_block_timestamp_global(10 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify balance: only special (500), no normal days yet
+    let balance = dispatcher.balance_of(wallet, token_id);
+    assert(balance == 500, 'Should have 500 tokens');
+    
+    stop_cheat_block_timestamp_global();
+}
+
+// Test 2: First claim with special_release after release_hour - mints special + normal
+#[test]
+fn test_claim_first_after_release_hour_with_special() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token: release_hour=14, release_amount=1000, special_release=500
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Claim at day 0, 16:00 (after release_hour 14:00)
+    start_cheat_block_timestamp_global(16 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify balance: special (500) + 1 day (1000) = 1500
+    let balance = dispatcher.balance_of(wallet, token_id);
+    assert(balance == 1500, 'Should have 1500 tokens');
+    
+    stop_cheat_block_timestamp_global();
+}
+
+// Test 3: First claim multiple days later with special_release
+#[test]
+fn test_claim_first_multiple_days_with_special() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token: release_hour=14, release_amount=1000, special_release=500
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Claim at day 3, 16:00
+    start_cheat_block_timestamp_global(3 * 86400 + 16 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify balance: special (500) + 4 days (4000) = 4500
+    // Days released: day 0, 1, 2, 3 (all at 14:00)
+    let balance = dispatcher.balance_of(wallet, token_id);
+    assert(balance == 4500, 'Should have 4500 tokens');
+    
+    stop_cheat_block_timestamp_global();
+}
+
+// Test 4: Second claim does NOT include special_release
+#[test]
+fn test_claim_second_no_special() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token: release_hour=14, release_amount=1000, special_release=500
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // First claim at day 0, 16:00
+    start_cheat_block_timestamp_global(16 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    let balance_after_first = dispatcher.balance_of(wallet, token_id);
+    assert(balance_after_first == 1500, 'First: 1500 tokens');
+    
+    // Second claim at day 1, 16:00
+    start_cheat_block_timestamp_global(86400 + 16 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify balance increased by only 1000 (no special in second claim)
+    let balance_after_second = dispatcher.balance_of(wallet, token_id);
+    assert(balance_after_second == 2500, 'Second: 2500 total');
+    
+    stop_cheat_block_timestamp_global();
+}
+
+// Test 5: Multiple accumulated days in second claim
+#[test]
+fn test_claim_accumulated_days() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token: release_hour=14, release_amount=1000, special_release=500
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // First claim at day 1, 20:00
+    start_cheat_block_timestamp_global(86400 + 20 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123); // Claims special + 2 days
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    let balance_after_first = dispatcher.balance_of(wallet, token_id);
+    assert(balance_after_first == 2500, 'First: 2500 (500+2000)');
+    
+    // Second claim at day 4, 15:00 (skip days 2 and 3)
+    start_cheat_block_timestamp_global(4 * 86400 + 15 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123); // Should claim days 2, 3, 4 = 3000
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    let balance_after_second = dispatcher.balance_of(wallet, token_id);
+    assert(balance_after_second == 5500, 'Second: 5500 total');
+    
+    stop_cheat_block_timestamp_global();
+}
+
+// Test 6: Claim with NO special_release (special_release = 0)
+#[test]
+fn test_claim_no_special_release() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token with NO special_release
+    let token_data = TokenDataToCreateTrait::new(14, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Claim at day 0, 16:00 (after release_hour)
+    start_cheat_block_timestamp_global(16 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify balance: only 1000 (no special)
+    let balance = dispatcher.balance_of(wallet, token_id);
+    assert(balance == 1000, 'Should have 1000 (no special)');
+    
+    stop_cheat_block_timestamp_global();
+}
+
+// Test 7: Claim exactly at release_hour
+#[test]
+fn test_claim_exactly_at_release_hour() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token: release_hour=14, release_amount=1000, special_release=500
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Claim exactly at day 0, 14:00
+    start_cheat_block_timestamp_global(14 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Verify balance: special (500) + 1 day (1000) = 1500
+    // At exactly 14:00, the day should be released (>= check)
+    let balance = dispatcher.balance_of(wallet, token_id);
+    assert(balance == 1500, 'Should have 1500 at 14:00');
+    
+    stop_cheat_block_timestamp_global();
+}
+
+// Test 8: Claim before release_hour second time should fail
+#[test]
+#[should_panic(expected: ('Nothing to claim yet', ))] 
+fn test_claim_before_release_hour_second_time_fails() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token: release_hour=14, release_amount=1000, special_release=500
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // First claim at day 0, 16:00
+    start_cheat_block_timestamp_global(16 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    
+    // Try to claim again on day 1 at 10:00 (before release_hour)
+    start_cheat_block_timestamp_global(86400 + 10 * 3600);
+    dispatcher.claim(token_id, 123); // Should panic
+    
+    stop_cheat_caller_address(dispatcher.contract_address);
+    stop_cheat_block_timestamp_global();
+}
+
+// Test 9: Three consecutive claims
+#[test]
+fn test_claim_three_consecutive() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token: release_hour=14, release_amount=1000, special_release=500
+    let token_data = TokenDataToCreateTrait::new_with_special_release(14, 1000, 500);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    
+    // Register simulation
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Claim 1: day 0, 16:00
+    start_cheat_block_timestamp_global(16 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    let balance1 = dispatcher.balance_of(wallet, token_id);
+    assert(balance1 == 1500, 'Claim 1: 1500');
+    
+    // Claim 2: day 1, 16:00
+    start_cheat_block_timestamp_global(86400 + 16 * 3600);
+    dispatcher.claim(token_id, 123);
+    let balance2 = dispatcher.balance_of(wallet, token_id);
+    assert(balance2 == 2500, 'Claim 2: 2500');
+    
+    // Claim 3: day 2, 16:00
+    start_cheat_block_timestamp_global(2 * 86400 + 16 * 3600);
+    dispatcher.claim(token_id, 123);
+    let balance3 = dispatcher.balance_of(wallet, token_id);
+    assert(balance3 == 3500, 'Claim 3: 3500');
+    
+    stop_cheat_caller_address(dispatcher.contract_address);
     stop_cheat_block_timestamp_global();
 }
