@@ -1,4 +1,4 @@
-use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait};
+use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist};
 
 #[starknet::contract]
 mod KliverRC1155 {
@@ -8,7 +8,7 @@ mod KliverRC1155 {
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
-    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait};
+    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist};
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -33,6 +33,8 @@ mod KliverRC1155 {
         token_info: Map<u256, TokenInfo>,
         next_token_id: u256,
         simulations: Map<felt252, Simulation>,
+        // (token_id, wallet) -> simulation_id
+        whitelist: Map<(u256, ContractAddress), felt252>,
     }
 
     #[event]
@@ -44,8 +46,9 @@ mod KliverRC1155 {
         SRC5Event: SRC5Component::Event,
         TokenCreated: TokenCreated,
         SimulationRegistered: SimulationRegistered,
+        AddedToWhitelist: AddedToWhitelist,
+        RemovedFromWhitelist: RemovedFromWhitelist,
     }
-
 
     #[constructor]
     fn constructor(ref self: ContractState, owner: ContractAddress, base_uri: ByteArray) {
@@ -157,6 +160,79 @@ mod KliverRC1155 {
         let simulation = self.simulations.entry(simulation_id).read();
         let current_time = starknet::get_block_timestamp();
         current_time >= simulation.expiration_timestamp
+    }
+
+    #[external(v0)]
+    fn add_to_whitelist(
+        ref self: ContractState,
+        token_id: u256,
+        wallet: ContractAddress,
+        simulation_id: felt252,
+    ) {
+        // Only owner can add to whitelist
+        self._assert_only_owner();
+
+        // Verify token exists
+        let token_info = self.token_info.entry(token_id).read();
+        assert(
+            token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist',
+        );
+
+        // Verify simulation exists and belongs to the token
+        let simulation = self.simulations.entry(simulation_id).read();
+        assert(simulation.token_id == token_id, 'Simulation not for this token');
+
+        // Add to whitelist
+        self.whitelist.entry((token_id, wallet)).write(simulation_id);
+
+        self.emit(AddedToWhitelist {
+            token_id,
+            wallet,
+            simulation_id,
+        });
+    }
+
+    #[external(v0)]
+    fn remove_from_whitelist(
+        ref self: ContractState,
+        token_id: u256,
+        wallet: ContractAddress,
+    ) {
+        // Only owner can remove from whitelist
+        self._assert_only_owner();
+
+        // Verify token exists
+        let token_info = self.token_info.entry(token_id).read();
+        assert(
+            token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist',
+        );
+
+        // Remove from whitelist (set to 0)
+        self.whitelist.entry((token_id, wallet)).write(0);
+
+        self.emit(RemovedFromWhitelist {
+            token_id,
+            wallet,
+        });
+    }
+
+    #[external(v0)]
+    fn is_whitelisted(
+        self: @ContractState,
+        token_id: u256,
+        wallet: ContractAddress,
+    ) -> bool {
+        let simulation_id = self.whitelist.entry((token_id, wallet)).read();
+        simulation_id != 0
+    }
+
+    #[external(v0)]
+    fn get_whitelist_simulation(
+        self: @ContractState,
+        token_id: u256,
+        wallet: ContractAddress,
+    ) -> felt252 {
+        self.whitelist.entry((token_id, wallet)).read()
     }
 
     #[external(v0)]

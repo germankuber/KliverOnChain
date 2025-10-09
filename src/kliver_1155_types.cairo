@@ -65,3 +65,16 @@ pub struct SimulationRegistered {
     pub creator: ContractAddress,
     pub expiration_timestamp: u64,
 }
+
+#[derive(Drop, starknet::Event)]
+pub struct AddedToWhitelist {
+    pub token_id: u256,
+    pub wallet: ContractAddress,
+    pub simulation_id: felt252,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct RemovedFromWhitelist {
+    pub token_id: u256,
+    pub wallet: ContractAddress,
+}
