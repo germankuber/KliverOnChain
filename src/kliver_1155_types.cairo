@@ -4,18 +4,25 @@ use starknet::ContractAddress;
 pub struct TokenInfo {
     pub release_hour: u64,
     pub release_amount: u256,
+    pub special_release: u256,
 }
 
 #[derive(Drop, Serde)]
 pub struct TokenDataToCreate {
     pub release_hour: u64,
     pub release_amount: u256,
+    pub special_release: u256,
 }
 
 #[generate_trait]
 pub impl TokenDataToCreateImpl of TokenDataToCreateTrait {
     fn new(release_hour: u64, release_amount: u256) -> TokenDataToCreate {
-        TokenDataToCreate { release_hour, release_amount }
+        TokenDataToCreate { release_hour, release_amount, special_release: 0 }
+    }
+    fn new_with_special_release(
+        release_hour: u64, release_amount: u256, special_release: u256,
+    ) -> TokenDataToCreate {
+        TokenDataToCreate { release_hour, release_amount, special_release }
     }
 }
 
@@ -28,7 +35,9 @@ pub struct SimulationDataToCreate {
 
 #[generate_trait]
 pub impl SimulationDataToCreateImpl of SimulationDataToCreateTrait {
-    fn new(simulation_id: felt252, token_id: u256, expiration_timestamp: u64) -> SimulationDataToCreate {
+    fn new(
+        simulation_id: felt252, token_id: u256, expiration_timestamp: u64,
+    ) -> SimulationDataToCreate {
         SimulationDataToCreate { simulation_id, token_id, expiration_timestamp }
     }
 }
@@ -40,6 +49,7 @@ pub struct TokenCreated {
     pub creator: ContractAddress,
     pub release_hour: u64,
     pub release_amount: u256,
+    pub special_release: u256,
 }
 
 #[derive(Drop, Serde, starknet::Store)]
@@ -53,7 +63,13 @@ pub struct Simulation {
 
 #[generate_trait]
 pub impl SimulationImpl of SimulationTrait {
-    fn new(simulation_id: felt252, token_id: u256, creator: ContractAddress, creation_timestamp: u64, expiration_timestamp: u64) -> Simulation {
+    fn new(
+        simulation_id: felt252,
+        token_id: u256,
+        creator: ContractAddress,
+        creation_timestamp: u64,
+        expiration_timestamp: u64,
+    ) -> Simulation {
         Simulation { simulation_id, token_id, creator, creation_timestamp, expiration_timestamp }
     }
 }

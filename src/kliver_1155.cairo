@@ -1,4 +1,8 @@
-use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed, SessionPayment, SessionPaid, HintPayment, HintPaid};
+use super::kliver_1155_types::{
+    AddedToWhitelist, HintPaid, HintPayment, RemovedFromWhitelist, SessionPaid, SessionPayment,
+    Simulation, SimulationDataToCreate, SimulationRegistered, SimulationTrait, TokenCreated,
+    TokenDataToCreate, TokenInfo, TokensClaimed,
+};
 
 #[starknet::contract]
 mod KliverRC1155 {
@@ -8,7 +12,11 @@ mod KliverRC1155 {
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
-    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait, AddedToWhitelist, RemovedFromWhitelist, TokensClaimed, SessionPayment, SessionPaid, HintPayment, HintPaid};
+    use super::{
+        AddedToWhitelist, HintPaid, HintPayment, RemovedFromWhitelist, SessionPaid, SessionPayment,
+        Simulation, SimulationDataToCreate, SimulationRegistered, SimulationTrait, TokenCreated,
+        TokenDataToCreate, TokenInfo, TokensClaimed,
+    };
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -74,7 +82,9 @@ mod KliverRC1155 {
         let token_id = self.next_token_id.read();
 
         let token_info = TokenInfo {
-            release_hour: token_data.release_hour, release_amount: token_data.release_amount,
+            release_hour: token_data.release_hour,
+            release_amount: token_data.release_amount,
+            special_release: token_data.special_release,
         };
 
         self.token_info.entry(token_id).write(token_info);
@@ -87,6 +97,7 @@ mod KliverRC1155 {
                     creator: get_caller_address(),
                     release_hour: token_data.release_hour,
                     release_amount: token_data.release_amount,
+                    special_release: token_data.special_release,
                 },
             );
 
@@ -129,14 +140,15 @@ mod KliverRC1155 {
 
     #[external(v0)]
     fn register_simulation(
-        ref self: ContractState,
-        simulation_data: SimulationDataToCreate,
+        ref self: ContractState, simulation_data: SimulationDataToCreate,
     ) -> felt252 {
         self._assert_only_owner();
 
         // Check if token exists by verifying token info is not zero
         let token_info = self.token_info.entry(simulation_data.token_id).read();
-        assert(token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist');
+        assert(
+            token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist',
+        );
 
         let caller = get_caller_address();
 
@@ -151,12 +163,15 @@ mod KliverRC1155 {
 
         self.simulations.entry(simulation_data.simulation_id).write(simulation);
 
-        self.emit(SimulationRegistered {
-            simulation_id: simulation_data.simulation_id,
-            token_id: simulation_data.token_id,
-            creator: caller,
-            expiration_timestamp: simulation_data.expiration_timestamp,
-        });
+        self
+            .emit(
+                SimulationRegistered {
+                    simulation_id: simulation_data.simulation_id,
+                    token_id: simulation_data.token_id,
+                    creator: caller,
+                    expiration_timestamp: simulation_data.expiration_timestamp,
+                },
+            );
 
         simulation_data.simulation_id
     }
@@ -175,10 +190,7 @@ mod KliverRC1155 {
 
     #[external(v0)]
     fn add_to_whitelist(
-        ref self: ContractState,
-        token_id: u256,
-        wallet: ContractAddress,
-        simulation_id: felt252,
+        ref self: ContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252,
     ) {
         // Only owner can add to whitelist
         self._assert_only_owner();
@@ -196,19 +208,11 @@ mod KliverRC1155 {
         // Add to whitelist
         self.whitelist.entry((token_id, wallet)).write(simulation_id);
 
-        self.emit(AddedToWhitelist {
-            token_id,
-            wallet,
-            simulation_id,
-        });
+        self.emit(AddedToWhitelist { token_id, wallet, simulation_id });
     }
 
     #[external(v0)]
-    fn remove_from_whitelist(
-        ref self: ContractState,
-        token_id: u256,
-        wallet: ContractAddress,
-    ) {
+    fn remove_from_whitelist(ref self: ContractState, token_id: u256, wallet: ContractAddress) {
         // Only owner can remove from whitelist
         self._assert_only_owner();
 
@@ -221,43 +225,32 @@ mod KliverRC1155 {
         // Remove from whitelist (set to 0)
         self.whitelist.entry((token_id, wallet)).write(0);
 
-        self.emit(RemovedFromWhitelist {
-            token_id,
-            wallet,
-        });
+        self.emit(RemovedFromWhitelist { token_id, wallet });
     }
 
     #[external(v0)]
-    fn is_whitelisted(
-        self: @ContractState,
-        token_id: u256,
-        wallet: ContractAddress,
-    ) -> bool {
+    fn is_whitelisted(self: @ContractState, token_id: u256, wallet: ContractAddress) -> bool {
         let simulation_id = self.whitelist.entry((token_id, wallet)).read();
         simulation_id != 0
     }
 
     #[external(v0)]
     fn get_whitelist_simulation(
-        self: @ContractState,
-        token_id: u256,
-        wallet: ContractAddress,
+        self: @ContractState, token_id: u256, wallet: ContractAddress,
     ) -> felt252 {
         self.whitelist.entry((token_id, wallet)).read()
     }
 
     #[external(v0)]
-    fn claim(
-        ref self: ContractState,
-        token_id: u256,
-        simulation_id: felt252,
-    ) {
+    fn claim(ref self: ContractState, token_id: u256, simulation_id: felt252) {
         let caller = get_caller_address();
         let zero_address: ContractAddress = 0.try_into().unwrap();
 
         // 1. Verify token exists
         let token_info = self.token_info.entry(token_id).read();
-        assert(token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist');
+        assert(
+            token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist',
+        );
 
         // 2. Verify simulation exists
         let simulation = self.simulations.entry(simulation_id).read();
@@ -276,78 +269,100 @@ mod KliverRC1155 {
 
         // 6. Get last claim timestamp (0 if never claimed)
         let last_claim = self.last_claim_timestamp.entry((token_id, simulation_id, caller)).read();
-        let start_time = if last_claim == 0 {
-            simulation.creation_timestamp
+
+        // 7. Calculate amount to mint
+        let total_amount = if last_claim == 0 {
+            // FIRST CLAIM: special_release + normal days
+            let special_amount = token_info.special_release;
+
+            // Calculate normal days available
+            let normal_days = self
+                .calculate_claimable_days(
+                    current_time, simulation.creation_timestamp, token_info.release_hour,
+                );
+            let normal_amount = token_info.release_amount * normal_days;
+
+            special_amount + normal_amount
         } else {
-            last_claim
+            // SUBSEQUENT CLAIMS: only normal days (no special)
+
+            // Total claimable days until now (always from creation_timestamp)
+            let total_claimable_days = self
+                .calculate_claimable_days(
+                    current_time, simulation.creation_timestamp, token_info.release_hour,
+                );
+
+            // Days already claimed in last claim (always from creation_timestamp)
+            let days_already_claimed = self
+                .calculate_claimable_days(
+                    last_claim, simulation.creation_timestamp, token_info.release_hour,
+                );
+
+            // Calculate only new days
+            assert(total_claimable_days > days_already_claimed, 'Nothing to claim yet');
+            let new_days = total_claimable_days - days_already_claimed;
+
+            token_info.release_amount * new_days
         };
 
-        // 7. Calculate claimable days
-        let claimable_days = self.calculate_claimable_days(
-            current_time,
-            start_time,
-            token_info.release_hour
-        );
+        assert(total_amount > 0, 'Nothing to claim');
 
-        assert(claimable_days > 0, 'No days available to claim');
+        // 8. Mint tokens to claimer
+        self.erc1155.mint_with_acceptance_check(caller, token_id, total_amount, array![].span());
 
-        // 8. Calculate total amount to mint
-        let total_amount = token_info.release_amount * claimable_days;
-
-        // 9. Mint tokens to claimer
-        self.erc1155.mint_with_acceptance_check(
-            caller,
-            token_id,
-            total_amount,
-            array![].span()
-        );
-
-        // 10. Update last claim timestamp
+        // 9. Update last claim timestamp
         self.last_claim_timestamp.entry((token_id, simulation_id, caller)).write(current_time);
 
-        self.emit(TokensClaimed {
-            token_id,
-            simulation_id,
-            claimer: caller,
-            amount: total_amount,
-        });
+        self.emit(TokensClaimed { token_id, simulation_id, claimer: caller, amount: total_amount });
     }
 
 
     #[external(v0)]
     fn get_claimable_amount(
-        self: @ContractState,
-        token_id: u256,
-        simulation_id: felt252,
-        wallet: ContractAddress,
+        self: @ContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress,
     ) -> u256 {
         let simulation = self.simulations.entry(simulation_id).read();
         let token_info = self.token_info.entry(token_id).read();
         let current_time = starknet::get_block_timestamp();
-
         let last_claim = self.last_claim_timestamp.entry((token_id, simulation_id, wallet)).read();
-        let start_time = if last_claim == 0 {
-            simulation.creation_timestamp
+
+        if last_claim == 0 {
+            // FIRST CLAIM: special_release + normal days
+            let special_amount = token_info.special_release;
+
+            let normal_days = self
+                .calculate_claimable_days(
+                    current_time, simulation.creation_timestamp, token_info.release_hour,
+                );
+            let normal_amount = token_info.release_amount * normal_days;
+
+            special_amount + normal_amount
         } else {
-            last_claim
-        };
+            // Total claimable days until now
+            let total_claimable_days = self
+                .calculate_claimable_days(
+                    current_time, simulation.creation_timestamp, token_info.release_hour,
+                );
 
-        let claimable_days = self.calculate_claimable_days(
-            current_time,
-            start_time,
-            token_info.release_hour
-        );
+            // Days already claimed
+            let days_already_claimed = self
+                .calculate_claimable_days(
+                    last_claim, simulation.creation_timestamp, token_info.release_hour,
+                );
 
-        // Return total tokens claimable, not days
-        token_info.release_amount * claimable_days
+            // Calculate only new days (return 0 if nothing new)
+            if total_claimable_days > days_already_claimed {
+                let new_days = total_claimable_days - days_already_claimed;
+                token_info.release_amount * new_days
+            } else {
+                0
+            }
+        }
     }
 
     #[external(v0)]
     fn pay_for_session(
-        ref self: ContractState,
-        simulation_id: felt252,
-        session_id: felt252,
-        amount: u256,
+        ref self: ContractState, simulation_id: felt252, session_id: felt252, amount: u256,
     ) {
         let caller = get_caller_address();
         let zero_address: ContractAddress = 0.try_into().unwrap();
@@ -376,22 +391,12 @@ mod KliverRC1155 {
 
         // 7. Record session as paid
         let session_payment = SessionPayment {
-            session_id,
-            simulation_id,
-            payer: caller,
-            amount,
-            timestamp: current_time,
+            session_id, simulation_id, payer: caller, amount, timestamp: current_time,
         };
         self.paid_sessions.entry(session_id).write(session_payment);
 
         // 8. Emit event
-        self.emit(SessionPaid {
-            session_id,
-            simulation_id,
-            payer: caller,
-            amount,
-            token_id,
-        });
+        self.emit(SessionPaid { session_id, simulation_id, payer: caller, amount, token_id });
     }
 
     #[external(v0)]
@@ -409,10 +414,7 @@ mod KliverRC1155 {
 
     #[external(v0)]
     fn pay_for_hint(
-        ref self: ContractState,
-        simulation_id: felt252,
-        hint_id: felt252,
-        amount: u256,
+        ref self: ContractState, simulation_id: felt252, hint_id: felt252, amount: u256,
     ) {
         let caller = get_caller_address();
         let zero_address: ContractAddress = 0.try_into().unwrap();
@@ -441,22 +443,12 @@ mod KliverRC1155 {
 
         // 7. Record hint as paid
         let hint_payment = HintPayment {
-            hint_id,
-            simulation_id,
-            payer: caller,
-            amount,
-            timestamp: current_time,
+            hint_id, simulation_id, payer: caller, amount, timestamp: current_time,
         };
         self.paid_hints.entry(hint_id).write(hint_payment);
 
         // 8. Emit event
-        self.emit(HintPaid {
-            hint_id,
-            simulation_id,
-            payer: caller,
-            amount,
-            token_id,
-        });
+        self.emit(HintPaid { hint_id, simulation_id, payer: caller, amount, token_id });
     }
 
     #[external(v0)]
@@ -486,10 +478,7 @@ mod KliverRC1155 {
         }
 
         fn calculate_claimable_days(
-            self: @ContractState,
-            current_time: u64,
-            start_time: u64,
-            release_hour: u64
+            self: @ContractState, current_time: u64, start_time: u64, release_hour: u64,
         ) -> u256 {
             let seconds_per_day: u64 = 86400;
             let seconds_per_hour: u64 = 3600;
