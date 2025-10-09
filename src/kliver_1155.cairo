@@ -1,4 +1,4 @@
-use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered};
+use super::kliver_1155_types::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait};
 
 #[starknet::contract]
 mod KliverRC1155 {
@@ -8,7 +8,7 @@ mod KliverRC1155 {
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
-    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered};
+    use super::{TokenCreated, TokenDataToCreate, TokenInfo, Simulation, SimulationRegistered, SimulationDataToCreate, SimulationTrait};
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -32,7 +32,7 @@ mod KliverRC1155 {
         owner: ContractAddress,
         token_info: Map<u256, TokenInfo>,
         next_token_id: u256,
-        simulations: Map<u256, Simulation>,
+        simulations: Map<felt252, Simulation>,
     }
 
     #[event]
@@ -118,34 +118,45 @@ mod KliverRC1155 {
     #[external(v0)]
     fn register_simulation(
         ref self: ContractState,
-        simulation_id: u256,
-        token_id: u256,
-    ) {
-        // Check if token exists by verifying creator is not zero address
-        let token_info = self.token_info.entry(token_id).read();
-        let zero_address: ContractAddress = 0.try_into().unwrap();
+        simulation_data: SimulationDataToCreate,
+    ) -> felt252 {
+        self._assert_only_owner();
+
+        // Check if token exists by verifying token info is not zero
+        let token_info = self.token_info.entry(simulation_data.token_id).read();
         assert(token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist');
 
         let caller = get_caller_address();
 
-        let simulation = Simulation {
-            simulation_id,
-            token_id,
-            creator: caller,
-        };
+        let simulation = SimulationTrait::new(
+            simulation_data.simulation_id,
+            simulation_data.token_id,
+            caller,
+            simulation_data.expiration_timestamp,
+        );
 
-        self.simulations.entry(simulation_id).write(simulation);
+        self.simulations.entry(simulation_data.simulation_id).write(simulation);
 
         self.emit(SimulationRegistered {
-            simulation_id,
-            token_id,
+            simulation_id: simulation_data.simulation_id,
+            token_id: simulation_data.token_id,
             creator: caller,
+            expiration_timestamp: simulation_data.expiration_timestamp,
         });
+
+        simulation_data.simulation_id
     }
 
     #[external(v0)]
-    fn get_simulation(self: @ContractState, simulation_id: u256) -> Simulation {
+    fn get_simulation(self: @ContractState, simulation_id: felt252) -> Simulation {
         self.simulations.entry(simulation_id).read()
+    }
+
+    #[external(v0)]
+    fn is_simulation_expired(self: @ContractState, simulation_id: felt252) -> bool {
+        let simulation = self.simulations.entry(simulation_id).read();
+        let current_time = starknet::get_block_timestamp();
+        current_time >= simulation.expiration_timestamp
     }
 
     #[external(v0)]

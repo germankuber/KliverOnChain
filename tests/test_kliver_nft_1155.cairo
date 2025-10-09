@@ -2,7 +2,7 @@ use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_c
 use starknet::ContractAddress;
 
 // Import structs from the types file
-use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenDataToCreateTrait, Simulation};
+use kliver_on_chain::kliver_1155_types::{TokenInfo, TokenDataToCreate, TokenDataToCreateTrait, SimulationDataToCreate, SimulationDataToCreateTrait};
 
 // Define the interface for testing
 #[starknet::interface]
@@ -10,8 +10,9 @@ trait IKliverRC1155<TContractState> {
     fn create_token(ref self: TContractState, token_data: TokenDataToCreate) -> u256;
     fn get_token_info(self: @TContractState, token_id: u256) -> TokenInfo;
     fn time_until_release(self: @TContractState, token_id: u256) -> u64;
-    fn register_simulation(ref self: TContractState, simulation_id: u256, token_id: u256);
-    fn get_simulation(self: @TContractState, simulation_id: u256) -> kliver_on_chain::kliver_1155_types::Simulation;
+    fn register_simulation(ref self: TContractState, simulation_data: SimulationDataToCreate) -> felt252;
+    fn get_simulation(self: @TContractState, simulation_id: felt252) -> kliver_on_chain::kliver_1155_types::Simulation;
+    fn is_simulation_expired(self: @TContractState, simulation_id: felt252) -> bool;
     fn get_owner(self: @TContractState) -> ContractAddress;
 }
 
@@ -156,8 +157,10 @@ fn test_register_simulation_success() {
     let token_id = dispatcher.create_token(token_data);
 
     // Register a simulation
-    let simulation_id: u256 = 123;
-    dispatcher.register_simulation(simulation_id, token_id);
+    let simulation_id: felt252 = 123;
+    let simulation_data = SimulationDataToCreateTrait::new(simulation_id, token_id, 1735689600); // 2025-01-01 00:00:00 UTC
+    let returned_id = dispatcher.register_simulation(simulation_data);
+    assert(returned_id == simulation_id, 'Returned ID should match');
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Verify simulation was registered
@@ -165,6 +168,7 @@ fn test_register_simulation_success() {
     assert(simulation.simulation_id == simulation_id, 'Simulation ID mismatch');
     assert(simulation.token_id == token_id, 'Token ID mismatch');
     assert(simulation.creator == owner, 'Creator mismatch');
+    assert(simulation.expiration_timestamp == 1735689600, 'Expiration timestamp');
 }
 
 #[test]
@@ -176,9 +180,8 @@ fn test_register_simulation_invalid_token() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Try to register simulation with non-existent token
-    let simulation_id: u256 = 123;
-    let invalid_token_id: u256 = 999;
-    dispatcher.register_simulation(simulation_id, invalid_token_id);
+    let simulation_data = SimulationDataToCreateTrait::new(123, 999, 1735689600);
+    dispatcher.register_simulation(simulation_data);
 
     stop_cheat_caller_address(dispatcher.contract_address);
 }
@@ -194,8 +197,10 @@ fn test_get_simulation() {
     let token_id = dispatcher.create_token(token_data);
 
     // Register a simulation
-    let simulation_id: u256 = 456;
-    dispatcher.register_simulation(simulation_id, token_id);
+    let simulation_id: felt252 = 456;
+    let simulation_data = SimulationDataToCreateTrait::new(simulation_id, token_id, 1735689600);
+    let returned_id = dispatcher.register_simulation(simulation_data);
+    assert(returned_id == simulation_id, 'Returned ID should match');
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Get simulation info
@@ -204,6 +209,27 @@ fn test_get_simulation() {
     assert(simulation.simulation_id == simulation_id, 'Simulation ID should match');
     assert(simulation.token_id == token_id, 'Token ID should match');
     assert(simulation.creator == owner, 'Creator should match');
+    assert(simulation.expiration_timestamp == 1735689600, 'Expiration timestamp match');
+}
+
+#[test]
+#[should_panic(expected: ('Not owner', ))]
+fn test_register_simulation_non_owner_should_fail() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let non_owner: ContractAddress = 'non_owner'.try_into().unwrap();
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Try to register simulation as non-owner
+    start_cheat_caller_address(dispatcher.contract_address, non_owner);
+    let simulation_data = SimulationDataToCreateTrait::new(456, token_id, 1735689600);
+    dispatcher.register_simulation(simulation_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
 }
 
 #[test]
@@ -277,4 +303,72 @@ fn test_time_until_release_nonexistent_token() {
 
     // Try to get time until release for a token that doesn't exist
     dispatcher.time_until_release(999);
+}
+
+#[test]
+fn test_is_simulation_expired_false() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation with future expiration
+    let future_timestamp: u64 = 1735689600; // 2025-01-01 00:00:00 UTC
+    let simulation_data = SimulationDataToCreateTrait::new(123, token_id, future_timestamp);
+    dispatcher.register_simulation(simulation_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Check that simulation is not expired
+    let is_expired = dispatcher.is_simulation_expired(123);
+    assert(!is_expired, 'Not expired');
+}
+
+#[test]
+fn test_is_simulation_expired_true() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation with past expiration
+    let past_timestamp: u64 = 0; // Timestamp 0 is always in the past
+    let simulation_data = SimulationDataToCreateTrait::new(456, token_id, past_timestamp);
+    dispatcher.register_simulation(simulation_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Check that simulation is expired
+    let is_expired = dispatcher.is_simulation_expired(456);
+    assert(is_expired, 'Expired');
+}
+
+#[test]
+fn test_is_simulation_expired_at_exactly_expiration_time() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    // Create a token first
+    let token_data = TokenDataToCreateTrait::new(12, 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(token_data);
+
+    // Register a simulation
+    let expiration_timestamp: u64 = 1735689600; // 2025-01-01 00:00:00 UTC
+    let simulation_data = SimulationDataToCreateTrait::new(789, token_id, expiration_timestamp);
+    dispatcher.register_simulation(simulation_data);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Mock time to exactly the expiration timestamp
+    start_cheat_block_timestamp_global(expiration_timestamp);
+
+    // Check that simulation is considered expired (current_time >= expiration_timestamp)
+    let is_expired = dispatcher.is_simulation_expired(789);
+    assert(is_expired, 'Expired at exact time');
+
+    stop_cheat_block_timestamp_global();
 }
