@@ -82,6 +82,8 @@ pub mod kliver_registry {
         simulation_authors: Map<felt252, ContractAddress>, // simulation_id -> author
         simulation_characters: Map<felt252, felt252>, // simulation_id -> character_id
         simulation_scenarios: Map<felt252, felt252>, // simulation_id -> scenario_id
+        simulation_token_ids: Map<felt252, u256>, // simulation_id -> token_id
+        simulation_expirations: Map<felt252, u64>, // simulation_id -> expiration_timestamp
         // Sessions:
         session_roots: Map<felt252, felt252>, // session_id -> root_hash
         session_simulations: Map<felt252, felt252>, // session_id -> simulation_id
@@ -398,6 +400,8 @@ pub mod kliver_registry {
             self.simulation_authors.write(metadata.simulation_id, metadata.author);
             self.simulation_characters.write(metadata.simulation_id, metadata.character_id);
             self.simulation_scenarios.write(metadata.simulation_id, metadata.scenario_id);
+            self.simulation_token_ids.write(metadata.simulation_id, metadata.token_id);
+            self.simulation_expirations.write(metadata.simulation_id, metadata.expiration_timestamp);
 
             // Emit event
             self
@@ -490,8 +494,10 @@ pub mod kliver_registry {
             let author = self.simulation_authors.read(simulation_id);
             let character_id = self.simulation_characters.read(simulation_id);
             let scenario_id = self.simulation_scenarios.read(simulation_id);
+            let token_id = self.simulation_token_ids.read(simulation_id);
+            let expiration_timestamp = self.simulation_expirations.read(simulation_id);
 
-            SimulationMetadata { simulation_id, author, character_id, scenario_id, simulation_hash }
+            SimulationMetadata { simulation_id, author, character_id, scenario_id, simulation_hash, token_id, expiration_timestamp }
         }
 
         fn simulation_exists(self: @ContractState, simulation_id: felt252) -> bool {
@@ -657,3 +663,4 @@ pub mod kliver_registry {
         }
     }
 }
+

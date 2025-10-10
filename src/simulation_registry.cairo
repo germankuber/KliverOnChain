@@ -9,6 +9,8 @@ pub struct SimulationMetadata {
     pub character_id: felt252,
     pub scenario_id: felt252,
     pub simulation_hash: felt252,
+    pub token_id: u256,
+    pub expiration_timestamp: u64,
 }
 
 
