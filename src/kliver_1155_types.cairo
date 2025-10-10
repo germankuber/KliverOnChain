@@ -146,3 +146,19 @@ pub struct ClaimableAmountResult {
     pub wallet: ContractAddress,
     pub amount: u256,
 }
+
+#[derive(Drop, Serde)]
+pub struct SimulationClaimData {
+    pub simulation_id: felt252,
+    pub claimable_amount: u256,
+}
+
+#[derive(Drop, Serde)]
+pub struct WalletTokenSummary {
+    pub token_id: u256,
+    pub wallet: ContractAddress,
+    pub current_balance: u256,
+    pub token_info: TokenInfo,
+    pub total_claimable: u256,
+    pub simulations_data: Array<SimulationClaimData>,
+}

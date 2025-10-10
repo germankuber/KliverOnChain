@@ -2,7 +2,7 @@ use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_c
 use starknet::ContractAddress;
 
 // Import structs from the types file
-use kliver_on_chain::kliver_1155_types::{TokenInfo, SessionPayment, HintPayment, ClaimableAmountResult};
+use kliver_on_chain::kliver_1155_types::{TokenInfo, SessionPayment, HintPayment, ClaimableAmountResult, WalletTokenSummary, SimulationClaimData};
 
 // Mock ERC1155 Receiver contract for testing using OpenZeppelin's component
 #[starknet::contract]
@@ -56,6 +56,7 @@ trait IKliverRC1155<TContractState> {
     fn claim(ref self: TContractState, token_id: u256, simulation_id: felt252);
     fn get_claimable_amount(self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> u256;
     fn get_claimable_amounts_batch(self: @TContractState, token_id: u256, simulation_ids: Span<felt252>, wallets: Span<ContractAddress>) -> Array<ClaimableAmountResult>;
+    fn get_wallet_token_summary(self: @TContractState, token_id: u256, wallet: ContractAddress, simulation_ids: Span<felt252>) -> WalletTokenSummary;
     fn pay_for_session(ref self: TContractState, simulation_id: felt252, session_id: felt252, amount: u256);
     fn is_session_paid(self: @TContractState, session_id: felt252) -> bool;
     fn get_session_payment(self: @TContractState, session_id: felt252) -> SessionPayment;
@@ -1483,6 +1484,247 @@ fn test_claim_second_time_only_special_token_fails() {
     dispatcher.claim(token_id, 123); // Should panic
     
     stop_cheat_caller_address(dispatcher.contract_address);
+    stop_cheat_block_timestamp_global();
+}
+
+// ==================== WALLET TOKEN SUMMARY TESTS ====================
+
+#[test]
+fn test_get_wallet_token_summary_debug() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500);
+
+    // Register simulation
+    dispatcher.register_simulation(123, token_id, 1735689600);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward 2 days
+    start_cheat_block_timestamp_global(86400 * 2 + 13 * 3600);
+
+    // First check with individual method
+    let individual_amount = dispatcher.get_claimable_amount(token_id, 123, wallet);
+
+    // Query summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(123);
+    
+    let summary = dispatcher.get_wallet_token_summary(token_id, wallet, simulation_ids.span());
+
+    // Verify they match
+    assert(summary.simulations_data.len() == 1, 'Should have 1 simulation');
+    let sim_data = summary.simulations_data.at(0);
+    assert(sim_data.claimable_amount == @individual_amount, 'Should match individual');
+    assert(summary.total_claimable == individual_amount, 'Total should match');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_wallet_token_summary_basic() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500); // 12h, 1000/day, 500 special
+
+    // Register simulation
+    dispatcher.register_simulation(123, token_id, 1735689600);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward 2 days
+    start_cheat_block_timestamp_global(86400 * 2 + 13 * 3600);
+
+    // Get expected amount
+    let expected_amount = dispatcher.get_claimable_amount(token_id, 123, wallet);
+
+    // Query summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(123);
+    
+    let summary = dispatcher.get_wallet_token_summary(token_id, wallet, simulation_ids.span());
+
+    // Verify summary
+    assert(summary.token_id == token_id, 'Wrong token_id');
+    assert(summary.wallet == wallet, 'Wrong wallet');
+    assert(summary.current_balance == 0, 'Balance should be 0');
+    assert(summary.token_info.release_hour == 12, 'Wrong release_hour');
+    assert(summary.token_info.release_amount == 1000, 'Wrong release_amount');
+    assert(summary.token_info.special_release == 500, 'Wrong special_release');
+    assert(summary.total_claimable == expected_amount, 'Wrong total_claimable');
+    assert(summary.simulations_data.len() == 1, 'Should have 1 simulation');
+    
+    let sim_data = summary.simulations_data.at(0);
+    assert(*sim_data.simulation_id == 123, 'Wrong simulation_id');
+    assert(sim_data.claimable_amount == @expected_amount, 'Wrong claimable_amount');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_wallet_token_summary_multiple_simulations() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(14, 1000, 300); // 14h, 1000/day, 300 special
+
+    // Register 3 simulations
+    dispatcher.register_simulation(111, token_id, 1735689600);
+    dispatcher.register_simulation(222, token_id, 1735689600);
+    dispatcher.register_simulation(333, token_id, 1735689600);
+
+    // Add to whitelist for all 3
+    dispatcher.add_to_whitelist(token_id, wallet, 111);
+    dispatcher.add_to_whitelist(token_id, wallet, 222);
+    dispatcher.add_to_whitelist(token_id, wallet, 333);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward 3 days
+    start_cheat_block_timestamp_global(86400 * 3 + 15 * 3600);
+
+    // Get expected amounts
+    let amount1 = dispatcher.get_claimable_amount(token_id, 111, wallet);
+    let amount2 = dispatcher.get_claimable_amount(token_id, 222, wallet);
+    let amount3 = dispatcher.get_claimable_amount(token_id, 333, wallet);
+    let expected_total = amount1 + amount2 + amount3;
+
+    // Query summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(111);
+    simulation_ids.append(222);
+    simulation_ids.append(333);
+    
+    let summary = dispatcher.get_wallet_token_summary(token_id, wallet, simulation_ids.span());
+
+    assert(summary.total_claimable == expected_total, 'Wrong total_claimable');
+    assert(summary.simulations_data.len() == 3, 'Should have 3 simulations');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_wallet_token_summary_filters_expired() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500);
+
+    // Register 2 simulations - one expires soon
+    let current_time = starknet::get_block_timestamp();
+    dispatcher.register_simulation(111, token_id, current_time + 86400); // Expires in 1 day
+    dispatcher.register_simulation(222, token_id, current_time + 86400 * 10); // Expires in 10 days
+
+    dispatcher.add_to_whitelist(token_id, wallet, 111);
+    dispatcher.add_to_whitelist(token_id, wallet, 222);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward 2 days (111 is now expired)
+    start_cheat_block_timestamp_global(current_time + 86400 * 2);
+
+    // Query summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(111); // Expired
+    simulation_ids.append(222); // Active
+    
+    let summary = dispatcher.get_wallet_token_summary(token_id, wallet, simulation_ids.span());
+
+    // Should only include simulation 222
+    assert(summary.simulations_data.len() == 1, 'Should have 1 simulation');
+    let sim_data = summary.simulations_data.at(0);
+    assert(*sim_data.simulation_id == 222, 'Should be sim 222');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_wallet_token_summary_filters_not_whitelisted() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500);
+
+    // Register 3 simulations but only whitelist for 2
+    dispatcher.register_simulation(111, token_id, 1735689600);
+    dispatcher.register_simulation(222, token_id, 1735689600);
+    dispatcher.register_simulation(333, token_id, 1735689600);
+
+    dispatcher.add_to_whitelist(token_id, wallet, 111);
+    // NOT whitelisted for 222
+    dispatcher.add_to_whitelist(token_id, wallet, 333);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    start_cheat_block_timestamp_global(86400 * 2);
+
+    // Query summary with all 3
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(111);
+    simulation_ids.append(222); // Not whitelisted
+    simulation_ids.append(333);
+    
+    let summary = dispatcher.get_wallet_token_summary(token_id, wallet, simulation_ids.span());
+
+    // Should only include 111 and 333
+    assert(summary.simulations_data.len() == 2, 'Should have 2 simulations');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_wallet_token_summary_with_balance() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet = deploy_mock_receiver();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500);
+
+    // Register simulation and whitelist
+    dispatcher.register_simulation(123, token_id, 1735689600);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward and claim
+    start_cheat_block_timestamp_global(86400 * 2 + 13 * 3600);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123); // Claims 2500
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward more
+    start_cheat_block_timestamp_global(86400 * 5 + 13 * 3600);
+
+    // Get expected values
+    let expected_balance = dispatcher.balance_of(wallet, token_id);
+    let expected_claimable = dispatcher.get_claimable_amount(token_id, 123, wallet);
+
+    // Query summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(123);
+    
+    let summary = dispatcher.get_wallet_token_summary(token_id, wallet, simulation_ids.span());
+
+    // Should have balance from previous claim
+    assert(summary.current_balance == expected_balance, 'Wrong balance');
+    // Should have new days claimable
+    assert(summary.total_claimable == expected_claimable, 'Wrong total_claimable');
+
     stop_cheat_block_timestamp_global();
 }
 
