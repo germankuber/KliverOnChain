@@ -9,7 +9,7 @@ import click
 from typing import Optional, List, Dict, Any
 
 from kliver_deploy import ConfigManager, ContractDeployer
-from kliver_deploy.utils import Colors, print_deployment_summary, print_deployment_json
+from kliver_deploy.utils import Colors, print_deployment_summary, print_deployment_json, format_address
 
 
 @click.command()
@@ -106,9 +106,12 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         if success and deployments:
             if output_json:
                 print_deployment_json(deployments)
+            elif contract == 'all':
+                # Comprehensive summary already printed in deploy_all_contracts
+                pass
             else:
-                print_deployment_summary(deployments, env_config.network)
-                click.echo(f"\n{Colors.SUCCESS}✅ Deployment completed successfully!{Colors.RESET}")
+                # Print comprehensive summary for single contract deployments
+                print_comprehensive_summary(deployments, env_config.network)
             exit(0)
         else:
             click.echo(f"\n{Colors.ERROR}❌ Deployment failed. Check the logs above for details.{Colors.RESET}")
@@ -125,9 +128,72 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         exit(1)
 
 
+def print_comprehensive_summary(deployments: List[Dict[str, Any]], network: str):
+    """Print a comprehensive professional deployment summary."""
+    print(f"\n{Colors.BOLD}{'='*100}{Colors.RESET}")
+    print(f"{Colors.BOLD}{Colors.CYAN}🎯 COMPLETE DEPLOYMENT SUMMARY - {network.upper()}{Colors.RESET}")
+    print(f"{Colors.BOLD}{'='*100}{Colors.RESET}")
+
+    for i, deployment in enumerate(deployments, 1):
+        print(f"\n{Colors.BOLD}{Colors.BLUE}Contract {i}: {deployment['contract_name'].upper()}{Colors.RESET}")
+        print(f"{Colors.BOLD}{'-'*50}{Colors.RESET}")
+
+        # Basic contract info
+        print(f"📋 {Colors.BOLD}Contract Details:{Colors.RESET}")
+        print(f"   Name: {deployment['contract_name']}")
+        print(f"   Type: {deployment['contract_type']}")
+        print(f"   Address: {Colors.SUCCESS}{deployment['contract_address']}{Colors.RESET}")
+        print(f"   Class Hash: {deployment['class_hash']}")
+        print(f"   Owner: {format_address(deployment['owner'])}")
+
+        # Deployment transaction
+        if deployment.get('deployment_tx_hash'):
+            print(f"\n🚀 {Colors.BOLD}Deployment Transaction:{Colors.RESET}")
+            print(f"   Transaction Hash: {Colors.INFO}{deployment['deployment_tx_hash']}{Colors.RESET}")
+            print(f"   Status: {Colors.SUCCESS}✓ Confirmed{Colors.RESET}")
+
+        # Constructor parameters
+        if deployment.get('constructor_params'):
+            print(f"\n⚙️  {Colors.BOLD}Constructor Parameters:{Colors.RESET}")
+            for param, value in deployment['constructor_params'].items():
+                if isinstance(value, str) and len(value) > 40:
+                    print(f"   {param}: {Colors.CYAN}{value[:37]}...{Colors.RESET}")
+                elif param.endswith('_address'):
+                    print(f"   {param}: {Colors.INFO}{value}{Colors.RESET}")
+                else:
+                    print(f"   {param}: {value}")
+
+        # Post-deployment operations
+        if deployment.get('post_deployment_ops'):
+            print(f"\n🔧 {Colors.BOLD}Post-Deployment Operations:{Colors.RESET}")
+            for j, op in enumerate(deployment['post_deployment_ops'], 1):
+                print(f"   {j}. {Colors.BOLD}{op['method']}(){Colors.RESET}")
+                if op.get('tx_hash'):
+                    print(f"      Transaction: {Colors.INFO}{op['tx_hash']}{Colors.RESET}")
+                if op.get('params'):
+                    print(f"      Parameters: {op['params']}")
+                if op.get('validation'):
+                    print(f"      Validation: {Colors.SUCCESS}{op['validation']}{Colors.RESET}")
+
+        # Dependencies
+        deps = []
+        for key, value in deployment.items():
+            if key.endswith('_address') and key != 'contract_address':
+                deps.append(f"{key.replace('_address', '').title()}: {value}")
+
+        if deps:
+            print(f"\n🔗 {Colors.BOLD}Dependencies:{Colors.RESET}")
+            for dep in deps:
+                print(f"   {dep}")
+
+    print(f"\n{Colors.BOLD}{'='*100}{Colors.RESET}")
+    print(f"{Colors.SUCCESS}✅ ALL CONTRACTS DEPLOYED AND CONFIGURED SUCCESSFULLY!{Colors.RESET}")
+    print(f"{Colors.BOLD}{'='*100}{Colors.RESET}")
+
+
 def deploy_all_contracts(config_manager: ConfigManager, environment: str,
-                        owner: Optional[str], verifier_address: Optional[str],
-                        deployments: List[Dict[str, Any]], no_compile: bool = False) -> bool:
+                         owner: Optional[str], verifier_address: Optional[str],
+                         deployments: List[Dict[str, Any]], no_compile: bool = False) -> bool:
     """Deploy all contracts in the correct order."""
     click.echo(f"\n{Colors.BOLD}🚀 COMPLETE DEPLOYMENT MODE{Colors.RESET}")
     click.echo(f"{Colors.INFO}This will deploy: NFT → Token1155 → Registry{Colors.RESET}\n")
@@ -203,7 +269,14 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
     )
 
     if set_registry_result:
+        # Add post-deployment operation to the token deployment details
+        if token_result and 'post_deployment_ops' not in token_result:
+            token_result['post_deployment_ops'] = []
+        if token_result:
+            token_result['post_deployment_ops'].append(set_registry_result)
+
         click.echo(f"\n{Colors.SUCCESS}✓ Token1155 configured with Registry address{Colors.RESET}\n")
+
         return True
     else:
         click.echo(f"\n{Colors.ERROR}✗ Failed to configure Token1155 with Registry address{Colors.RESET}")

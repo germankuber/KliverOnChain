@@ -20,6 +20,7 @@ class Colors:
     ERROR = Fore.RED
     WARNING = Fore.YELLOW
     INFO = Fore.BLUE
+    CYAN = Fore.CYAN
     BOLD = Style.BRIGHT
     RESET = Style.RESET_ALL
 
