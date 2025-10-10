@@ -2,7 +2,7 @@ use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_c
 use starknet::ContractAddress;
 
 // Import structs from the types file
-use kliver_on_chain::kliver_1155_types::{TokenInfo, SessionPayment, HintPayment};
+use kliver_on_chain::kliver_1155_types::{TokenInfo, SessionPayment, HintPayment, ClaimableAmountResult};
 
 // Mock ERC1155 Receiver contract for testing using OpenZeppelin's component
 #[starknet::contract]
@@ -55,6 +55,7 @@ trait IKliverRC1155<TContractState> {
     fn is_whitelisted(self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> bool;
     fn claim(ref self: TContractState, token_id: u256, simulation_id: felt252);
     fn get_claimable_amount(self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> u256;
+    fn get_claimable_amounts_batch(self: @TContractState, token_id: u256, simulation_ids: Span<felt252>, wallets: Span<ContractAddress>) -> Array<ClaimableAmountResult>;
     fn pay_for_session(ref self: TContractState, simulation_id: felt252, session_id: felt252, amount: u256);
     fn is_session_paid(self: @TContractState, session_id: felt252) -> bool;
     fn get_session_payment(self: @TContractState, session_id: felt252) -> SessionPayment;
@@ -1482,5 +1483,376 @@ fn test_claim_second_time_only_special_token_fails() {
     dispatcher.claim(token_id, 123); // Should panic
     
     stop_cheat_caller_address(dispatcher.contract_address);
+    stop_cheat_block_timestamp_global();
+}
+
+// ==================== BATCH GET CLAIMABLE AMOUNTS TESTS ====================
+
+#[test]
+fn test_get_claimable_amounts_batch_debug() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500); // 12h, 1000/day, 500 special
+
+    // Register simulation
+    dispatcher.register_simulation(123, token_id, 1735689600);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward 2 days
+    start_cheat_block_timestamp_global(86400 * 2 + 13 * 3600); // 2 days + 13h
+
+    // First test individual method
+    let individual_amount = dispatcher.get_claimable_amount(token_id, 123, wallet);
+    
+    // Then test batch method
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(123);
+    
+    let mut wallets = ArrayTrait::new();
+    wallets.append(wallet);
+
+    let results = dispatcher.get_claimable_amounts_batch(token_id, simulation_ids.span(), wallets.span());
+
+    assert(results.len() == 1, 'Should have 1 result');
+    
+    let result = results.at(0);
+    assert(*result.simulation_id == 123, 'Wrong sim_id');
+    assert(*result.wallet == wallet, 'Wrong wallet');
+    assert(*result.amount == individual_amount, 'Amount should match individual');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_claimable_amounts_batch_single_simulation_multiple_wallets() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    let wallet1: ContractAddress = 'wallet1'.try_into().unwrap();
+    let wallet2: ContractAddress = 'wallet2'.try_into().unwrap();
+    let wallet3: ContractAddress = 'wallet3'.try_into().unwrap();
+
+    // Create token with special release
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500); // 12h, 1000/day, 500 special
+
+    // Register simulation
+    dispatcher.register_simulation(123, token_id, 1735689600);
+
+    // Add all wallets to whitelist
+    dispatcher.add_to_whitelist(token_id, wallet1, 123);
+    dispatcher.add_to_whitelist(token_id, wallet2, 123);
+    dispatcher.add_to_whitelist(token_id, wallet3, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward 2 days
+    start_cheat_block_timestamp_global(86400 * 2 + 13 * 3600); // 2 days + 13h
+
+    // First check individual amounts to see what they should be
+    let individual1 = dispatcher.get_claimable_amount(token_id, 123, wallet1);
+    let individual2 = dispatcher.get_claimable_amount(token_id, 123, wallet2);
+    let individual3 = dispatcher.get_claimable_amount(token_id, 123, wallet3);
+
+    // Prepare batch query
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(123);
+    
+    let mut wallets = ArrayTrait::new();
+    wallets.append(wallet1);
+    wallets.append(wallet2);
+    wallets.append(wallet3);
+
+    // Execute batch query
+    let results = dispatcher.get_claimable_amounts_batch(token_id, simulation_ids.span(), wallets.span());
+
+    // Verify results
+    assert(results.len() == 3, 'Should have 3 results');
+    
+    // All should match individual calculations
+    let result1 = results.at(0);
+    assert(*result1.simulation_id == 123, 'Result1: wrong sim_id');
+    assert(*result1.wallet == wallet1, 'Result1: wrong wallet');
+    assert(result1.amount == @individual1, 'Result1: should match');
+
+    let result2 = results.at(1);
+    assert(*result2.simulation_id == 123, 'Result2: wrong sim_id');
+    assert(*result2.wallet == wallet2, 'Result2: wrong wallet');
+    assert(result2.amount == @individual2, 'Result2: should match');
+
+    let result3 = results.at(2);
+    assert(*result3.simulation_id == 123, 'Result3: wrong sim_id');
+    assert(*result3.wallet == wallet3, 'Result3: wrong wallet');
+    assert(result3.amount == @individual3, 'Result3: should match');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_claimable_amounts_batch_multiple_simulations_single_wallet() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(14, 1000, 300); // 14h, 1000/day, 300 special
+
+    // Register multiple simulations
+    dispatcher.register_simulation(111, token_id, 1735689600);
+    dispatcher.register_simulation(222, token_id, 1735689600);
+    dispatcher.register_simulation(333, token_id, 1735689600);
+
+    // Add wallet to all simulations
+    dispatcher.add_to_whitelist(token_id, wallet, 111);
+    dispatcher.add_to_whitelist(token_id, wallet, 222);
+    dispatcher.add_to_whitelist(token_id, wallet, 333);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward 3 days
+    start_cheat_block_timestamp_global(86400 * 3 + 15 * 3600); // 3 days + 15h
+
+    // Check individual amounts first
+    let individual1 = dispatcher.get_claimable_amount(token_id, 111, wallet);
+    let individual2 = dispatcher.get_claimable_amount(token_id, 222, wallet);
+    let individual3 = dispatcher.get_claimable_amount(token_id, 333, wallet);
+
+    // Prepare batch query
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(111);
+    simulation_ids.append(222);
+    simulation_ids.append(333);
+    
+    let mut wallets = ArrayTrait::new();
+    wallets.append(wallet);
+
+    // Execute batch query
+    let results = dispatcher.get_claimable_amounts_batch(token_id, simulation_ids.span(), wallets.span());
+
+    // Verify results
+    assert(results.len() == 3, 'Should have 3 results');
+    
+    // All should match individual calculations
+    let result1 = results.at(0);
+    assert(*result1.simulation_id == 111, 'Result1: wrong sim_id');
+    assert(*result1.wallet == wallet, 'Result1: wrong wallet');
+    assert(result1.amount == @individual1, 'Result1: should match');
+
+    let result2 = results.at(1);
+    assert(*result2.simulation_id == 222, 'Result2: wrong sim_id');
+    assert(*result2.wallet == wallet, 'Result2: wrong wallet');
+    assert(result2.amount == @individual2, 'Result2: should match');
+
+    let result3 = results.at(2);
+    assert(*result3.simulation_id == 333, 'Result3: wrong sim_id');
+    assert(*result3.wallet == wallet, 'Result3: wrong wallet');
+    assert(result3.amount == @individual3, 'Result3: should match');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_claimable_amounts_batch_multiple_simulations_multiple_wallets() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    let wallet1: ContractAddress = 'wallet1'.try_into().unwrap();
+    let wallet2: ContractAddress = 'wallet2'.try_into().unwrap();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(10, 500, 200); // 10h, 500/day, 200 special
+
+    // Register simulations
+    dispatcher.register_simulation(100, token_id, 1735689600);
+    dispatcher.register_simulation(200, token_id, 1735689600);
+
+    // Add wallets to simulations
+    dispatcher.add_to_whitelist(token_id, wallet1, 100);
+    dispatcher.add_to_whitelist(token_id, wallet1, 200);
+    dispatcher.add_to_whitelist(token_id, wallet2, 100);
+    dispatcher.add_to_whitelist(token_id, wallet2, 200);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward 1 day
+    start_cheat_block_timestamp_global(86400 + 11 * 3600); // 1 day + 11h
+
+    // Check individual amounts first
+    let individual_sim100_w1 = dispatcher.get_claimable_amount(token_id, 100, wallet1);
+    let individual_sim100_w2 = dispatcher.get_claimable_amount(token_id, 100, wallet2);
+    let individual_sim200_w1 = dispatcher.get_claimable_amount(token_id, 200, wallet1);
+    let individual_sim200_w2 = dispatcher.get_claimable_amount(token_id, 200, wallet2);
+
+    // Prepare batch query
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(100);
+    simulation_ids.append(200);
+    
+    let mut wallets = ArrayTrait::new();
+    wallets.append(wallet1);
+    wallets.append(wallet2);
+
+    // Execute batch query
+    let results = dispatcher.get_claimable_amounts_batch(token_id, simulation_ids.span(), wallets.span());
+
+    // Verify results - should have 2 simulations × 2 wallets = 4 results
+    assert(results.len() == 4, 'Should have 4 results');
+    
+    // Result 0: sim 100, wallet1
+    let result0 = results.at(0);
+    assert(*result0.simulation_id == 100, 'Result0: wrong sim_id');
+    assert(*result0.wallet == wallet1, 'Result0: wrong wallet');
+    assert(result0.amount == @individual_sim100_w1, 'Result0: should match');
+
+    // Result 1: sim 100, wallet2
+    let result1 = results.at(1);
+    assert(*result1.simulation_id == 100, 'Result1: wrong sim_id');
+    assert(*result1.wallet == wallet2, 'Result1: wrong wallet');
+    assert(result1.amount == @individual_sim100_w2, 'Result1: should match');
+
+    // Result 2: sim 200, wallet1
+    let result2 = results.at(2);
+    assert(*result2.simulation_id == 200, 'Result2: wrong sim_id');
+    assert(*result2.wallet == wallet1, 'Result2: wrong wallet');
+    assert(result2.amount == @individual_sim200_w1, 'Result2: should match');
+
+    // Result 3: sim 200, wallet2
+    let result3 = results.at(3);
+    assert(*result3.simulation_id == 200, 'Result3: wrong sim_id');
+    assert(*result3.wallet == wallet2, 'Result3: wrong wallet');
+    assert(result3.amount == @individual_sim200_w2, 'Result3: should match');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_claimable_amounts_batch_after_some_claims() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    let wallet1 = deploy_mock_receiver();
+    let wallet2 = deploy_mock_receiver();
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500); // 12h, 1000/day, 500 special
+
+    // Register simulation
+    dispatcher.register_simulation(123, token_id, 1735689600);
+
+    // Add wallets
+    dispatcher.add_to_whitelist(token_id, wallet1, 123);
+    dispatcher.add_to_whitelist(token_id, wallet2, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward 2 days
+    start_cheat_block_timestamp_global(86400 * 2 + 13 * 3600); // 2 days + 13h
+
+    // Wallet1 claims
+    start_cheat_caller_address(dispatcher.contract_address, wallet1);
+    dispatcher.claim(token_id, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward to 5 days total
+    start_cheat_block_timestamp_global(86400 * 5 + 13 * 3600); // 5 days + 13h
+
+    // Check individual amounts
+    let individual1 = dispatcher.get_claimable_amount(token_id, 123, wallet1);
+    let individual2 = dispatcher.get_claimable_amount(token_id, 123, wallet2);
+
+    // Now check batch
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(123);
+    
+    let mut wallets = ArrayTrait::new();
+    wallets.append(wallet1);
+    wallets.append(wallet2);
+
+    let results = dispatcher.get_claimable_amounts_batch(token_id, simulation_ids.span(), wallets.span());
+
+    assert(results.len() == 2, 'Should have 2 results');
+    
+    // Wallet1: Already claimed at day 2, now at day 5
+    let result1 = results.at(0);
+    assert(*result1.simulation_id == 123, 'Result1: wrong sim_id');
+    assert(*result1.wallet == wallet1, 'Result1: wrong wallet');
+    assert(result1.amount == @individual1, 'Result1: should match');
+
+    // Wallet2: Never claimed
+    let result2 = results.at(1);
+    assert(*result2.simulation_id == 123, 'Result2: wrong sim_id');
+    assert(*result2.wallet == wallet2, 'Result2: wrong wallet');
+    assert(result2.amount == @individual2, 'Result2: should match');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_get_claimable_amounts_batch_empty_arrays() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Query with empty arrays
+    let simulation_ids = ArrayTrait::new();
+    let wallets = ArrayTrait::new();
+
+    let results = dispatcher.get_claimable_amounts_batch(token_id, simulation_ids.span(), wallets.span());
+
+    // Should return empty array
+    assert(results.len() == 0, 'Should have 0 results');
+}
+
+#[test]
+fn test_get_claimable_amounts_batch_before_release_hour() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    
+    let wallet1: ContractAddress = 'wallet1'.try_into().unwrap();
+    let wallet2: ContractAddress = 'wallet2'.try_into().unwrap();
+
+    // Create token with release at 14h
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(14, 1000, 500); // 14h, 1000/day, 500 special
+
+    // Register simulation at day 0, 00:00
+    dispatcher.register_simulation(123, token_id, 1735689600);
+
+    // Add wallets
+    dispatcher.add_to_whitelist(token_id, wallet1, 123);
+    dispatcher.add_to_whitelist(token_id, wallet2, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Set time to day 0, 10:00 (before release_hour 14:00)
+    start_cheat_block_timestamp_global(10 * 3600); // 10 hours
+
+    // Prepare batch query
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(123);
+    
+    let mut wallets = ArrayTrait::new();
+    wallets.append(wallet1);
+    wallets.append(wallet2);
+
+    // Execute batch query
+    let results = dispatcher.get_claimable_amounts_batch(token_id, simulation_ids.span(), wallets.span());
+
+    // Verify results - should only have special_release
+    assert(results.len() == 2, 'Should have 2 results');
+    
+    let result1 = results.at(0);
+    assert(*result1.amount == 500, 'Result1: should be 500');
+
+    let result2 = results.at(1);
+    assert(*result2.amount == 500, 'Result2: should be 500');
+
     stop_cheat_block_timestamp_global();
 }

@@ -139,3 +139,10 @@ pub struct HintPaid {
     pub amount: u256,
     pub token_id: u256,
 }
+
+#[derive(Drop, Serde)]
+pub struct ClaimableAmountResult {
+    pub simulation_id: felt252,
+    pub wallet: ContractAddress,
+    pub amount: u256,
+}

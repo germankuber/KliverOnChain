@@ -1,6 +1,7 @@
 use super::kliver_1155_types::{
-    AddedToWhitelist, HintPaid, HintPayment, RemovedFromWhitelist, SessionPaid, SessionPayment,
-    Simulation, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo, TokensClaimed,
+    AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RemovedFromWhitelist,
+    SessionPaid, SessionPayment, Simulation, SimulationRegistered, SimulationTrait, TokenCreated,
+    TokenInfo, TokensClaimed,
 };
 
 #[starknet::contract]
@@ -12,8 +13,9 @@ mod KliverRC1155 {
     };
     use starknet::{ContractAddress, get_caller_address};
     use super::{
-        AddedToWhitelist, HintPaid, HintPayment, RemovedFromWhitelist, SessionPaid, SessionPayment,
-        Simulation, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo, TokensClaimed,
+        AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RemovedFromWhitelist,
+        SessionPaid, SessionPayment, Simulation, SimulationRegistered, SimulationTrait,
+        TokenCreated, TokenInfo, TokensClaimed,
     };
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
@@ -365,6 +367,87 @@ mod KliverRC1155 {
                 0
             }
         }
+    }
+
+    #[external(v0)]
+    fn get_claimable_amounts_batch(
+        self: @ContractState,
+        token_id: u256,
+        simulation_ids: Span<felt252>,
+        wallets: Span<ContractAddress>,
+    ) -> Array<ClaimableAmountResult> {
+        let mut results: Array<ClaimableAmountResult> = ArrayTrait::new();
+        let token_info = self.token_info.entry(token_id).read();
+        let current_time = starknet::get_block_timestamp();
+
+        // Iterate through all simulation_ids
+        let mut i: u32 = 0;
+        loop {
+            if i >= simulation_ids.len() {
+                break;
+            }
+
+            let simulation_id = *simulation_ids.at(i);
+            let simulation = self.simulations.entry(simulation_id).read();
+
+            // Iterate through all wallets for this simulation
+            let mut j: u32 = 0;
+            loop {
+                if j >= wallets.len() {
+                    break;
+                }
+
+                let wallet = *wallets.at(j);
+                let last_claim = self
+                    .last_claim_timestamp
+                    .entry((token_id, simulation_id, wallet))
+                    .read();
+
+                let amount = if last_claim == 0 {
+                    // FIRST CLAIM: special_release + normal days
+                    let special_amount = token_info.special_release;
+
+                    let normal_days = self
+                        .calculate_claimable_days(
+                            current_time, simulation.creation_timestamp, token_info.release_hour,
+                        );
+                    let normal_amount = token_info.release_amount * normal_days;
+
+                    special_amount + normal_amount
+                } else {
+                    // Total claimable days until now
+                    let total_claimable_days = self
+                        .calculate_claimable_days(
+                            current_time, simulation.creation_timestamp, token_info.release_hour,
+                        );
+
+                    // Days already claimed
+                    let days_already_claimed = self
+                        .calculate_claimable_days(
+                            last_claim, simulation.creation_timestamp, token_info.release_hour,
+                        );
+
+                    // Calculate only new days (return 0 if nothing new)
+                    if total_claimable_days > days_already_claimed {
+                        let new_days = total_claimable_days - days_already_claimed;
+                        token_info.release_amount * new_days
+                    } else {
+                        0
+                    }
+                };
+
+                results
+                    .append(
+                        ClaimableAmountResult { simulation_id, wallet, amount },
+                    );
+
+                j += 1;
+            };
+
+            i += 1;
+        };
+
+        results
     }
 
     #[external(v0)]
