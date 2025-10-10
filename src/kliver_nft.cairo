@@ -147,7 +147,7 @@ pub mod KliverNFT {
             to: ContractAddress,
             token_id: u256,
             auth: ContractAddress,
-        ) {// No additional logic needed after update
+        ) { // No additional logic needed after update
         }
     }
 

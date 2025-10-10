@@ -2,7 +2,7 @@ use super::kliver_1155_types::{
     AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
     RemovedFromWhitelist, SessionPaid, SessionPayment, Simulation, SimulationClaimData,
     SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo,
-    TokensClaimed, WalletTokenSummary, WalletMultiTokenSummary,
+    TokensClaimed, WalletMultiTokenSummary, WalletTokenSummary,
 };
 
 #[starknet::contract]
@@ -16,8 +16,8 @@ mod KliverRC1155 {
     use super::{
         AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
         RemovedFromWhitelist, SessionPaid, SessionPayment, Simulation, SimulationClaimData,
-        SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated,
-        TokenInfo, TokensClaimed, WalletTokenSummary, WalletMultiTokenSummary,
+        SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo,
+        TokensClaimed, WalletMultiTokenSummary, WalletTokenSummary,
     };
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
@@ -86,16 +86,16 @@ mod KliverRC1155 {
     fn set_registry_address(ref self: ContractState, new_registry_address: ContractAddress) {
         // Solo el owner puede setear/actualizar la dirección del registry
         self._assert_only_owner();
-        
+
         // Validar que la nueva dirección no sea zero
         assert(new_registry_address != 0.try_into().unwrap(), 'Registry cannot be zero');
-        
+
         // Guardar la dirección anterior para el evento
         let old_address = self.registry_address.read();
-        
+
         // Actualizar la dirección del registry
         self.registry_address.write(new_registry_address);
-        
+
         // Emitir evento
         self.emit(RegistryAddressUpdated { old_address, new_address: new_registry_address });
     }
@@ -106,25 +106,20 @@ mod KliverRC1155 {
     }
 
     #[external(v0)]
-    fn create_token(ref self: ContractState, release_hour: u64, release_amount: u256, special_release: u256) -> u256 {
+    fn create_token(
+        ref self: ContractState, release_hour: u64, release_amount: u256, special_release: u256,
+    ) -> u256 {
         self._assert_only_owner();
 
         // Validate release_hour is valid (0-23)
         assert(release_hour < 24, 'Invalid release hour');
 
         // Validate at least one release mechanism exists
-        assert(
-            release_amount > 0 || special_release > 0,
-            'No release amount set',
-        );
+        assert(release_amount > 0 || special_release > 0, 'No release amount set');
 
         let token_id = self.next_token_id.read();
 
-        let token_info = TokenInfo {
-            release_hour,
-            release_amount,
-            special_release,
-        };
+        let token_info = TokenInfo { release_hour, release_amount, special_release };
 
         self.token_info.entry(token_id).write(token_info);
         self.next_token_id.write(token_id + 1);
@@ -210,10 +205,7 @@ mod KliverRC1155 {
         self
             .emit(
                 SimulationRegistered {
-                    simulation_id,
-                    token_id,
-                    creator: caller,
-                    expiration_timestamp,
+                    simulation_id, token_id, creator: caller, expiration_timestamp,
                 },
             );
 
@@ -445,21 +437,13 @@ mod KliverRC1155 {
 
         // Iterate through all simulation_ids
         let mut i: u32 = 0;
-        loop {
-            if i >= simulation_ids.len() {
-                break;
-            }
-
+        while i < simulation_ids.len() {
             let simulation_id = *simulation_ids.at(i);
             let simulation = self.simulations.entry(simulation_id).read();
 
             // Iterate through all wallets for this simulation
             let mut j: u32 = 0;
-            loop {
-                if j >= wallets.len() {
-                    break;
-                }
-
+            while j < wallets.len() {
                 let wallet = *wallets.at(j);
                 let last_claim = self
                     .last_claim_timestamp
@@ -499,16 +483,13 @@ mod KliverRC1155 {
                     }
                 };
 
-                results
-                    .append(
-                        ClaimableAmountResult { simulation_id, wallet, amount },
-                    );
+                results.append(ClaimableAmountResult { simulation_id, wallet, amount });
 
                 j += 1;
-            };
+            }
 
             i += 1;
-        };
+        }
 
         results
     }
@@ -525,9 +506,7 @@ mod KliverRC1155 {
 
     #[external(v0)]
     fn get_wallet_simulations_summary(
-        self: @ContractState,
-        wallet: ContractAddress,
-        simulation_ids: Span<felt252>,
+        self: @ContractState, wallet: ContractAddress, simulation_ids: Span<felt252>,
     ) -> WalletMultiTokenSummary {
         // Step 1: Identificar todos los tokens únicos de las simulaciones
         let mut unique_tokens: Array<u256> = ArrayTrait::new();
@@ -551,7 +530,7 @@ mod KliverRC1155 {
                         break;
                     }
                     j += 1;
-                };
+                }
 
                 // Si no existe, agregarlo
                 if !already_exists {
@@ -560,7 +539,7 @@ mod KliverRC1155 {
             }
 
             i += 1;
-        };
+        }
 
         // Step 2: Para cada token, recopilar las simulaciones y calcular el summary
         let mut tokens_summary: Array<WalletTokenSummary> = ArrayTrait::new();
@@ -582,23 +561,19 @@ mod KliverRC1155 {
                 }
 
                 sim_idx += 1;
-            };
+            }
 
             // Usar el método interno para obtener el summary del token
-            let token_summary = self._get_wallet_token_summary_internal(
-                current_token_id,
-                wallet,
-                token_simulations.span()
-            );
+            let token_summary = self
+                ._get_wallet_token_summary_internal(
+                    current_token_id, wallet, token_simulations.span(),
+                );
 
             tokens_summary.append(token_summary);
             token_idx += 1;
-        };
-
-        WalletMultiTokenSummary {
-            wallet,
-            summaries: tokens_summary,
         }
+
+        WalletMultiTokenSummary { wallet, summaries: tokens_summary }
     }
 
     #[external(v0)]
@@ -722,10 +697,10 @@ mod KliverRC1155 {
             let caller = get_caller_address();
             let registry = self.registry_address.read();
             let zero_address: ContractAddress = 0.try_into().unwrap();
-            
+
             // Verificar que el registry esté configurado
             assert(registry != zero_address, 'Registry not configured');
-            
+
             // Verificar que el caller sea el registry
             assert(caller == registry, 'Only registry can call');
         }
@@ -792,7 +767,9 @@ mod KliverRC1155 {
 
                         let normal_days = self
                             .calculate_claimable_days(
-                                current_time, simulation.creation_timestamp, token_info.release_hour,
+                                current_time,
+                                simulation.creation_timestamp,
+                                token_info.release_hour,
                             );
                         let normal_amount = token_info.release_amount * normal_days;
 
@@ -801,7 +778,9 @@ mod KliverRC1155 {
                         // Total claimable days until now
                         let total_claimable_days = self
                             .calculate_claimable_days(
-                                current_time, simulation.creation_timestamp, token_info.release_hour,
+                                current_time,
+                                simulation.creation_timestamp,
+                                token_info.release_hour,
                             );
 
                         // Days already claimed
@@ -820,20 +799,16 @@ mod KliverRC1155 {
                     };
 
                     // Add to results
-                    simulations_data.append(SimulationClaimData { simulation_id, claimable_amount: amount });
+                    simulations_data
+                        .append(SimulationClaimData { simulation_id, claimable_amount: amount });
                     total_claimable += amount;
                 }
 
                 i += 1;
-            };
+            }
 
             WalletTokenSummary {
-                token_id,
-                wallet,
-                current_balance,
-                token_info,
-                total_claimable,
-                simulations_data,
+                token_id, wallet, current_balance, token_info, total_claimable, simulations_data,
             }
         }
     }

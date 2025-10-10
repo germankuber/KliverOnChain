@@ -1,9 +1,11 @@
-use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_caller_address, stop_cheat_caller_address, start_cheat_block_timestamp_global, stop_cheat_block_timestamp_global};
-use starknet::ContractAddress;
-
 // Import NFT interface
 use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
 use openzeppelin::token::erc721::interface::{IERC721Dispatcher, IERC721DispatcherTrait};
+use snforge_std::{
+    ContractClassTrait, DeclareResultTrait, declare, start_cheat_block_timestamp_global,
+    start_cheat_caller_address, stop_cheat_block_timestamp_global, stop_cheat_caller_address,
+};
+use starknet::ContractAddress;
 
 /// Helper function to deploy the NFT contract
 fn deploy_nft_contract() -> (IKliverNFTDispatcher, ContractAddress) {
@@ -61,7 +63,7 @@ fn test_mint_to_user_success() {
 }
 
 #[test]
-#[should_panic(expected: ('Caller is not the owner', ))]
+#[should_panic(expected: ('Caller is not the owner',))]
 fn test_mint_to_user_not_owner() {
     let (dispatcher, _) = deploy_nft_contract();
     let user: ContractAddress = 'user'.try_into().unwrap();
@@ -73,7 +75,7 @@ fn test_mint_to_user_not_owner() {
 }
 
 #[test]
-#[should_panic(expected: ('Invalid address', ))]
+#[should_panic(expected: ('Invalid address',))]
 fn test_mint_to_user_zero_address() {
     let (dispatcher, owner) = deploy_nft_contract();
     let zero_address: ContractAddress = 0.try_into().unwrap();
@@ -84,7 +86,7 @@ fn test_mint_to_user_zero_address() {
 }
 
 #[test]
-#[should_panic(expected: ('User already has Kliver NFT', ))]
+#[should_panic(expected: ('User already has Kliver NFT',))]
 fn test_mint_to_user_already_has_nft() {
     let (dispatcher, owner) = deploy_nft_contract();
     let user: ContractAddress = 'user'.try_into().unwrap();
@@ -182,7 +184,7 @@ fn test_get_minted_at() {
 }
 
 #[test]
-#[should_panic(expected: ('Token does not exist', ))]
+#[should_panic(expected: ('Token does not exist',))]
 fn test_get_minted_at_nonexistent_token() {
     let (dispatcher, _) = deploy_nft_contract();
 
@@ -218,7 +220,7 @@ fn test_burn_user_nft_success() {
 }
 
 #[test]
-#[should_panic(expected: ('Caller is not the owner', ))]
+#[should_panic(expected: ('Caller is not the owner',))]
 fn test_burn_user_nft_not_owner() {
     let (dispatcher, owner) = deploy_nft_contract();
     let user: ContractAddress = 'user'.try_into().unwrap();
@@ -236,7 +238,7 @@ fn test_burn_user_nft_not_owner() {
 }
 
 #[test]
-#[should_panic(expected: ('User has no NFT to burn', ))]
+#[should_panic(expected: ('User has no NFT to burn',))]
 fn test_burn_user_nft_no_nft() {
     let (dispatcher, owner) = deploy_nft_contract();
     let user: ContractAddress = 'user'.try_into().unwrap();
@@ -248,7 +250,7 @@ fn test_burn_user_nft_no_nft() {
 }
 
 #[test]
-#[should_panic(expected: ('Kliver NFT is soulbound', ))]
+#[should_panic(expected: ('Kliver NFT is soulbound',))]
 fn test_nft_transfer_blocked() {
     let (dispatcher, owner) = deploy_nft_contract();
     let user1: ContractAddress = 'user1'.try_into().unwrap();

@@ -12,16 +12,19 @@ pub struct SimulationMetadata {
 }
 
 
-
 /// Simulation Registry Interface
 #[starknet::interface]
 pub trait ISimulationRegistry<TContractState> {
     /// Register a simulation with its metadata (only owner)
     fn register_simulation(ref self: TContractState, metadata: SimulationMetadata);
     /// Verify if a simulation ID matches its expected hash
-    fn verify_simulation(self: @TContractState, simulation_id: felt252, simulation_hash: felt252) -> VerificationResult;
+    fn verify_simulation(
+        self: @TContractState, simulation_id: felt252, simulation_hash: felt252,
+    ) -> VerificationResult;
     /// Verify multiple simulations at once
-    fn batch_verify_simulations(self: @TContractState, simulations: Array<SimulationMetadata>) -> Array<(felt252, VerificationResult)>;
+    fn batch_verify_simulations(
+        self: @TContractState, simulations: Array<SimulationMetadata>,
+    ) -> Array<(felt252, VerificationResult)>;
     /// Get the hash for a simulation ID
     fn get_simulation_hash(self: @TContractState, simulation_id: felt252) -> felt252;
     /// Get complete simulation information

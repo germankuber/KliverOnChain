@@ -18,7 +18,9 @@ pub trait ISessionRegistry<TContractState> {
     /// Register a session with metadata (only owner)
     fn register_session(ref self: TContractState, metadata: SessionMetadata);
     /// Verify if a session ID matches its expected root hash
-    fn verify_session(self: @TContractState, session_id: felt252, root_hash: felt252) -> VerificationResult;
+    fn verify_session(
+        self: @TContractState, session_id: felt252, root_hash: felt252,
+    ) -> VerificationResult;
     /// Get session information (returns complete metadata)
     fn get_session_info(self: @TContractState, session_id: felt252) -> SessionMetadata;
     /// Grant access to a session to a specific address (optional: for sales traceability)

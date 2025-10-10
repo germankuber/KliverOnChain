@@ -1,9 +1,9 @@
 // Import interfaces from separate modules
 use crate::character_registry::ICharacterRegistry;
-use crate::scenario_registry::IScenarioRegistry;
-use crate::simulation_registry::ISimulationRegistry;
 use crate::owner_registry::IOwnerRegistry;
+use crate::scenario_registry::IScenarioRegistry;
 use crate::session_registry::ISessionRegistry;
+use crate::simulation_registry::ISimulationRegistry;
 use crate::types::VerificationResult;
 
 /// Verifier Interface for proof verification
@@ -17,17 +17,21 @@ pub trait IVerifier<TContractState> {
 /// Kliver Registry Contract
 #[starknet::contract]
 pub mod kliver_registry {
-    use super::{ICharacterRegistry, IScenarioRegistry, ISimulationRegistry, IOwnerRegistry, ISessionRegistry, VerificationResult};
-    use super::{IVerifierDispatcher, IVerifierDispatcherTrait};
-    use starknet::storage::{Map, StoragePointerReadAccess, StoragePointerWriteAccess, StorageMapReadAccess, StorageMapWriteAccess};
-    use starknet::{ContractAddress, get_caller_address};
     use core::num::traits::Zero;
-
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
+    use starknet::{ContractAddress, get_caller_address};
+    use crate::character_registry::CharacterMetadata;
+    use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+    use crate::scenario_registry::ScenarioMetadata;
     use crate::session_registry::{SessionAccessGranted, SessionMetadata};
     use crate::simulation_registry::SimulationMetadata;
-    use crate::character_registry::CharacterMetadata;
-    use crate::scenario_registry::ScenarioMetadata;
-    use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+    use super::{
+        ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
+        ISimulationRegistry, IVerifierDispatcher, IVerifierDispatcherTrait, VerificationResult,
+    };
 
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -66,23 +70,23 @@ pub mod kliver_registry {
         /// Maps character ID to its hash
         characters: Map<felt252, felt252>,
         // Character metadata:
-        character_authors: Map<felt252, ContractAddress>,        // character_id -> author
+        character_authors: Map<felt252, ContractAddress>, // character_id -> author
         /// Maps scenario ID to its hash
         scenarios: Map<felt252, felt252>,
         // Scenario metadata:
-        scenario_authors: Map<felt252, ContractAddress>,         // scenario_id -> author
+        scenario_authors: Map<felt252, ContractAddress>, // scenario_id -> author
         /// Maps simulation ID to its hash
         simulations: Map<felt252, felt252>,
         // Simulations metadata:
-        simulation_authors: Map<felt252, ContractAddress>,        // simulation_id -> author
-        simulation_characters: Map<felt252, felt252>,            // simulation_id -> character_id
-        simulation_scenarios: Map<felt252, felt252>,             // simulation_id -> scenario_id
+        simulation_authors: Map<felt252, ContractAddress>, // simulation_id -> author
+        simulation_characters: Map<felt252, felt252>, // simulation_id -> character_id
+        simulation_scenarios: Map<felt252, felt252>, // simulation_id -> scenario_id
         // Sessions:
-        session_roots: Map<felt252, felt252>,                     // session_id -> root_hash
-        session_simulations: Map<felt252, felt252>,              // session_id -> simulation_id
-        session_authors: Map<felt252, ContractAddress>,          // session_id -> author (seller original)
-        session_scores: Map<felt252, u32>,                       // session_id -> score
-        session_access: Map<(felt252, ContractAddress), bool>,   // (session_id, addr) -> true
+        session_roots: Map<felt252, felt252>, // session_id -> root_hash
+        session_simulations: Map<felt252, felt252>, // session_id -> simulation_id
+        session_authors: Map<felt252, ContractAddress>, // session_id -> author (seller original)
+        session_scores: Map<felt252, u32>, // session_id -> score
+        session_access: Map<(felt252, ContractAddress), bool> // (session_id, addr) -> true
     }
 
     pub mod Errors {
@@ -147,14 +151,17 @@ pub mod kliver_registry {
             self.character_authors.write(character_id, author);
 
             // Emit event
-            self.emit(CharacterRegistered {
-                character_id,
-                character_hash,
-                registered_by: get_caller_address()
-            });
+            self
+                .emit(
+                    CharacterRegistered {
+                        character_id, character_hash, registered_by: get_caller_address(),
+                    },
+                );
         }
 
-        fn verify_character(self: @ContractState, character_id: felt252, character_hash: felt252) -> VerificationResult {
+        fn verify_character(
+            self: @ContractState, character_id: felt252, character_hash: felt252,
+        ) -> VerificationResult {
             // Validate inputs
             assert(character_id != 0, 'Character ID cannot be zero');
             assert(character_hash != 0, 'Character hash cannot be zero');
@@ -164,15 +171,17 @@ pub mod kliver_registry {
 
             // Determine verification result based on stored data
             if stored_hash == 0 {
-                VerificationResult::NotFound  // ID no existe
+                VerificationResult::NotFound // ID no existe
             } else if stored_hash == character_hash {
-                VerificationResult::Match     // ID existe y hash coincide
+                VerificationResult::Match // ID existe y hash coincide
             } else {
-                VerificationResult::Mismatch  // ID existe pero hash no coincide
+                VerificationResult::Mismatch // ID existe pero hash no coincide
             }
         }
 
-        fn batch_verify_characters(self: @ContractState, characters: Array<CharacterMetadata>) -> Array<(felt252, VerificationResult)> {
+        fn batch_verify_characters(
+            self: @ContractState, characters: Array<CharacterMetadata>,
+        ) -> Array<(felt252, VerificationResult)> {
             let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
             let len = characters.len();
@@ -184,22 +193,22 @@ pub mod kliver_registry {
 
                 // For batch operations, handle zero values gracefully instead of panicking
                 let verification_result = if character_id == 0 || character_hash == 0 {
-                    VerificationResult::NotFound  // Treat invalid inputs as NotFound
+                    VerificationResult::NotFound // Treat invalid inputs as NotFound
                 } else {
                     let stored_hash = self.characters.read(character_id);
 
                     if stored_hash == 0 {
-                        VerificationResult::NotFound  // ID no existe
+                        VerificationResult::NotFound // ID no existe
                     } else if stored_hash == character_hash {
-                        VerificationResult::Match     // ID existe y hash coincide
+                        VerificationResult::Match // ID existe y hash coincide
                     } else {
-                        VerificationResult::Mismatch  // ID existe pero hash no coincide
+                        VerificationResult::Mismatch // ID existe pero hash no coincide
                     }
                 };
 
                 results.append((character_id, verification_result));
                 i += 1;
-            };
+            }
 
             results
         }
@@ -228,11 +237,7 @@ pub mod kliver_registry {
             let author = self.character_authors.read(character_id);
 
             // Return the complete metadata
-            CharacterMetadata {
-                character_id,
-                character_hash,
-                author,
-            }
+            CharacterMetadata { character_id, character_hash, author }
         }
     }
 
@@ -270,7 +275,9 @@ pub mod kliver_registry {
             self.emit(Event::ScenarioRegistered(metadata));
         }
 
-        fn verify_scenario(self: @ContractState, scenario_id: felt252, scenario_hash: felt252) -> VerificationResult {
+        fn verify_scenario(
+            self: @ContractState, scenario_id: felt252, scenario_hash: felt252,
+        ) -> VerificationResult {
             // Validate inputs
             assert(scenario_id != 0, 'Scenario ID cannot be zero');
             assert(scenario_hash != 0, 'Scenario hash cannot be zero');
@@ -280,15 +287,17 @@ pub mod kliver_registry {
 
             // Determine verification result based on stored data
             if stored_hash == 0 {
-                VerificationResult::NotFound  // ID no existe
+                VerificationResult::NotFound // ID no existe
             } else if stored_hash == scenario_hash {
-                VerificationResult::Match     // ID existe y hash coincide
+                VerificationResult::Match // ID existe y hash coincide
             } else {
-                VerificationResult::Mismatch  // ID existe pero hash no coincide
+                VerificationResult::Mismatch // ID existe pero hash no coincide
             }
         }
 
-        fn batch_verify_scenarios(self: @ContractState, scenarios: Array<ScenarioMetadata>) -> Array<(felt252, VerificationResult)> {
+        fn batch_verify_scenarios(
+            self: @ContractState, scenarios: Array<ScenarioMetadata>,
+        ) -> Array<(felt252, VerificationResult)> {
             let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
             let len = scenarios.len();
@@ -300,22 +309,22 @@ pub mod kliver_registry {
 
                 // For batch operations, handle zero values gracefully instead of panicking
                 let verification_result = if scenario_id == 0 || scenario_hash == 0 {
-                    VerificationResult::NotFound  // Treat invalid inputs as NotFound
+                    VerificationResult::NotFound // Treat invalid inputs as NotFound
                 } else {
                     let stored_hash = self.scenarios.read(scenario_id);
 
                     if stored_hash == 0 {
-                        VerificationResult::NotFound  // ID no existe
+                        VerificationResult::NotFound // ID no existe
                     } else if stored_hash == scenario_hash {
-                        VerificationResult::Match     // ID existe y hash coincide
+                        VerificationResult::Match // ID existe y hash coincide
                     } else {
-                        VerificationResult::Mismatch  // ID existe pero hash no coincide
+                        VerificationResult::Mismatch // ID existe pero hash no coincide
                     }
                 };
 
                 results.append((scenario_id, verification_result));
                 i += 1;
-            };
+            }
 
             results
         }
@@ -344,11 +353,7 @@ pub mod kliver_registry {
             let author = self.scenario_authors.read(scenario_id);
 
             // Return the complete metadata
-            ScenarioMetadata {
-                scenario_id,
-                scenario_hash,
-                author,
-            }
+            ScenarioMetadata { scenario_id, scenario_hash, author }
         }
     }
 
@@ -390,16 +395,21 @@ pub mod kliver_registry {
             self.simulation_scenarios.write(metadata.simulation_id, metadata.scenario_id);
 
             // Emit event
-            self.emit(SimulationRegistered {
-                simulation_id: metadata.simulation_id,
-                simulation_hash: metadata.simulation_hash,
-                author: metadata.author,
-                character_id: metadata.character_id,
-                scenario_id: metadata.scenario_id,
-            });
+            self
+                .emit(
+                    SimulationRegistered {
+                        simulation_id: metadata.simulation_id,
+                        simulation_hash: metadata.simulation_hash,
+                        author: metadata.author,
+                        character_id: metadata.character_id,
+                        scenario_id: metadata.scenario_id,
+                    },
+                );
         }
 
-        fn verify_simulation(self: @ContractState, simulation_id: felt252, simulation_hash: felt252) -> VerificationResult {
+        fn verify_simulation(
+            self: @ContractState, simulation_id: felt252, simulation_hash: felt252,
+        ) -> VerificationResult {
             // Validate inputs
             assert(simulation_id != 0, 'Simulation ID cannot be zero');
             assert(simulation_hash != 0, 'Simulation hash cannot be zero');
@@ -409,15 +419,17 @@ pub mod kliver_registry {
 
             // Determine verification result based on stored data
             if stored_hash == 0 {
-                VerificationResult::NotFound  // ID no existe
+                VerificationResult::NotFound // ID no existe
             } else if stored_hash == simulation_hash {
-                VerificationResult::Match     // ID existe y hash coincide
+                VerificationResult::Match // ID existe y hash coincide
             } else {
-                VerificationResult::Mismatch  // ID existe pero hash no coincide
+                VerificationResult::Mismatch // ID existe pero hash no coincide
             }
         }
 
-        fn batch_verify_simulations(self: @ContractState, simulations: Array<SimulationMetadata>) -> Array<(felt252, VerificationResult)> {
+        fn batch_verify_simulations(
+            self: @ContractState, simulations: Array<SimulationMetadata>,
+        ) -> Array<(felt252, VerificationResult)> {
             let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
             let mut i = 0;
             let len = simulations.len();
@@ -429,22 +441,22 @@ pub mod kliver_registry {
 
                 // For batch operations, handle zero values gracefully instead of panicking
                 let verification_result = if simulation_id == 0 || simulation_hash == 0 {
-                    VerificationResult::NotFound  // Treat invalid inputs as NotFound
+                    VerificationResult::NotFound // Treat invalid inputs as NotFound
                 } else {
                     let stored_hash = self.simulations.read(simulation_id);
 
                     if stored_hash == 0 {
-                        VerificationResult::NotFound  // ID no existe
+                        VerificationResult::NotFound // ID no existe
                     } else if stored_hash == simulation_hash {
-                        VerificationResult::Match     // ID existe y hash coincide
+                        VerificationResult::Match // ID existe y hash coincide
                     } else {
-                        VerificationResult::Mismatch  // ID existe pero hash no coincide
+                        VerificationResult::Mismatch // ID existe pero hash no coincide
                     }
                 };
 
                 results.append((simulation_id, verification_result));
                 i += 1;
-            };
+            }
 
             results
         }
@@ -474,13 +486,7 @@ pub mod kliver_registry {
             let character_id = self.simulation_characters.read(simulation_id);
             let scenario_id = self.simulation_scenarios.read(simulation_id);
 
-            SimulationMetadata {
-                simulation_id,
-                author,
-                character_id,
-                scenario_id,
-                simulation_hash,
-            }
+            SimulationMetadata { simulation_id, author, character_id, scenario_id, simulation_hash }
         }
 
         fn simulation_exists(self: @ContractState, simulation_id: felt252) -> bool {
@@ -525,7 +531,9 @@ pub mod kliver_registry {
             self.emit(Event::SessionRegistered(metadata));
         }
 
-        fn verify_session(self: @ContractState, session_id: felt252, root_hash: felt252) -> VerificationResult {
+        fn verify_session(
+            self: @ContractState, session_id: felt252, root_hash: felt252,
+        ) -> VerificationResult {
             assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
             assert(root_hash != 0, Errors::ROOT_HASH_CANNOT_BE_ZERO);
 
@@ -542,9 +550,7 @@ pub mod kliver_registry {
         fn verify_complete_session(
             self: @ContractState, full_proof_with_hints: Span<felt252>,
         ) -> Option<Span<u256>> {
-            let verifier = IVerifierDispatcher {
-                contract_address: self.verifier_address.read()
-            };
+            let verifier = IVerifierDispatcher { contract_address: self.verifier_address.read() };
             verifier.verify_ultra_starknet_honk_proof(full_proof_with_hints)
         }
 
@@ -555,20 +561,15 @@ pub mod kliver_registry {
             let simulation_id = self.session_simulations.read(session_id);
             let author = self.session_authors.read(session_id);
             let score = self.session_scores.read(session_id);
-            
-            SessionMetadata {
-                session_id,
-                root_hash,
-                simulation_id,
-                author,
-                score
-            }
+
+            SessionMetadata { session_id, root_hash, simulation_id, author, score }
         }
 
         // ---- Opcional: access list (trazabilidad de ventas) ----
         fn grant_access(ref self: ContractState, session_id: felt252, addr: ContractAddress) {
             self._assert_not_paused();
-            self._assert_only_owner(); // o permitir también al author si querés: assert(get_caller==owner || == author)
+            self
+                ._assert_only_owner(); // o permitir también al author si querés: assert(get_caller==owner || == author)
 
             assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
             assert(!addr.is_zero(), Errors::GRANTEE_CANNOT_BE_ZERO);
@@ -578,11 +579,12 @@ pub mod kliver_registry {
 
             self.session_access.write((session_id, addr), true);
 
-            self.emit(SessionAccessGranted {
-                session_id,
-                grantee: addr,
-                granted_by: get_caller_address()
-            });
+            self
+                .emit(
+                    SessionAccessGranted {
+                        session_id, grantee: addr, granted_by: get_caller_address(),
+                    },
+                );
         }
 
         fn has_access(self: @ContractState, session_id: felt252, addr: ContractAddress) -> bool {
