@@ -102,21 +102,99 @@ fn setup_registry(dispatcher: IKliverRC1155Dispatcher, owner: ContractAddress) -
 /// Helper function to setup simulation with registry configured
 /// Returns: (simulation_id, registry_address)
 fn setup_simulation_with_registry(
-    dispatcher: IKliverRC1155Dispatcher, 
-    owner: ContractAddress, 
-    token_id: u256, 
+    dispatcher: IKliverRC1155Dispatcher,
+    owner: ContractAddress,
+    token_id: u256,
     expiration_timestamp: u64
 ) -> (felt252, ContractAddress) {
     // Setup registry
     let registry = setup_registry(dispatcher, owner);
-    
+
     // Register simulation from registry address
     let simulation_id: felt252 = 'sim_1';
     start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(simulation_id, token_id, expiration_timestamp);
     stop_cheat_caller_address(dispatcher.contract_address);
-    
+
     (simulation_id, registry)
+}
+
+/// Helper function to create a token as owner
+/// Returns: token_id
+fn create_token_as_owner(
+    dispatcher: IKliverRC1155Dispatcher,
+    owner: ContractAddress,
+    release_hour: u64,
+    release_amount: u256,
+    special_release: u256
+) -> u256 {
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(release_hour, release_amount, special_release);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    token_id
+}
+
+/// Helper function to register simulation with registry
+/// Returns: simulation_id
+fn register_simulation_with_registry(
+    dispatcher: IKliverRC1155Dispatcher,
+    owner: ContractAddress,
+    simulation_id: felt252,
+    token_id: u256,
+    expiration_timestamp: u64
+) -> felt252 {
+    let registry = setup_registry(dispatcher, owner);
+    start_cheat_caller_address(dispatcher.contract_address, registry);
+    dispatcher.register_simulation(simulation_id, token_id, expiration_timestamp);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    simulation_id
+}
+
+/// Helper function to add wallet to whitelist as owner
+fn add_to_whitelist_as_owner(
+    dispatcher: IKliverRC1155Dispatcher,
+    owner: ContractAddress,
+    token_id: u256,
+    wallet: ContractAddress,
+    simulation_id: felt252
+) {
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    dispatcher.add_to_whitelist(token_id, wallet, simulation_id);
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+/// Helper function to setup a complete simulation (token + simulation + whitelist)
+/// Returns: (token_id, simulation_id)
+fn setup_complete_simulation(
+    dispatcher: IKliverRC1155Dispatcher,
+    owner: ContractAddress,
+    wallet: ContractAddress,
+    release_hour: u64,
+    release_amount: u256,
+    special_release: u256,
+    simulation_id: felt252,
+    expiration_timestamp: u64
+) -> (u256, felt252) {
+    // Create token
+    let token_id = create_token_as_owner(dispatcher, owner, release_hour, release_amount, special_release);
+
+    // Register simulation
+    register_simulation_with_registry(dispatcher, owner, simulation_id, token_id, expiration_timestamp);
+
+    // Add to whitelist
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, simulation_id);
+
+    (token_id, simulation_id)
+}
+
+/// Helper to set timestamp globally
+fn set_block_timestamp(timestamp: u64) {
+    start_cheat_block_timestamp_global(timestamp);
+}
+
+/// Helper to reset timestamp
+fn reset_block_timestamp() {
+    stop_cheat_block_timestamp_global();
 }
 
 #[test]
