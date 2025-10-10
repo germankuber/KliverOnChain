@@ -7,6 +7,8 @@ pub trait IOwnerRegistry<TContractState> {
     fn get_owner(self: @TContractState) -> ContractAddress;
     /// Get the NFT contract address
     fn get_nft_address(self: @TContractState) -> ContractAddress;
+    /// Get the Kliver 1155 contract address
+    fn get_kliver_1155_address(self: @TContractState) -> ContractAddress;
     /// Transfer ownership to a new address (only current owner)
     fn transfer_ownership(ref self: TContractState, new_owner: ContractAddress);
     /// Pause the contract (only owner)
