@@ -1017,10 +1017,11 @@ fn test_register_simulation_with_token_invalid_token() {
         _owner_dispatcher,
         _session_dispatcher,
         _nft_dispatcher,
-        contract_address,
         owner,
+        nft_address,
         tokens_core_address,
     ) = deploy_contract_with_nft();
+    let contract_address = sim_dispatcher.contract_address;
     
     // Registry address is already configured in deploy_contract_with_nft()
     
