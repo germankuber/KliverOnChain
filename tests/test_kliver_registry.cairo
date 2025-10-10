@@ -14,6 +14,7 @@ use kliver_on_chain::session_registry::{
 };
 use kliver_on_chain::simulation_registry::{
     ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata,
+    SimulationWithTokenMetadata,
 };
 use kliver_on_chain::types::VerificationResult;
 use snforge_std::{
@@ -226,10 +227,8 @@ fn register_test_simulation(
     let simulation_id: felt252 = 'test_sim_123';
     let simulation_hash: felt252 = 'sim_hash_456';
     let metadata = SimulationMetadata {
-        simulation_id, author: owner, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600 // Future timestamp (2025-01-01)
-        };
+        simulation_id, author: owner, character_id, scenario_id, simulation_hash
+    };
 
     start_cheat_caller_address(contract_address, owner);
     sim_dispatcher.register_simulation(metadata);
@@ -734,9 +733,7 @@ fn test_register_simulation_success() {
     let simulation_id: felt252 = 'sim123';
     let simulation_hash: felt252 = 'hash456';
     let metadata = SimulationMetadata {
-        simulation_id, author: owner, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
+        simulation_id, author: owner, character_id, scenario_id, simulation_hash
         };
 
     start_cheat_caller_address(contract_address, owner);
@@ -762,8 +759,6 @@ fn test_register_simulation_invalid_character() {
         character_id: 'invalid_char', // This character doesn't exist
         scenario_id,
         simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
         };
 
     start_cheat_caller_address(contract_address, owner);
@@ -788,8 +783,6 @@ fn test_register_simulation_invalid_scenario() {
         character_id,
         scenario_id: 'invalid_scenario', // This scenario doesn't exist
         simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
         };
 
     start_cheat_caller_address(contract_address, owner);
@@ -809,9 +802,7 @@ fn test_get_simulation_info_success() {
     let simulation_id: felt252 = 'sim123';
     let simulation_hash: felt252 = 'hash456';
     let metadata = SimulationMetadata {
-        simulation_id, author: owner, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
+        simulation_id, author: owner, character_id, scenario_id, simulation_hash
         };
 
     start_cheat_caller_address(contract_address, owner);
@@ -839,9 +830,7 @@ fn test_verify_simulation_valid() {
     let simulation_id: felt252 = 123;
     let simulation_hash: felt252 = 456;
     let metadata = SimulationMetadata {
-        simulation_id, author: owner, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
+        simulation_id, author: owner, character_id, scenario_id, simulation_hash
         };
 
     // First register the simulation
@@ -866,9 +855,7 @@ fn test_get_simulation_hash_success() {
     let simulation_id: felt252 = 123;
     let simulation_hash: felt252 = 456;
     let metadata = SimulationMetadata {
-        simulation_id, author: owner, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
+        simulation_id, author: owner, character_id, scenario_id, simulation_hash
         };
 
     // First register the simulation
@@ -894,9 +881,7 @@ fn test_verify_simulation_invalid_hash() {
     let simulation_hash: felt252 = 456;
     let wrong_hash: felt252 = 789;
     let metadata = SimulationMetadata {
-        simulation_id, author: owner, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
+        simulation_id, author: owner, character_id, scenario_id, simulation_hash
         };
 
     // First register the simulation
@@ -956,9 +941,7 @@ fn test_register_simulation_zero_id() {
     let simulation_id: felt252 = 0;
     let simulation_hash: felt252 = 'hash456';
     let metadata = SimulationMetadata {
-        simulation_id, author: owner, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
+        simulation_id, author: owner, character_id, scenario_id, simulation_hash
         };
 
     start_cheat_caller_address(contract_address, owner);
@@ -979,9 +962,7 @@ fn test_register_simulation_zero_hash() {
     let simulation_id: felt252 = 'sim123';
     let simulation_hash: felt252 = 0;
     let metadata = SimulationMetadata {
-        simulation_id, author: owner, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
+        simulation_id, author: owner, character_id, scenario_id, simulation_hash
         };
 
     start_cheat_caller_address(contract_address, owner);
@@ -1003,9 +984,7 @@ fn test_register_simulation_zero_author() {
     let simulation_hash: felt252 = 'hash456';
     let zero_author: ContractAddress = 0.try_into().unwrap();
     let metadata = SimulationMetadata {
-        simulation_id, author: zero_author, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
+        simulation_id, author: zero_author, character_id, scenario_id, simulation_hash
         };
 
     start_cheat_caller_address(contract_address, owner);
@@ -1356,8 +1335,6 @@ fn test_batch_verify_simulations_all_valid() {
         character_id,
         scenario_id,
         simulation_hash: sim_hash_1,
-            token_id: 1,
-            expiration_timestamp: 1735689600
         };
     let metadata_2 = SimulationMetadata {
         simulation_id: sim_id_2,
@@ -1365,8 +1342,6 @@ fn test_batch_verify_simulations_all_valid() {
         character_id,
         scenario_id,
         simulation_hash: sim_hash_2,
-            token_id: 1,
-            expiration_timestamp: 1735689600
         };
     let metadata_3 = SimulationMetadata {
         simulation_id: sim_id_3,
@@ -1374,8 +1349,6 @@ fn test_batch_verify_simulations_all_valid() {
         character_id,
         scenario_id,
         simulation_hash: sim_hash_3,
-            token_id: 1,
-            expiration_timestamp: 1735689600
         };
 
     start_cheat_caller_address(contract_address, owner);
@@ -1430,8 +1403,6 @@ fn test_batch_verify_simulations_mixed_results() {
         character_id,
         scenario_id,
         simulation_hash: sim_hash_1,
-            token_id: 1,
-            expiration_timestamp: 1735689600
         };
     let metadata_2 = SimulationMetadata {
         simulation_id: sim_id_2,
@@ -1439,8 +1410,6 @@ fn test_batch_verify_simulations_mixed_results() {
         character_id,
         scenario_id,
         simulation_hash: sim_hash_2,
-            token_id: 1,
-            expiration_timestamp: 1735689600
         };
 
     start_cheat_caller_address(contract_address, owner);
@@ -1456,8 +1425,6 @@ fn test_batch_verify_simulations_mixed_results() {
         character_id,
         scenario_id,
         simulation_hash: wrong_hash_2, // Wrong hash
-        token_id: 1,
-        expiration_timestamp: 1735689600
     };
     let metadata_3_not_registered = SimulationMetadata {
         simulation_id: sim_id_3,
@@ -1465,8 +1432,6 @@ fn test_batch_verify_simulations_mixed_results() {
         character_id,
         scenario_id,
         simulation_hash: 202, // Not registered
-        token_id: 1,
-        expiration_timestamp: 1735689600
     };
 
     let mut batch_array = ArrayTrait::new();
@@ -1964,9 +1929,7 @@ fn test_simulation_exists_true() {
     let simulation_id: felt252 = 'sim123';
     let simulation_hash: felt252 = 'hash456';
     let metadata = SimulationMetadata {
-        simulation_id, author: owner, character_id, scenario_id, simulation_hash,
-            token_id: 1,
-            expiration_timestamp: 1735689600
+        simulation_id, author: owner, character_id, scenario_id, simulation_hash
         };
 
     start_cheat_caller_address(contract_address, owner);

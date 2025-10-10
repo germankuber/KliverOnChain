@@ -35,7 +35,7 @@ pub mod kliver_registry {
     use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
     use crate::scenario_registry::ScenarioMetadata;
     use crate::session_registry::{SessionAccessGranted, SessionMetadata};
-    use crate::simulation_registry::SimulationMetadata;
+    use crate::simulation_registry::{SimulationMetadata, SimulationWithTokenMetadata};
     use super::{
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
         ISimulationRegistry, ITokenCoreDispatcher, ITokenCoreDispatcherTrait, IVerifierDispatcher,
@@ -404,13 +404,11 @@ pub mod kliver_registry {
             let existing_hash = self.simulations.read(metadata.simulation_id);
             assert(existing_hash == 0, 'Simulation already registered');
 
-            // Save the simulation and metadata
+            // Save the simulation and metadata (without token info)
             self.simulations.write(metadata.simulation_id, metadata.simulation_hash);
             self.simulation_authors.write(metadata.simulation_id, metadata.author);
             self.simulation_characters.write(metadata.simulation_id, metadata.character_id);
             self.simulation_scenarios.write(metadata.simulation_id, metadata.scenario_id);
-            self.simulation_token_ids.write(metadata.simulation_id, metadata.token_id);
-            self.simulation_expirations.write(metadata.simulation_id, metadata.expiration_timestamp);
 
             // Emit event
             self
@@ -425,7 +423,7 @@ pub mod kliver_registry {
                 );
         }
 
-        fn register_simulation_with_token(ref self: ContractState, metadata: SimulationMetadata) {
+        fn register_simulation_with_token(ref self: ContractState, metadata: SimulationWithTokenMetadata) {
             // Check if contract is paused
             self._assert_not_paused();
             // Only owner can register simulations
@@ -561,10 +559,33 @@ pub mod kliver_registry {
             let author = self.simulation_authors.read(simulation_id);
             let character_id = self.simulation_characters.read(simulation_id);
             let scenario_id = self.simulation_scenarios.read(simulation_id);
+
+            SimulationMetadata { simulation_id, author, character_id, scenario_id, simulation_hash }
+        }
+
+        fn get_simulation_with_token_info(self: @ContractState, simulation_id: felt252) -> SimulationWithTokenMetadata {
+            // Validate input
+            assert(simulation_id != 0, 'Simulation ID cannot be zero');
+
+            // Get the stored data for this simulation ID
+            let simulation_hash = self.simulations.read(simulation_id);
+            assert(simulation_hash != 0, 'Simulation not found');
+
+            let author = self.simulation_authors.read(simulation_id);
+            let character_id = self.simulation_characters.read(simulation_id);
+            let scenario_id = self.simulation_scenarios.read(simulation_id);
             let token_id = self.simulation_token_ids.read(simulation_id);
             let expiration_timestamp = self.simulation_expirations.read(simulation_id);
 
-            SimulationMetadata { simulation_id, author, character_id, scenario_id, simulation_hash, token_id, expiration_timestamp }
+            SimulationWithTokenMetadata { 
+                simulation_id, 
+                author, 
+                character_id, 
+                scenario_id, 
+                simulation_hash,
+                token_id,
+                expiration_timestamp
+            }
         }
 
         fn simulation_exists(self: @ContractState, simulation_id: felt252) -> bool {
