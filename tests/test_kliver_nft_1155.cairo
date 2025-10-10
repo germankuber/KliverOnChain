@@ -397,6 +397,7 @@ fn test_register_simulation_invalid_token() {
     start_cheat_caller_address(dispatcher.contract_address, registry);
 
     // Try to register simulation with non-existent token
+    // This should panic because the token 999 doesn't exist
     dispatcher.register_simulation(123, 999, 1735689600);
 
     stop_cheat_caller_address(dispatcher.contract_address);

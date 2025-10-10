@@ -180,7 +180,7 @@ mod KliverRC1155 {
         // Solo el registry puede registrar simulaciones
         self._assert_only_registry();
 
-        // Check if token exists
+        // Verify that the token exists
         let token_info = self.token_info.entry(token_id).read();
         assert(
             token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist',

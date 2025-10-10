@@ -14,6 +14,14 @@ pub trait IVerifier<TContractState> {
     ) -> Option<Span<u256>>;
 }
 
+/// Token Core Interface for simulation registration
+#[starknet::interface]
+pub trait ITokenCore<TContractState> {
+    fn register_simulation(
+        ref self: TContractState, simulation_id: felt252, token_id: u256, expiration_timestamp: u64,
+    ) -> felt252;
+}
+
 /// Kliver Registry Contract
 #[starknet::contract]
 pub mod kliver_registry {
@@ -30,7 +38,8 @@ pub mod kliver_registry {
     use crate::simulation_registry::SimulationMetadata;
     use super::{
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
-        ISimulationRegistry, IVerifierDispatcher, IVerifierDispatcherTrait, VerificationResult,
+        ISimulationRegistry, ITokenCoreDispatcher, ITokenCoreDispatcherTrait, IVerifierDispatcher,
+        IVerifierDispatcherTrait, VerificationResult,
     };
 
     #[event]
@@ -402,6 +411,64 @@ pub mod kliver_registry {
             self.simulation_scenarios.write(metadata.simulation_id, metadata.scenario_id);
             self.simulation_token_ids.write(metadata.simulation_id, metadata.token_id);
             self.simulation_expirations.write(metadata.simulation_id, metadata.expiration_timestamp);
+
+            // Emit event
+            self
+                .emit(
+                    SimulationRegistered {
+                        simulation_id: metadata.simulation_id,
+                        simulation_hash: metadata.simulation_hash,
+                        author: metadata.author,
+                        character_id: metadata.character_id,
+                        scenario_id: metadata.scenario_id,
+                    },
+                );
+        }
+
+        fn register_simulation_with_token(ref self: ContractState, metadata: SimulationMetadata) {
+            // Check if contract is paused
+            self._assert_not_paused();
+            // Only owner can register simulations
+            self._assert_only_owner();
+
+            // Validate inputs
+            assert(metadata.simulation_id != 0, 'Simulation ID cannot be zero');
+            assert(metadata.simulation_hash != 0, 'Simulation hash cannot be zero');
+            assert(!metadata.author.is_zero(), 'Author cannot be zero');
+            assert(metadata.character_id != 0, 'Character ID cannot be zero');
+            assert(metadata.scenario_id != 0, 'Scenario ID cannot be zero');
+
+            // Validate that author has a Kliver NFT
+            self._assert_author_has_nft(metadata.author);
+
+            // Validate that character exists
+            let character_hash = self.characters.read(metadata.character_id);
+            assert(character_hash != 0, Errors::CHARACTER_NOT_FOUND);
+
+            // Validate that scenario exists
+            let scenario_hash = self.scenarios.read(metadata.scenario_id);
+            assert(scenario_hash != 0, Errors::SCENARIO_NOT_FOUND);
+
+            // Check if simulation is already registered
+            let existing_hash = self.simulations.read(metadata.simulation_id);
+            assert(existing_hash == 0, 'Simulation already registered');
+
+            // Save the simulation and metadata
+            self.simulations.write(metadata.simulation_id, metadata.simulation_hash);
+            self.simulation_authors.write(metadata.simulation_id, metadata.author);
+            self.simulation_characters.write(metadata.simulation_id, metadata.character_id);
+            self.simulation_scenarios.write(metadata.simulation_id, metadata.scenario_id);
+            self.simulation_token_ids.write(metadata.simulation_id, metadata.token_id);
+            self.simulation_expirations.write(metadata.simulation_id, metadata.expiration_timestamp);
+
+            // Call token core to register the simulation
+            let token_core_address = self.tokens_core_address.read();
+            let token_core_dispatcher = ITokenCoreDispatcher { contract_address: token_core_address };
+            token_core_dispatcher.register_simulation(
+                metadata.simulation_id,
+                metadata.token_id,
+                metadata.expiration_timestamp
+            );
 
             // Emit event
             self

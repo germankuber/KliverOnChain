@@ -17,8 +17,10 @@ pub struct SimulationMetadata {
 /// Simulation Registry Interface
 #[starknet::interface]
 pub trait ISimulationRegistry<TContractState> {
-    /// Register a simulation with its metadata (only owner)
+    /// Register a simulation with its metadata (only owner) - Does not call token core
     fn register_simulation(ref self: TContractState, metadata: SimulationMetadata);
+    /// Register a simulation with its metadata AND register it in the token core (only owner)
+    fn register_simulation_with_token(ref self: TContractState, metadata: SimulationMetadata);
     /// Verify if a simulation ID matches its expected hash
     fn verify_simulation(
         self: @TContractState, simulation_id: felt252, simulation_hash: felt252,
