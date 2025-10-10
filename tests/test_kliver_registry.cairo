@@ -14,6 +14,7 @@ use kliver_on_chain::session_registry::{
 };
 use kliver_on_chain::simulation_registry::{
     ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata,
+    SimulationWithTokenMetadata,
 };
 use kliver_on_chain::types::VerificationResult;
 use snforge_std::{
@@ -93,6 +94,7 @@ fn deploy_contract_with_nft() -> (
     IKliverNFTDispatcher,
     ContractAddress,
     ContractAddress,
+    ContractAddress, // tokens_core_address
 ) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let nft_address = deploy_nft_contract(owner);
@@ -105,6 +107,18 @@ fn deploy_contract_with_nft() -> (
     constructor_calldata.append(tokens_core_address.into());
     constructor_calldata.append(verifier_address.into());
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
+    
+    // Configure the registry address in the tokens_core contract
+    start_cheat_caller_address(tokens_core_address, owner);
+    let mut calldata = ArrayTrait::new();
+    calldata.append(contract_address.into());
+    starknet::syscalls::call_contract_syscall(
+        tokens_core_address,
+        selector!("set_registry_address"),
+        calldata.span()
+    ).unwrap();
+    stop_cheat_caller_address(tokens_core_address);
+    
     (
         ICharacterRegistryDispatcher { contract_address },
         IScenarioRegistryDispatcher { contract_address },
@@ -114,6 +128,7 @@ fn deploy_contract_with_nft() -> (
         IKliverNFTDispatcher { contract_address: nft_address },
         owner,
         nft_address,
+        tokens_core_address,
     )
 }
 
@@ -159,6 +174,7 @@ fn deploy_for_sessions() -> (
         nft_dispatcher,
         owner,
         nft_address,
+        _tokens_core_address,
     ) =
         deploy_contract_with_nft();
     (
@@ -988,6 +1004,49 @@ fn test_register_simulation_zero_author() {
 
     start_cheat_caller_address(contract_address, owner);
     dispatcher.register_simulation(metadata);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Token does not exist',))]
+fn test_register_simulation_with_token_invalid_token() {
+    let (
+        char_dispatcher,
+        scenario_dispatcher,
+        sim_dispatcher,
+        _owner_dispatcher,
+        _session_dispatcher,
+        _nft_dispatcher,
+        contract_address,
+        owner,
+        tokens_core_address,
+    ) = deploy_contract_with_nft();
+    
+    // Registry address is already configured in deploy_contract_with_nft()
+    
+    // Register character and scenario first
+    let character_id = register_test_character(char_dispatcher, contract_address, owner);
+    let scenario_id = register_test_scenario(scenario_dispatcher, contract_address, owner);
+
+    let simulation_id: felt252 = 'sim123';
+    let simulation_hash: felt252 = 'hash456';
+    let author: ContractAddress = owner;
+    let non_existent_token_id: u256 = 999; // Token that doesn't exist
+    let expiration_timestamp: u64 = 1735689600;
+    
+    let metadata = SimulationWithTokenMetadata {
+        simulation_id,
+        author,
+        character_id,
+        scenario_id,
+        simulation_hash,
+        token_id: non_existent_token_id,
+        expiration_timestamp,
+    };
+
+    start_cheat_caller_address(contract_address, owner);
+    // This should panic because token 999 doesn't exist in the ERC1155 contract
+    sim_dispatcher.register_simulation_with_token(metadata);
     stop_cheat_caller_address(contract_address);
 }
 
