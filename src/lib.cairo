@@ -5,8 +5,9 @@
 
 // Registry interface modules - separated by functionality
 pub mod character_registry;
-pub mod kliver_1155;
-pub mod kliver_1155_types;
+pub mod kliver_tokens_core;
+pub mod kliver_tokens_core_interface;
+pub mod kliver_tokens_core_types;
 // NFT modules
 pub mod kliver_nft;
 

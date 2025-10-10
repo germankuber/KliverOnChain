@@ -115,7 +115,7 @@ class KliverNFT1155(BaseContract):
 CONTRACTS = {
     "nft": KliverNFT,
     "registry": KliverRegistry,
-    "kliver_1155": KliverNFT1155
+    "kliver_tokens_core": KliverNFT1155
 }
 
 

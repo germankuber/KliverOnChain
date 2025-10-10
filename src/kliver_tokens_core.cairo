@@ -1,4 +1,4 @@
-use super::kliver_1155_types::{
+use super::kliver_tokens_core_types::{
     AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
     RemovedFromWhitelist, SessionPaid, SessionPayment, Simulation, SimulationClaimData,
     SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo,
@@ -7,7 +7,7 @@ use super::kliver_1155_types::{
 
 
 #[starknet::contract]
-mod KliverRC1155 {
+mod KliverTokensCore {
     use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::token::erc1155::{ERC1155Component, ERC1155HooksEmptyImpl};
     use starknet::storage::{

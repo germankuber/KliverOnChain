@@ -108,9 +108,9 @@ class ContractDeployer:
                 "name": "KliverNFT",
                 "class_name": "KliverNFT"
             },
-            "kliver_1155": {
-                "name": "KliverNFT1155",
-                "class_name": "KliverNFT1155"
+            "kliver_tokens_core": {
+                "name": "KlivertokensCore",
+                "class_name": "KlivertokensCore"
             },
 
         }
@@ -384,11 +384,11 @@ class ContractDeployer:
             print(f"{Colors.INFO}📋 Using Tokens Core address: {tokens_core_address}{Colors.RESET}")
             print(f"{Colors.INFO}📋 Using Verifier address: {verifier_address}{Colors.RESET}")
             constructor_calldata = [owner_address, nft_address, tokens_core_address, verifier_address]
-        elif self.contract_type == "kliver_1155":
-            # Kliver1155 requires: owner + base_uri (ByteArray)
+        elif self.contract_type == "kliver_tokens_core":
+            # KliverTokensCore requires: owner + base_uri (ByteArray)
             base_uri = ""
             if self.env_config and "contracts" in self.env_config:
-                token_config = self.env_config["contracts"].get("kliver_1155", {})
+                token_config = self.env_config["contracts"].get("kliver_tokens_core", {})
                 base_uri = token_config.get("base_uri", "https://api.kliver.io/metadata/")
             
             if base_uri:
@@ -620,7 +620,7 @@ class ContractDeployer:
 
 @click.command()
 @click.option('--environment', '-e', required=True, help='Environment to deploy to: dev, qa, or prod')
-@click.option('--contract', '-c', default='registry', help='Contract to deploy: registry, nft, kliver_1155, or all')
+@click.option('--contract', '-c', default='registry', help='Contract to deploy: registry, nft, kliver_tokens_core, or all')
 @click.option('--rpc-url', '-r', help='Custom RPC URL (optional - overrides environment config)')
 @click.option('--owner', '-o', help='Owner address for the contract (uses account address if not specified)')
 @click.option('--nft-address', '-n', help='NFT contract address (required when deploying registry separately)')
@@ -650,7 +650,7 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
     
     2. Deploy Individual Contracts:
         python deploy_contract.py --environment dev --contract nft
-        python deploy_contract.py --environment dev --contract kliver_1155
+        python deploy_contract.py --environment dev --contract kliver_tokens_core
         python deploy_contract.py --environment dev --contract registry --nft-address 0x456...
     
     3. Contract Dependencies:
@@ -661,7 +661,7 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
     Example usage:
         python deploy_contract.py --environment dev --contract all
         python deploy_contract.py --environment qa --contract registry --nft-address 0x123...
-        python deploy_contract.py --environment prod --contract kliver_1155
+        python deploy_contract.py --environment prod --contract kliver_tokens_core
     """
     
     try:
@@ -683,8 +683,8 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
             click.echo(f"{Colors.ERROR}❌ Failed to load environment config: {str(e)}{Colors.RESET}")
             exit(1)
         
-        if contract not in ['registry', 'nft', 'kliver_1155', 'all']:
-            click.echo(f"{Colors.ERROR}❌ Invalid contract type. Use: registry, nft, kliver_1155, or all{Colors.RESET}")
+        if contract not in ['registry', 'nft', 'kliver_tokens_core', 'all']:
+            click.echo(f"{Colors.ERROR}❌ Invalid contract type. Use: registry, nft, kliver_tokens_core, or all{Colors.RESET}")
             exit(1)
             
         deployments = []
@@ -706,18 +706,18 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
                 success = False
                 click.echo(f"\n{Colors.ERROR}✗ NFT deployment failed. Aborting.{Colors.RESET}")
 
-            # Step 2: Deploy Token1155
+            # Step 2: Deploy Tokens Core
             if success:
-                click.echo(f"{Colors.BOLD}Step 2/3: Deploying Token1155 Contract{Colors.RESET}")
-                deployer_token = ContractDeployer(account, network, 'kliver_1155', rpc_url, env_config)
+                click.echo(f"{Colors.BOLD}Step 2/3: Deploying Tokens Core Contract{Colors.RESET}")
+                deployer_token = ContractDeployer(account, network, 'kliver_tokens_core', rpc_url, env_config)
                 token_result = deployer_token.deploy_full_flow(owner)
                 if token_result:
                     deployments.append(token_result)
                     token_deployed_address = token_result['contract_address']
-                    click.echo(f"\n{Colors.SUCCESS}✓ Token1155 deployed successfully at: {token_deployed_address}{Colors.RESET}\n")
+                    click.echo(f"\n{Colors.SUCCESS}✓ Tokens Core deployed successfully at: {token_deployed_address}{Colors.RESET}\n")
                 else:
                     success = False
-                    click.echo(f"\n{Colors.ERROR}✗ Token1155 deployment failed. Aborting.{Colors.RESET}")
+                    click.echo(f"\n{Colors.ERROR}✗ Tokens Core deployment failed. Aborting.{Colors.RESET}")
 
             # Step 3: Deploy Registry using NFT and Token1155 addresses
             if success:
@@ -757,9 +757,9 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
             else:
                 success = False
 
-        elif contract == 'kliver_1155':
-            # Deploying Token1155 separately
-            click.echo(f"\n{Colors.BOLD}🎯 TOKEN1155-ONLY DEPLOYMENT{Colors.RESET}\n")
+        elif contract == 'kliver_tokens_core':
+            # Deploying Tokens Core separately
+            click.echo(f"\n{Colors.BOLD}🎯 TOKENS CORE-ONLY DEPLOYMENT{Colors.RESET}\n")
             deployer = ContractDeployer(account, network, contract, rpc_url, env_config)
             result = deployer.deploy_full_flow(owner)
             if result:

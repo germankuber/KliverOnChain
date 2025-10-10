@@ -1,5 +1,5 @@
 // Import structs from the types file
-use kliver_on_chain::kliver_1155_types::{
+use kliver_on_chain::kliver_tokens_core_types::{
     ClaimableAmountResult, HintPayment, SessionPayment, TokenInfo, WalletMultiTokenSummary,
     WalletTokenSummary,
 };
@@ -51,7 +51,7 @@ mod MockERC1155Receiver {
 
 // Define the interface for testing
 #[starknet::interface]
-trait IKliverRC1155<TContractState> {
+trait IKliverTokensCore<TContractState> {
     fn create_token(
         ref self: TContractState, release_hour: u64, release_amount: u256, special_release: u256,
     ) -> u256;
@@ -64,7 +64,7 @@ trait IKliverRC1155<TContractState> {
     ) -> felt252;
     fn get_simulation(
         self: @TContractState, simulation_id: felt252,
-    ) -> kliver_on_chain::kliver_1155_types::Simulation;
+    ) -> kliver_on_chain::kliver_tokens_core_types::Simulation;
     fn is_simulation_expired(self: @TContractState, simulation_id: felt252) -> bool;
     fn update_simulation_expiration(
         ref self: TContractState, simulation_id: felt252, new_expiration_timestamp: u64,
@@ -111,15 +111,15 @@ trait IKliverRC1155<TContractState> {
     fn balance_of(self: @TContractState, account: ContractAddress, token_id: u256) -> u256;
 }
 
-/// Helper function to deploy the KliverRC1155 contract
-fn deploy_contract(owner: ContractAddress) -> IKliverRC1155Dispatcher {
-    let contract = declare("KliverRC1155").unwrap().contract_class();
+/// Helper function to deploy the KliverTokensCore contract
+fn deploy_contract(owner: ContractAddress) -> IKliverTokensCoreDispatcher {
+    let contract = declare("KliverTokensCore").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
     let base_uri: ByteArray = "https://api.kliver.io/1155/";
     Serde::serialize(@base_uri, ref constructor_calldata);
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
-    IKliverRC1155Dispatcher { contract_address }
+    IKliverTokensCoreDispatcher { contract_address }
 }
 
 /// Helper function to deploy a mock ERC1155 receiver contract
@@ -132,7 +132,7 @@ fn deploy_mock_receiver() -> ContractAddress {
 
 /// Helper function to setup registry for testing
 /// This function sets the registry address and returns it
-fn setup_registry(dispatcher: IKliverRC1155Dispatcher, owner: ContractAddress) -> ContractAddress {
+fn setup_registry(dispatcher: IKliverTokensCoreDispatcher, owner: ContractAddress) -> ContractAddress {
     let registry: ContractAddress = 'registry'.try_into().unwrap();
     start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.set_registry_address(registry);
@@ -143,7 +143,7 @@ fn setup_registry(dispatcher: IKliverRC1155Dispatcher, owner: ContractAddress) -
 /// Helper function to setup simulation with registry configured
 /// Returns: (simulation_id, registry_address)
 fn setup_simulation_with_registry(
-    dispatcher: IKliverRC1155Dispatcher,
+    dispatcher: IKliverTokensCoreDispatcher,
     owner: ContractAddress,
     token_id: u256,
     expiration_timestamp: u64,
@@ -163,7 +163,7 @@ fn setup_simulation_with_registry(
 /// Helper function to create a token as owner
 /// Returns: token_id
 fn create_token_as_owner(
-    dispatcher: IKliverRC1155Dispatcher,
+    dispatcher: IKliverTokensCoreDispatcher,
     owner: ContractAddress,
     release_hour: u64,
     release_amount: u256,
@@ -178,7 +178,7 @@ fn create_token_as_owner(
 /// Helper function to register simulation with registry
 /// Returns: simulation_id
 fn register_simulation_with_registry(
-    dispatcher: IKliverRC1155Dispatcher,
+    dispatcher: IKliverTokensCoreDispatcher,
     owner: ContractAddress,
     simulation_id: felt252,
     token_id: u256,
@@ -193,7 +193,7 @@ fn register_simulation_with_registry(
 
 /// Helper function to add wallet to whitelist as owner
 fn add_to_whitelist_as_owner(
-    dispatcher: IKliverRC1155Dispatcher,
+    dispatcher: IKliverTokensCoreDispatcher,
     owner: ContractAddress,
     token_id: u256,
     wallet: ContractAddress,
@@ -207,7 +207,7 @@ fn add_to_whitelist_as_owner(
 /// Helper function to setup a complete simulation (token + simulation + whitelist)
 /// Returns: (token_id, simulation_id)
 fn setup_complete_simulation(
-    dispatcher: IKliverRC1155Dispatcher,
+    dispatcher: IKliverTokensCoreDispatcher,
     owner: ContractAddress,
     wallet: ContractAddress,
     release_hour: u64,

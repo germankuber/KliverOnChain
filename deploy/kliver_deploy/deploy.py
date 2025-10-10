@@ -15,8 +15,8 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.command()
 @click.option('--environment', '-e', required=True, 
               help='Environment to deploy to: dev, qa, or prod')
-@click.option('--contract', '-c', default='registry', 
-              help='Contract to deploy: registry, nft, kliver_1155, or all')
+@click.option('--contract', '-c', default='registry',
+              help='Contract to deploy: registry, nft, kliver_tokens_core, or all')
 @click.option('--owner', '-o', 
               help='Owner address for the contract (uses account address if not specified)')
 @click.option('--nft-address', '-n',
@@ -50,7 +50,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
 
     2. Deploy Individual Contracts:
         python deploy.py --environment dev --contract nft
-        python deploy.py --environment dev --contract kliver_1155
+        python deploy.py --environment dev --contract kliver_tokens_core
         python deploy.py --environment dev --contract registry --nft-address 0x456... --tokens-core-address 0x789...
 
     3. Contract Dependencies:
@@ -61,7 +61,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
     Example usage:
         python deploy.py --environment dev --contract all
         python deploy.py --environment qa --contract registry --nft-address 0x123... --tokens-core-address 0x456...
-        python deploy.py --environment prod --contract kliver_1155
+        python deploy.py --environment prod --contract kliver_tokens_core
     """
     
     try:
@@ -218,10 +218,10 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
 
     # Step 2: Deploy Token1155
     click.echo(f"{Colors.BOLD}Step 2/3: Deploying Token1155 Contract{Colors.RESET}")
-    token_deployer = ContractDeployer(environment, 'kliver_1155', config_manager)
+    token_deployer = ContractDeployer(environment, 'kliver_tokens_core', config_manager)
 
     # Get base_uri from config
-    token_config = config_manager.get_contract_config(environment, 'kliver_1155')
+    token_config = config_manager.get_contract_config(environment, 'kliver_tokens_core')
     token_result = token_deployer.deploy_full_flow(owner, no_compile=no_compile, base_uri=token_config.base_uri)
 
     if token_result:
@@ -322,7 +322,7 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
             verifier_address = registry_config.verifier_address or "0x0"
         deploy_kwargs['verifier_address'] = verifier_address
         
-    elif contract == 'kliver_1155':
+    elif contract == 'kliver_tokens_core':
         click.echo(f"\n{Colors.BOLD}🎯 TOKEN1155-ONLY DEPLOYMENT{Colors.RESET}\n")
         contract_config = config_manager.get_contract_config(environment, contract)
         deploy_kwargs['base_uri'] = contract_config.base_uri

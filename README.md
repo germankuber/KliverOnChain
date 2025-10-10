@@ -951,8 +951,8 @@ python deploy_contract.py --environment dev --contract nft --owner 0x123...
 # Deploy Registry (requires NFT address)
 python deploy_contract.py --environment dev --contract registry --nft-address 0xNFT_ADDR
 
-# Deploy Kliver 1155
-python deploy_contract.py --environment dev --contract kliver_1155 --owner 0x123...
+# Deploy Kliver Tokens Core
+python deploy_contract.py --environment dev --contract kliver_tokens_core --owner 0x123...
 ```
 
 ### Deployment Examples
@@ -966,7 +966,7 @@ python deploy_contract.py --environment dev --contract all
 # Or step by step
 python deploy_contract.py --environment dev --contract nft
 python deploy_contract.py --environment dev --contract registry --nft-address 0xABC...
-python deploy_contract.py --environment dev --contract kliver_1155
+python deploy_contract.py --environment dev --contract kliver_tokens_core
 ```
 
 #### Production Environment
@@ -1085,35 +1085,35 @@ fn test_claim_accumulated_days() {
 
 ```cairo
 // 1. Create token (owner)
-let token_id = kliver_1155.create_token(
+let token_id = kliver_tokens_core.create_token(
     14,      // Release at 2 PM UTC
     100,     // 100 tokens daily
     500      // 500 token first-time bonus
 );
 
 // 2. Register simulation (owner)
-kliver_1155.register_simulation(
+kliver_tokens_core.register_simulation(
     'MISSION_ALPHA',
     token_id,
     1735689600  // Expires Jan 1, 2025
 );
 
 // 3. Add users to whitelist (owner)
-kliver_1155.add_to_whitelist(token_id, 'MISSION_ALPHA', user1);
-kliver_1155.add_to_whitelist(token_id, 'MISSION_ALPHA', user2);
+kliver_tokens_core.add_to_whitelist(token_id, 'MISSION_ALPHA', user1);
+kliver_tokens_core.add_to_whitelist(token_id, 'MISSION_ALPHA', user2);
 
 // 4. User completes mission and claims (user)
-let amount = kliver_1155.claim_tokens(token_id, 'MISSION_ALPHA', user1);
+let amount = kliver_tokens_core.claim_tokens(token_id, 'MISSION_ALPHA', user1);
 // amount = 600 (500 special + 100 daily)
 
 // 5. User waits 3 days and claims again
 // amount = 300 (100 daily * 3 days)
 
 // 6. User pays for hint (user)
-kliver_1155.pay_for_hint(token_id, 'MISSION_ALPHA', user1, 'HINT_1', 50);
+kliver_tokens_core.pay_for_hint(token_id, 'MISSION_ALPHA', user1, 'HINT_1', 50);
 
 // 7. Simulation expires, owner extends it (owner)
-kliver_1155.update_simulation_expiration('MISSION_ALPHA', 1767225600);
+kliver_tokens_core.update_simulation_expiration('MISSION_ALPHA', 1767225600);
 ```
 
 ### Example 2: Batch Queries
@@ -1123,14 +1123,14 @@ kliver_1155.update_simulation_expiration('MISSION_ALPHA', 1767225600);
 let simulations = array!['SIM_1', 'SIM_2', 'SIM_3'];
 let wallets = array![user1, user2, user3];
 
-let results = kliver_1155.get_claimable_amounts_batch(
+let results = kliver_tokens_core.get_claimable_amounts_batch(
     token_id,
     simulations,
     wallets
 );
 
 // Get comprehensive wallet summary
-let summary = kliver_1155.get_wallet_token_summary(
+let summary = kliver_tokens_core.get_wallet_token_summary(
     token_id,
     user1,
     array!['SIM_1', 'SIM_2']
