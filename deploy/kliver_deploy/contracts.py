@@ -54,30 +54,36 @@ class KliverNFT(BaseContract):
 
 class KliverRegistry(BaseContract):
     """Kliver Registry contract."""
-    
+
     def __init__(self):
         super().__init__("kliver_registry", "KliverRegistry")
-    
-    def get_constructor_calldata(self, owner_address: str, nft_address: str, 
-                               verifier_address: str = "0x0", **kwargs) -> List[str]:
-        """Registry requires: owner + nft_address + verifier_address"""
+
+    def get_constructor_calldata(self, owner_address: str, nft_address: str,
+                               tokens_core_address: str, verifier_address: str = "0x0", **kwargs) -> List[str]:
+        """Registry requires: owner + nft_address + tokens_core_address + verifier_address"""
         print(f"{Colors.INFO}📋 Using NFT address: {nft_address}{Colors.RESET}")
+        print(f"{Colors.INFO}📋 Using Tokens Core address: {tokens_core_address}{Colors.RESET}")
         print(f"{Colors.INFO}📋 Using Verifier address: {verifier_address}{Colors.RESET}")
-        
-        return [owner_address, nft_address, verifier_address]
+
+        return [owner_address, nft_address, tokens_core_address, verifier_address]
     
-    def validate_dependencies(self, nft_address: str = None, **kwargs) -> bool:
-        """Registry requires NFT address."""
+    def validate_dependencies(self, nft_address: str = None, tokens_core_address: str = None, **kwargs) -> bool:
+        """Registry requires NFT address and Tokens Core address."""
         if not nft_address:
             print(f"{Colors.ERROR}✗ NFT address is required for Registry deployment{Colors.RESET}")
             return False
+        if not tokens_core_address:
+            print(f"{Colors.ERROR}✗ Tokens Core address is required for Registry deployment{Colors.RESET}")
+            return False
         return True
     
-    def get_dependency_info(self, nft_address: str = None, verifier_address: str = None, **kwargs) -> List[str]:
+    def get_dependency_info(self, nft_address: str = None, tokens_core_address: str = None, verifier_address: str = None, **kwargs) -> List[str]:
         """Get dependency information."""
         deps = []
         if nft_address:
             deps.append(f"NFT Contract: {nft_address}")
+        if tokens_core_address:
+            deps.append(f"Tokens Core Contract: {tokens_core_address}")
         if verifier_address and verifier_address != "0x0":
             deps.append(f"Verifier Contract: {verifier_address}")
         return deps

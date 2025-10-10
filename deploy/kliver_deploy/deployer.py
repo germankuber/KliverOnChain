@@ -198,6 +198,107 @@ class ContractDeployer:
             print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
             return None
 
+    def set_registry_on_tokencore(self, tokencore_address: str, registry_address: str, owner_address: str) -> bool:
+        """Set the registry address on the TokenCore contract."""
+        print(f"{Colors.INFO}🔗 Setting registry address on TokenCore contract...{Colors.RESET}")
+
+        command = [
+            "sncast", "--account", self.network_config.account, "invoke",
+            "--contract-address", tokencore_address,
+            "--function", "set_registry_address",
+            "--calldata", registry_address,
+            "--url", self.network_config.rpc_url
+        ]
+
+        result = CommandRunner.run_command(command, f"Setting registry address on TokenCore")
+
+        if not result["success"]:
+            print(f"{Colors.ERROR}Failed to set registry address on TokenCore:{Colors.RESET}")
+            print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
+            print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
+            return False
+
+        try:
+            tx_hash = StarknetUtils.parse_transaction_hash(result["stdout"])
+            print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
+
+            print(f"{Colors.BOLD}⏳ Waiting for transaction to be confirmed...{Colors.RESET}")
+            if not self.tx_waiter.wait_for_confirmation(tx_hash):
+                print(f"{Colors.ERROR}✗ Transaction not confirmed.{Colors.RESET}")
+                return False
+
+            print(f"{Colors.SUCCESS}✓ Registry address set successfully on TokenCore!{Colors.RESET}")
+
+            # Validate that the registry address was set correctly
+            if not self.validate_registry_address_set(tokencore_address, registry_address):
+                print(f"{Colors.ERROR}✗ Registry address validation failed.{Colors.RESET}")
+                return False
+
+            return True
+
+        except ValueError as e:
+            print(f"{Colors.ERROR}Could not parse transaction hash from output{Colors.RESET}")
+            print(f"{Colors.ERROR}Error: {str(e)}{Colors.RESET}")
+            return False
+
+    def validate_registry_address_set(self, tokencore_address: str, expected_registry_address: str) -> bool:
+        """Validate that the registry address was set correctly on the TokenCore contract."""
+        print(f"{Colors.INFO}🔍 Validating registry address on TokenCore contract...{Colors.RESET}")
+
+        command = [
+            "sncast", "--account", self.network_config.account, "call",
+            "--contract-address", tokencore_address,
+            "--function", "get_registry_address",
+            "--url", self.network_config.rpc_url
+        ]
+
+        result = CommandRunner.run_command(command, f"Validating registry address on TokenCore")
+
+        if not result["success"]:
+            print(f"{Colors.ERROR}Failed to call get_registry_address on TokenCore:{Colors.RESET}")
+            print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
+            print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
+            return False
+
+        try:
+            # Parse the returned registry address from the output
+            import re
+            # The output should contain something like "0x[address]"
+            match = re.search(r'0x[a-fA-F0-9]+', result["stdout"])
+            if not match:
+                print(f"{Colors.ERROR}Could not parse registry address from call output{Colors.RESET}")
+                print(f"{Colors.ERROR}Output: {result['stdout']}{Colors.RESET}")
+                return False
+
+            returned_address = match.group(0).lower()
+            expected_address = expected_registry_address.lower()
+
+            # Normalize addresses by removing leading zeros after 0x for comparison
+            def normalize_address(addr: str) -> str:
+                if addr.startswith('0x'):
+                    # Remove leading zeros after 0x, but keep at least one zero if the address is all zeros
+                    hex_part = addr[2:].lstrip('0')
+                    return '0x' + (hex_part if hex_part else '0')
+                return addr
+
+            normalized_returned = normalize_address(returned_address)
+            normalized_expected = normalize_address(expected_address)
+
+            if normalized_returned == normalized_expected:
+                print(f"{Colors.SUCCESS}✓ Registry address validated successfully: {returned_address}{Colors.RESET}")
+                return True
+            else:
+                print(f"{Colors.ERROR}✗ Registry address mismatch!{Colors.RESET}")
+                print(f"{Colors.ERROR}Expected: {expected_address}{Colors.RESET}")
+                print(f"{Colors.ERROR}Got: {returned_address}{Colors.RESET}")
+                print(f"{Colors.ERROR}Normalized Expected: {normalized_expected}{Colors.RESET}")
+                print(f"{Colors.ERROR}Normalized Got: {normalized_returned}{Colors.RESET}")
+                return False
+
+        except Exception as e:
+            print(f"{Colors.ERROR}Error validating registry address: {str(e)}{Colors.RESET}")
+            return False
+
     def validate_contract(self, contract_address: str, contract_type: str) -> bool:
         """Validate that a contract exists and is of the expected type."""
         print(f"{Colors.INFO}🔍 Validating {contract_type} contract at {contract_address}...{Colors.RESET}")
