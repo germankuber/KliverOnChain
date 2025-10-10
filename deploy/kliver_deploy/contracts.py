@@ -89,11 +89,11 @@ class KliverRegistry(BaseContract):
         return deps
 
 
-class KliverNFT1155(BaseContract):
-    """Kliver NFT 1155 (ERC1155) contract."""
+class KliverTokensCore(BaseContract):
+    """Kliver Tokens Core (ERC1155) contract."""
     
     def __init__(self):
-        super().__init__("KliverNFT1155", "KliverNFT1155")
+        super().__init__("KliverTokensCore", "KliverTokensCore")
     
     def get_constructor_calldata(self, owner_address: str, base_uri: str = "", **kwargs) -> List[str]:
         """Kliver1155 requires: owner + base_uri (ByteArray)"""
@@ -115,7 +115,7 @@ class KliverNFT1155(BaseContract):
 CONTRACTS = {
     "nft": KliverNFT,
     "registry": KliverRegistry,
-    "kliver_tokens_core": KliverNFT1155
+    "kliver_tokens_core": KliverTokensCore
 }
 
 

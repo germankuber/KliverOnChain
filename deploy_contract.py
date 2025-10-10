@@ -109,8 +109,8 @@ class ContractDeployer:
                 "class_name": "KliverNFT"
             },
             "kliver_tokens_core": {
-                "name": "KlivertokensCore",
-                "class_name": "KlivertokensCore"
+                "name": "KliverTokensCore",
+                "class_name": "KliverTokensCore"
             },
 
         }

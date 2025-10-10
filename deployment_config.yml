@@ -21,8 +21,8 @@ environments:
         sierra_file: "target/dev/kliver_on_chain_KliverNFT.contract_class.json"
         base_uri: "https://api-dev.kliver.ai/api/nft/metadata"
       kliver_tokens_core:
-        name: "KlivertokensCore"
-        sierra_file: "target/dev/kliver_on_chain_KlivertokensCore.contract_class.json"
+        name: "KliverTokensCore"
+        sierra_file: "target/dev/kliver_on_chain_KliverTokensCore.contract_class.json"
         base_uri: "https://api-dev.kliver.ai/api/metadata/"
     deployment_settings:
       wait_timeout: 120
@@ -75,8 +75,8 @@ environments:
         sierra_file: "target/release/kliver_on_chain_KliverNFT.contract_class.json"
         base_uri: "https://api.kliver.ai/api/nft/metadata"
       kliver_tokens_core:
-        name: "KlivertokensCore"
-        sierra_file: "target/release/kliver_on_chain_KlivertokensCore.contract_class.json"
+        name: "KliverTokensCore"
+        sierra_file: "target/release/kliver_on_chain_KliverTokensCore.contract_class.json"
         base_uri: "https://api.kliver.ai/api/metadata/"
     deployment_settings:
       wait_timeout: 300
