@@ -41,15 +41,15 @@ fn deploy_nft_contract(owner: ContractAddress) -> ContractAddress {
     nft_address
 }
 
-/// Helper function to deploy the Kliver 1155 contract
-fn deploy_kliver_1155_contract(owner: ContractAddress) -> ContractAddress {
-    let contract_1155 = declare("KliverRC1155").unwrap().contract_class();
+/// Helper function to deploy the Tokens Core contract
+fn deploy_tokens_core_contract(owner: ContractAddress) -> ContractAddress {
+    let contract_tokens_core = declare("KliverRC1155").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
-    let base_uri: ByteArray = "https://api.kliver.io/1155/";
+    let base_uri: ByteArray = "https://api.kliver.io/tokens-core/";
     Serde::serialize(@base_uri, ref constructor_calldata);
-    let (address_1155, _) = contract_1155.deploy(@constructor_calldata).unwrap();
-    address_1155
+    let (address_tokens_core, _) = contract_tokens_core.deploy(@constructor_calldata).unwrap();
+    address_tokens_core
 }
 
 /// Helper function to deploy the contract and return all dispatchers
@@ -63,13 +63,13 @@ fn deploy_contract() -> (
 ) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let nft_address = deploy_nft_contract(owner);
-    let kliver_1155_address = deploy_kliver_1155_contract(owner);
+    let tokens_core_address = deploy_tokens_core_contract(owner);
     let verifier_address: ContractAddress = 'verifier'.try_into().unwrap();
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
     constructor_calldata.append(nft_address.into());
-    constructor_calldata.append(kliver_1155_address.into());
+    constructor_calldata.append(tokens_core_address.into());
     constructor_calldata.append(verifier_address.into());
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
     (
@@ -95,13 +95,13 @@ fn deploy_contract_with_nft() -> (
 ) {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let nft_address = deploy_nft_contract(owner);
-    let kliver_1155_address = deploy_kliver_1155_contract(owner);
+    let tokens_core_address = deploy_tokens_core_contract(owner);
     let verifier_address: ContractAddress = 'verifier'.try_into().unwrap();
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
     constructor_calldata.append(nft_address.into());
-    constructor_calldata.append(kliver_1155_address.into());
+    constructor_calldata.append(tokens_core_address.into());
     constructor_calldata.append(verifier_address.into());
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
     (
@@ -276,22 +276,22 @@ fn test_constructor_zero_nft_address() {
 }
 
 #[test]
-fn test_constructor_zero_kliver_1155_address() {
+fn test_constructor_zero_tokens_core_address() {
     let owner: ContractAddress = 'owner'.try_into().unwrap();
     let nft_address: ContractAddress = 'nft'.try_into().unwrap();
-    let zero_kliver_1155: ContractAddress = 0.try_into().unwrap();
+    let zero_tokens_core: ContractAddress = 0.try_into().unwrap();
     let verifier_address: ContractAddress = 'verifier'.try_into().unwrap();
     let contract = declare("kliver_registry").unwrap().contract_class();
     let mut constructor_calldata = ArrayTrait::new();
     constructor_calldata.append(owner.into());
     constructor_calldata.append(nft_address.into());
-    constructor_calldata.append(zero_kliver_1155.into());
+    constructor_calldata.append(zero_tokens_core.into());
     constructor_calldata.append(verifier_address.into());
 
     match contract.deploy(@constructor_calldata) {
         Result::Ok(_) => core::panic_with_felt252('Should have panicked'),
         Result::Err(errors) => {
-            assert(*errors.at(0) == '1155 address cannot be zero', 'Wrong error message');
+            assert(*errors.at(0) == 'Tokens core addr cannot be zero', 'Wrong error message');
         },
     }
 }
@@ -319,13 +319,13 @@ fn test_get_nft_address() {
 }
 
 #[test]
-fn test_get_kliver_1155_address() {
+fn test_get_tokens_core_address() {
     let (_, _, _, owner_dispatcher, _, _) = deploy_contract();
-    let kliver_1155_address = owner_dispatcher.get_kliver_1155_address();
+    let tokens_core_address = owner_dispatcher.get_tokens_core_address();
 
     // Verify the address is not zero
     let zero_address: ContractAddress = 0.try_into().unwrap();
-    assert(kliver_1155_address != zero_address, '1155 address should not be zero');
+    assert(tokens_core_address != zero_address, 'Tokens core addr != 0');
 }
 
 #[test]

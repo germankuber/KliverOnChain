@@ -339,7 +339,7 @@ class ContractDeployer:
     
     def deploy_contract(self, class_hash: str, owner_address: str, nft_address: Optional[str] = None,
                        registry_address: Optional[str] = None, token_address: Optional[str] = None,
-                       verifier_address: Optional[str] = None, kliver_1155_address: Optional[str] = None) -> Optional[str]:
+                       verifier_address: Optional[str] = None, tokens_core_address: Optional[str] = None) -> Optional[str]:
         """Deploy the contract and return the contract address"""
         contract_config = self.contracts[self.contract_type]
         contract_name = contract_config["name"]
@@ -364,13 +364,13 @@ class ContractDeployer:
 
             constructor_calldata = [owner_address] + base_uri_calldata
         elif self.contract_type == "registry":
-            # Registry requires: owner + nft_address + kliver_1155_address + verifier_address
+            # Registry requires: owner + nft_address + tokens_core_address + verifier_address
             if not nft_address:
                 print(f"{Colors.ERROR}✗ NFT address is required for Registry deployment{Colors.RESET}")
                 return None
 
-            if not kliver_1155_address:
-                print(f"{Colors.ERROR}✗ Kliver 1155 address is required for Registry deployment{Colors.RESET}")
+            if not tokens_core_address:
+                print(f"{Colors.ERROR}✗ Tokens Core address is required for Registry deployment{Colors.RESET}")
                 return None
 
             # Get verifier address from parameter, config, or use default
@@ -381,9 +381,9 @@ class ContractDeployer:
                     verifier_address = registry_config.get("verifier_address", "0x0")
 
             print(f"{Colors.INFO}📋 Using NFT address: {nft_address}{Colors.RESET}")
-            print(f"{Colors.INFO}📋 Using Kliver 1155 address: {kliver_1155_address}{Colors.RESET}")
+            print(f"{Colors.INFO}📋 Using Tokens Core address: {tokens_core_address}{Colors.RESET}")
             print(f"{Colors.INFO}📋 Using Verifier address: {verifier_address}{Colors.RESET}")
-            constructor_calldata = [owner_address, nft_address, kliver_1155_address, verifier_address]
+            constructor_calldata = [owner_address, nft_address, tokens_core_address, verifier_address]
         elif self.contract_type == "kliver_1155":
             # Kliver1155 requires: owner + base_uri (ByteArray)
             base_uri = ""
@@ -538,7 +538,7 @@ class ContractDeployer:
 
     def deploy_full_flow(self, owner_address: Optional[str] = None, nft_address: Optional[str] = None,
                         registry_address: Optional[str] = None, token_address: Optional[str] = None,
-                        verifier_address: Optional[str] = None, kliver_1155_address: Optional[str] = None) -> Optional[Dict[str, Any]]:
+                        verifier_address: Optional[str] = None, tokens_core_address: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Execute the complete deployment flow for a single contract"""
         contract_config = self.contracts[self.contract_type]
         contract_name = contract_config["name"]
@@ -585,7 +585,7 @@ class ContractDeployer:
             return None
             
         # Deploy contract
-        contract_address = self.deploy_contract(class_hash, owner_address, nft_address, registry_address, token_address, verifier_address, kliver_1155_address)
+        contract_address = self.deploy_contract(class_hash, owner_address, nft_address, registry_address, token_address, verifier_address, tokens_core_address)
         if not contract_address:
             print(f"{Colors.ERROR}Deployment failed.{Colors.RESET}")
             return None
@@ -624,13 +624,13 @@ class ContractDeployer:
 @click.option('--rpc-url', '-r', help='Custom RPC URL (optional - overrides environment config)')
 @click.option('--owner', '-o', help='Owner address for the contract (uses account address if not specified)')
 @click.option('--nft-address', '-n', help='NFT contract address (required when deploying registry separately)')
-@click.option('--kliver-1155-address', help='Kliver 1155 contract address (required when deploying registry separately)')
+@click.option('--tokens-core-address', help='Tokens Core contract address (required when deploying registry separately)')
 
 @click.option('--verifier-address', help='Verifier contract address (optional for Registry, uses 0x0 if not provided)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.option('--output-json', is_flag=True, help='Output deployment addresses in JSON format')
 def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optional[str], nft_address: Optional[str],
-           registry_address: Optional[str], token_address: Optional[str], verifier_address: Optional[str], kliver_1155_address: Optional[str], verbose: bool, output_json: bool):
+           registry_address: Optional[str], token_address: Optional[str], verifier_address: Optional[str], tokens_core_address: Optional[str], verbose: bool, output_json: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration
     
@@ -656,7 +656,7 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
     3. Contract Dependencies:
         - NFT: No dependencies
         - Token1155: No dependencies
-        - Registry: Requires NFT address and Kliver 1155 address
+        - Registry: Requires NFT address and Tokens Core address
     
     Example usage:
         python deploy_contract.py --environment dev --contract all
@@ -723,7 +723,7 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
             if success:
                 click.echo(f"{Colors.BOLD}Step 3/3: Deploying Registry Contract{Colors.RESET}")
                 deployer_registry = ContractDeployer(account, network, 'registry', rpc_url, env_config)
-                registry_result = deployer_registry.deploy_full_flow(owner, nft_deployed_address, verifier_address=verifier_address, kliver_1155_address=token_deployed_address)
+                registry_result = deployer_registry.deploy_full_flow(owner, nft_deployed_address, verifier_address=verifier_address, tokens_core_address=token_deployed_address)
                 if registry_result:
                     deployments.append(registry_result)
                     registry_deployed_address = registry_result['contract_address']
@@ -741,17 +741,17 @@ def deploy(environment: str, contract: str, rpc_url: Optional[str], owner: Optio
                 click.echo(f"{Colors.INFO}Use: --nft-address 0x... or deploy with --contract all{Colors.RESET}\n")
                 exit(1)
 
-            if not kliver_1155_address:
-                click.echo(f"\n{Colors.ERROR}❌ Kliver 1155 address is required when deploying Registry separately{Colors.RESET}")
-                click.echo(f"{Colors.INFO}Use: --kliver-1155-address 0x... or deploy with --contract all{Colors.RESET}\n")
+            if not tokens_core_address:
+                click.echo(f"\n{Colors.ERROR}❌ Tokens Core address is required when deploying Registry separately{Colors.RESET}")
+                click.echo(f"{Colors.INFO}Use: --tokens-core-address 0x... or deploy with --contract all{Colors.RESET}\n")
                 exit(1)
 
             click.echo(f"\n{Colors.BOLD}🎯 SEPARATE REGISTRY DEPLOYMENT{Colors.RESET}")
             click.echo(f"{Colors.INFO}Using NFT contract at: {nft_address}{Colors.RESET}")
-            click.echo(f"{Colors.INFO}Using Kliver 1155 contract at: {kliver_1155_address}{Colors.RESET}\n")
+            click.echo(f"{Colors.INFO}Using Tokens Core contract at: {tokens_core_address}{Colors.RESET}\n")
 
             deployer = ContractDeployer(account, network, contract, rpc_url, env_config)
-            result = deployer.deploy_full_flow(owner, nft_address, verifier_address=verifier_address, kliver_1155_address=kliver_1155_address)
+            result = deployer.deploy_full_flow(owner, nft_address, verifier_address=verifier_address, tokens_core_address=tokens_core_address)
             if result:
                 deployments.append(result)
             else:

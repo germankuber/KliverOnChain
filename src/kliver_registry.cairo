@@ -66,7 +66,7 @@ pub mod kliver_registry {
         owner: ContractAddress,
         paused: bool,
         nft_address: ContractAddress,
-        kliver_1155_address: ContractAddress,
+        tokens_core_address: ContractAddress,
         verifier_address: ContractAddress,
         /// Maps character ID to its hash
         characters: Map<felt252, felt252>,
@@ -92,7 +92,7 @@ pub mod kliver_registry {
 
     pub mod Errors {
         pub const NFT_ADDRESS_CANNOT_BE_ZERO: felt252 = 'NFT address cannot be zero';
-        pub const KLIVER_1155_ADDRESS_CANNOT_BE_ZERO: felt252 = '1155 address cannot be zero';
+        pub const TOKENS_CORE_ADDRESS_CANNOT_BE_ZERO: felt252 = 'Tokens core addr cannot be zero';
         pub const AUTHOR_MUST_OWN_NFT: felt252 = 'Author must own a Kliver NFT';
         pub const SESSION_ID_CANNOT_BE_ZERO: felt252 = 'Session ID cannot be zero';
         pub const ROOT_HASH_CANNOT_BE_ZERO: felt252 = 'Root hash cannot be zero';
@@ -111,16 +111,16 @@ pub mod kliver_registry {
         ref self: ContractState,
         owner: ContractAddress,
         nft_address: ContractAddress,
-        kliver_1155_address: ContractAddress,
+        tokens_core_address: ContractAddress,
         verifier_address: ContractAddress,
     ) {
         assert(!owner.is_zero(), 'Owner cannot be zero');
         assert(!nft_address.is_zero(), Errors::NFT_ADDRESS_CANNOT_BE_ZERO);
-        assert(!kliver_1155_address.is_zero(), Errors::KLIVER_1155_ADDRESS_CANNOT_BE_ZERO);
+        assert(!tokens_core_address.is_zero(), Errors::TOKENS_CORE_ADDRESS_CANNOT_BE_ZERO);
         assert(!verifier_address.is_zero(), 'Verifier address cannot be zero');
         self.owner.write(owner);
         self.nft_address.write(nft_address);
-        self.kliver_1155_address.write(kliver_1155_address);
+        self.tokens_core_address.write(tokens_core_address);
         self.verifier_address.write(verifier_address);
         self.paused.write(false);
     }
@@ -612,8 +612,8 @@ pub mod kliver_registry {
             self.nft_address.read()
         }
 
-        fn get_kliver_1155_address(self: @ContractState) -> ContractAddress {
-            self.kliver_1155_address.read()
+        fn get_tokens_core_address(self: @ContractState) -> ContractAddress {
+            self.tokens_core_address.read()
         }
 
         fn transfer_ownership(ref self: ContractState, new_owner: ContractAddress) {
