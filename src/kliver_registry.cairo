@@ -377,85 +377,26 @@ pub mod kliver_registry {
     #[abi(embed_v0)]
     impl SimulationRegistryImpl of ISimulationRegistry<ContractState> {
         fn register_simulation(ref self: ContractState, metadata: SimulationMetadata) {
-            // Check if contract is paused
-            self._assert_not_paused();
-            // Only owner can register simulations
-            self._assert_only_owner();
-
-            // Validate inputs
-            assert(metadata.simulation_id != 0, 'Simulation ID cannot be zero');
-            assert(metadata.simulation_hash != 0, 'Simulation hash cannot be zero');
-            assert(!metadata.author.is_zero(), 'Author cannot be zero');
-            assert(metadata.character_id != 0, 'Character ID cannot be zero');
-            assert(metadata.scenario_id != 0, 'Scenario ID cannot be zero');
-
-            // Validate that author has a Kliver NFT
-            self._assert_author_has_nft(metadata.author);
-
-            // Validate that character exists
-            let character_hash = self.characters.read(metadata.character_id);
-            assert(character_hash != 0, Errors::CHARACTER_NOT_FOUND);
-
-            // Validate that scenario exists
-            let scenario_hash = self.scenarios.read(metadata.scenario_id);
-            assert(scenario_hash != 0, Errors::SCENARIO_NOT_FOUND);
-
-            // Check if simulation is already registered
-            let existing_hash = self.simulations.read(metadata.simulation_id);
-            assert(existing_hash == 0, 'Simulation already registered');
-
-            // Save the simulation and metadata (without token info)
-            self.simulations.write(metadata.simulation_id, metadata.simulation_hash);
-            self.simulation_authors.write(metadata.simulation_id, metadata.author);
-            self.simulation_characters.write(metadata.simulation_id, metadata.character_id);
-            self.simulation_scenarios.write(metadata.simulation_id, metadata.scenario_id);
-
-            // Emit event
-            self
-                .emit(
-                    SimulationRegistered {
-                        simulation_id: metadata.simulation_id,
-                        simulation_hash: metadata.simulation_hash,
-                        author: metadata.author,
-                        character_id: metadata.character_id,
-                        scenario_id: metadata.scenario_id,
-                    },
-                );
+            self._register_simulation_internal(
+                metadata.simulation_id,
+                metadata.simulation_hash,
+                metadata.author,
+                metadata.character_id,
+                metadata.scenario_id,
+            );
         }
 
         fn register_simulation_with_token(ref self: ContractState, metadata: SimulationWithTokenMetadata) {
-            // Check if contract is paused
-            self._assert_not_paused();
-            // Only owner can register simulations
-            self._assert_only_owner();
+            // Register the simulation using the internal function (validates and saves base metadata)
+            self._register_simulation_internal(
+                metadata.simulation_id,
+                metadata.simulation_hash,
+                metadata.author,
+                metadata.character_id,
+                metadata.scenario_id,
+            );
 
-            // Validate inputs
-            assert(metadata.simulation_id != 0, 'Simulation ID cannot be zero');
-            assert(metadata.simulation_hash != 0, 'Simulation hash cannot be zero');
-            assert(!metadata.author.is_zero(), 'Author cannot be zero');
-            assert(metadata.character_id != 0, 'Character ID cannot be zero');
-            assert(metadata.scenario_id != 0, 'Scenario ID cannot be zero');
-
-            // Validate that author has a Kliver NFT
-            self._assert_author_has_nft(metadata.author);
-
-            // Validate that character exists
-            let character_hash = self.characters.read(metadata.character_id);
-            assert(character_hash != 0, Errors::CHARACTER_NOT_FOUND);
-
-            // Validate that scenario exists
-            let scenario_hash = self.scenarios.read(metadata.scenario_id);
-            assert(scenario_hash != 0, Errors::SCENARIO_NOT_FOUND);
-
-            // Check if simulation is already registered
-            let existing_hash = self.simulations.read(metadata.simulation_id);
-            assert(existing_hash == 0, 'Simulation already registered');
-
-            // Save the simulation and metadata
-            self.simulations.write(metadata.simulation_id, metadata.simulation_hash);
-            self.simulation_authors.write(metadata.simulation_id, metadata.author);
-            self.simulation_characters.write(metadata.simulation_id, metadata.character_id);
-            self.simulation_scenarios.write(metadata.simulation_id, metadata.scenario_id);
+            // Save token-specific metadata
             self.simulation_token_ids.write(metadata.simulation_id, metadata.token_id);
             self.simulation_expirations.write(metadata.simulation_id, metadata.expiration_timestamp);
 
@@ -467,18 +408,6 @@ pub mod kliver_registry {
                 metadata.token_id,
                 metadata.expiration_timestamp
             );
-
-            // Emit event
-            self
-                .emit(
-                    SimulationRegistered {
-                        simulation_id: metadata.simulation_id,
-                        simulation_hash: metadata.simulation_hash,
-                        author: metadata.author,
-                        character_id: metadata.character_id,
-                        scenario_id: metadata.scenario_id,
-                    },
-                );
         }
 
         fn verify_simulation(
@@ -748,6 +677,60 @@ pub mod kliver_registry {
             let nft_dispatcher = IKliverNFTDispatcher { contract_address: nft_address };
             let has_nft = nft_dispatcher.user_has_nft(author);
             assert(has_nft, Errors::AUTHOR_MUST_OWN_NFT);
+        }
+
+        fn _register_simulation_internal(
+            ref self: ContractState,
+            simulation_id: felt252,
+            simulation_hash: felt252,
+            author: ContractAddress,
+            character_id: felt252,
+            scenario_id: felt252,
+        ) {
+            // Check if contract is paused
+            self._assert_not_paused();
+            // Only owner can register simulations
+            self._assert_only_owner();
+
+            // Validate inputs
+            assert(simulation_id != 0, 'Simulation ID cannot be zero');
+            assert(simulation_hash != 0, 'Simulation hash cannot be zero');
+            assert(!author.is_zero(), 'Author cannot be zero');
+            assert(character_id != 0, 'Character ID cannot be zero');
+            assert(scenario_id != 0, 'Scenario ID cannot be zero');
+
+            // Validate that author has a Kliver NFT
+            self._assert_author_has_nft(author);
+
+            // Validate that character exists
+            let character_hash = self.characters.read(character_id);
+            assert(character_hash != 0, Errors::CHARACTER_NOT_FOUND);
+
+            // Validate that scenario exists
+            let scenario_hash = self.scenarios.read(scenario_id);
+            assert(scenario_hash != 0, Errors::SCENARIO_NOT_FOUND);
+
+            // Check if simulation is already registered
+            let existing_hash = self.simulations.read(simulation_id);
+            assert(existing_hash == 0, 'Simulation already registered');
+
+            // Save the simulation and metadata (without token info)
+            self.simulations.write(simulation_id, simulation_hash);
+            self.simulation_authors.write(simulation_id, author);
+            self.simulation_characters.write(simulation_id, character_id);
+            self.simulation_scenarios.write(simulation_id, scenario_id);
+
+            // Emit event
+            self
+                .emit(
+                    SimulationRegistered {
+                        simulation_id,
+                        simulation_hash,
+                        author,
+                        character_id,
+                        scenario_id,
+                    },
+                );
         }
     }
 }
