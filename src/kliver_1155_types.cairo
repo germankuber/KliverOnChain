@@ -148,6 +148,12 @@ pub struct HintPaid {
     pub token_id: u256,
 }
 
+#[derive(Drop, starknet::Event)]
+pub struct RegistryAddressUpdated {
+    pub old_address: ContractAddress,
+    pub new_address: ContractAddress,
+}
+
 #[derive(Drop, Serde)]
 pub struct ClaimableAmountResult {
     pub simulation_id: felt252,

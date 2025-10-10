@@ -1,8 +1,8 @@
 use super::kliver_1155_types::{
-    AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RemovedFromWhitelist,
-    SessionPaid, SessionPayment, Simulation, SimulationClaimData, SimulationExpirationUpdated,
-    SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo, TokensClaimed,
-    WalletTokenSummary,
+    AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
+    RemovedFromWhitelist, SessionPaid, SessionPayment, Simulation, SimulationClaimData,
+    SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo,
+    TokensClaimed, WalletTokenSummary,
 };
 
 #[starknet::contract]
@@ -14,8 +14,8 @@ mod KliverRC1155 {
     };
     use starknet::{ContractAddress, get_caller_address};
     use super::{
-        AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RemovedFromWhitelist,
-        SessionPaid, SessionPayment, Simulation, SimulationClaimData,
+        AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
+        RemovedFromWhitelist, SessionPaid, SessionPayment, Simulation, SimulationClaimData,
         SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated,
         TokenInfo, TokensClaimed, WalletTokenSummary,
     };
@@ -40,6 +40,7 @@ mod KliverRC1155 {
         #[substorage(v0)]
         src5: SRC5Component::Storage,
         owner: ContractAddress,
+        registry_address: ContractAddress,
         token_info: Map<u256, TokenInfo>,
         next_token_id: u256,
         simulations: Map<felt252, Simulation>,
@@ -68,6 +69,7 @@ mod KliverRC1155 {
         TokensClaimed: TokensClaimed,
         SessionPaid: SessionPaid,
         HintPaid: HintPaid,
+        RegistryAddressUpdated: RegistryAddressUpdated,
     }
 
     #[constructor]
@@ -76,6 +78,31 @@ mod KliverRC1155 {
         self.owner.write(owner);
         self.erc1155.initializer(base_uri);
         self.next_token_id.write(1);
+        // Registry address inicialmente a zero, será configurado después
+        self.registry_address.write(0.try_into().unwrap());
+    }
+
+    #[external(v0)]
+    fn set_registry_address(ref self: ContractState, new_registry_address: ContractAddress) {
+        // Solo el owner puede setear/actualizar la dirección del registry
+        self._assert_only_owner();
+        
+        // Validar que la nueva dirección no sea zero
+        assert(new_registry_address != 0.try_into().unwrap(), 'Registry cannot be zero');
+        
+        // Guardar la dirección anterior para el evento
+        let old_address = self.registry_address.read();
+        
+        // Actualizar la dirección del registry
+        self.registry_address.write(new_registry_address);
+        
+        // Emitir evento
+        self.emit(RegistryAddressUpdated { old_address, new_address: new_registry_address });
+    }
+
+    #[external(v0)]
+    fn get_registry_address(self: @ContractState) -> ContractAddress {
+        self.registry_address.read()
     }
 
     #[external(v0)]
@@ -154,7 +181,8 @@ mod KliverRC1155 {
     fn register_simulation(
         ref self: ContractState, simulation_id: felt252, token_id: u256, expiration_timestamp: u64,
     ) -> felt252 {
-        self._assert_only_owner();
+        // Solo el registry puede registrar simulaciones
+        self._assert_only_registry();
 
         // Check if token exists
         let token_info = self.token_info.entry(token_id).read();
@@ -688,6 +716,18 @@ mod KliverRC1155 {
             let caller = get_caller_address();
             let owner = self.owner.read();
             assert(caller == owner, 'Not owner');
+        }
+
+        fn _assert_only_registry(self: @ContractState) {
+            let caller = get_caller_address();
+            let registry = self.registry_address.read();
+            let zero_address: ContractAddress = 0.try_into().unwrap();
+            
+            // Verificar que el registry esté configurado
+            assert(registry != zero_address, 'Registry not configured');
+            
+            // Verificar que el caller sea el registry
+            assert(caller == registry, 'Only registry can call');
         }
 
         fn calculate_claimable_days(

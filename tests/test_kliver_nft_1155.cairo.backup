@@ -246,12 +246,7 @@ fn test_register_simulation_success() {
     // Register a simulation from registry
     start_cheat_caller_address(dispatcher.contract_address, registry);
     let simulation_id: felt252 = 123;
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     let returned_id = dispatcher.register_simulation(simulation_id, token_id, 1735689600); // 2025-01-01 00:00:00 UTC
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     assert(returned_id == simulation_id, 'Returned ID should match');
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -653,12 +648,7 @@ fn test_add_to_whitelist_non_owner() {
     let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Try to add to whitelist as non-owner
@@ -678,12 +668,7 @@ fn test_remove_from_whitelist_success() {
     let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -708,12 +693,7 @@ fn test_is_whitelisted_false() {
     let token_id = dispatcher.create_token(12, 1000, 0);
     
     // Register a simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Check that wallet is not whitelisted for simulation 123
@@ -735,12 +715,7 @@ fn test_get_claimable_amount() {
     let token_id = dispatcher.create_token(12, 1000, 0); // release at hour 12, 1000 tokens per day, no special
 
     // Register a simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -768,12 +743,7 @@ fn test_first_claim_before_release_hour_with_special() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation at day 0, 00:00
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -800,12 +770,7 @@ fn test_first_claim_after_release_hour_with_special() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation at day 0, 00:00
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -832,12 +797,7 @@ fn test_first_claim_multiple_days_later_with_special() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation at day 0, 00:00
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -869,12 +829,7 @@ fn test_second_claim_no_special() {
     let token_id = dispatcher.create_token(12, 1000, 0);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -915,12 +870,7 @@ fn test_accumulated_days_second_claim() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -960,12 +910,7 @@ fn test_no_special_release() {
     let token_id = dispatcher.create_token(12, 1000, 0);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -991,12 +936,7 @@ fn test_exactly_at_release_hour() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1020,12 +960,7 @@ fn test_claim_not_whitelisted() {
     let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Try to claim without being whitelisted
@@ -1047,12 +982,7 @@ fn test_claim_expired_simulation() {
     let token_id = dispatcher.create_token(12, 1000, 0);
 
     // Register a simulation that expires soon
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1000); // expires at timestamp 1000
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Add to whitelist
     dispatcher.add_to_whitelist(token_id, wallet, 123);
@@ -1114,12 +1044,7 @@ fn test_is_simulation_expired_false() {
 
     // Register a simulation with future expiration
     let future_timestamp: u64 = 1735689600; // 2025-01-01 00:00:00 UTC
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, future_timestamp);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Check that simulation is not expired
@@ -1158,12 +1083,7 @@ fn test_is_simulation_expired_at_exactly_expiration_time() {
 
     // Register a simulation
     let expiration_timestamp: u64 = 1735689600; // 2025-01-01 00:00:00 UTC
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(789, token_id, expiration_timestamp);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Mock time to exactly the expiration timestamp
@@ -1190,12 +1110,7 @@ fn test_claim_first_before_release_hour_only_special() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation at day 0, 00:00
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1225,12 +1140,7 @@ fn test_claim_first_after_release_hour_with_special() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1260,12 +1170,7 @@ fn test_claim_first_multiple_days_with_special() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1296,12 +1201,7 @@ fn test_claim_second_no_special() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1340,12 +1240,7 @@ fn test_claim_accumulated_days() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1383,12 +1278,7 @@ fn test_claim_no_special_release() {
     let token_id = dispatcher.create_token(14, 1000, 0);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1418,12 +1308,7 @@ fn test_claim_exactly_at_release_hour() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1455,12 +1340,7 @@ fn test_claim_before_release_hour_second_time_fails() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1490,12 +1370,7 @@ fn test_claim_three_consecutive() {
     let token_id = dispatcher.create_token(14, 1000, 500);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1644,12 +1519,7 @@ fn test_claim_only_special_release_token() {
     let token_id = dispatcher.create_token(14, 0, 2000);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1679,12 +1549,7 @@ fn test_claim_second_time_only_special_token_fails() {
     let token_id = dispatcher.create_token(14, 0, 1000);
     
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
     
@@ -1714,12 +1579,7 @@ fn test_get_wallet_token_summary_debug() {
     let token_id = dispatcher.create_token(12, 1000, 500);
 
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -1755,12 +1615,7 @@ fn test_get_wallet_token_summary_basic() {
     let token_id = dispatcher.create_token(12, 1000, 500); // 12h, 1000/day, 500 special
 
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -1804,24 +1659,9 @@ fn test_get_wallet_token_summary_multiple_simulations() {
     let token_id = dispatcher.create_token(14, 1000, 300); // 14h, 1000/day, 300 special
 
     // Register 3 simulations
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(111, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(222, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(333, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Add to whitelist for all 3
     dispatcher.add_to_whitelist(token_id, wallet, 111);
@@ -1864,18 +1704,8 @@ fn test_get_wallet_token_summary_filters_expired() {
 
     // Register 2 simulations - one expires soon
     let current_time = starknet::get_block_timestamp();
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(111, token_id, current_time + 86400); // Expires in 1 day
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(222, token_id, current_time + 86400 * 10); // Expires in 10 days
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     dispatcher.add_to_whitelist(token_id, wallet, 111);
     dispatcher.add_to_whitelist(token_id, wallet, 222);
@@ -1910,24 +1740,9 @@ fn test_get_wallet_token_summary_filters_not_whitelisted() {
     let token_id = dispatcher.create_token(12, 1000, 500);
 
     // Register 3 simulations but only whitelist for 2
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(111, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(222, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(333, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     dispatcher.add_to_whitelist(token_id, wallet, 111);
     // NOT whitelisted for 222
@@ -1961,12 +1776,7 @@ fn test_get_wallet_token_summary_with_balance() {
     let token_id = dispatcher.create_token(12, 1000, 500);
 
     // Register simulation and whitelist
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -2010,12 +1820,7 @@ fn test_get_claimable_amounts_batch_debug() {
     let token_id = dispatcher.create_token(12, 1000, 500); // 12h, 1000/day, 500 special
 
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -2058,12 +1863,7 @@ fn test_get_claimable_amounts_batch_single_simulation_multiple_wallets() {
     let token_id = dispatcher.create_token(12, 1000, 500); // 12h, 1000/day, 500 special
 
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Add all wallets to whitelist
     dispatcher.add_to_whitelist(token_id, wallet1, 123);
@@ -2124,24 +1924,9 @@ fn test_get_claimable_amounts_batch_multiple_simulations_single_wallet() {
     let token_id = dispatcher.create_token(14, 1000, 300); // 14h, 1000/day, 300 special
 
     // Register multiple simulations
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(111, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(222, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(333, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Add wallet to all simulations
     dispatcher.add_to_whitelist(token_id, wallet, 111);
@@ -2204,18 +1989,8 @@ fn test_get_claimable_amounts_batch_multiple_simulations_multiple_wallets() {
     let token_id = dispatcher.create_token(10, 500, 200); // 10h, 500/day, 200 special
 
     // Register simulations
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(100, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(200, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Add wallets to simulations
     dispatcher.add_to_whitelist(token_id, wallet1, 100);
@@ -2288,12 +2063,7 @@ fn test_get_claimable_amounts_batch_after_some_claims() {
     let token_id = dispatcher.create_token(12, 1000, 500); // 12h, 1000/day, 500 special
 
     // Register simulation
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Add wallets
     dispatcher.add_to_whitelist(token_id, wallet1, 123);
@@ -2375,12 +2145,7 @@ fn test_get_claimable_amounts_batch_before_release_hour() {
     let token_id = dispatcher.create_token(14, 1000, 500); // 14h, 1000/day, 500 special
 
     // Register simulation at day 0, 00:00
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, 1735689600);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Add wallets
     dispatcher.add_to_whitelist(token_id, wallet1, 123);
@@ -2427,12 +2192,7 @@ fn test_update_simulation_expiration_success() {
     // Register simulation with expiration in 10 days
     let current_time = starknet::get_block_timestamp();
     let initial_expiration = current_time + (86400 * 10);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, initial_expiration);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Verify initial expiration
     let simulation = dispatcher.get_simulation(123);
@@ -2478,12 +2238,7 @@ fn test_update_simulation_expiration_not_owner() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
     let token_id = dispatcher.create_token(12, 1000, 500);
     let current_time = starknet::get_block_timestamp();
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, current_time + 86400);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     stop_cheat_caller_address(dispatcher.contract_address);
 
     // Try to update as non-owner
@@ -2503,12 +2258,7 @@ fn test_update_simulation_expiration_past_timestamp() {
     // Create token and simulation
     let token_id = dispatcher.create_token(12, 1000, 500);
     let current_time = starknet::get_block_timestamp();
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, current_time + 86400);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Fast forward time
     stop_cheat_caller_address(dispatcher.contract_address);
@@ -2533,12 +2283,7 @@ fn test_update_simulation_expiration_current_timestamp() {
     // Create token and simulation
     let token_id = dispatcher.create_token(12, 1000, 500);
     let current_time = starknet::get_block_timestamp();
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, current_time + 86400);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // Try to update with current timestamp (not future)
     dispatcher.update_simulation_expiration(123, current_time);
@@ -2556,12 +2301,7 @@ fn test_update_simulation_expiration_extend_expired() {
     // Create token and simulation that expires soon
     let token_id = dispatcher.create_token(12, 1000, 500);
     let initial_time = starknet::get_block_timestamp();
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, initial_time + 100); // Expires in 100 seconds
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -2596,12 +2336,7 @@ fn test_update_simulation_expiration_multiple_times() {
     let token_id = dispatcher.create_token(12, 1000, 500);
     let current_time = starknet::get_block_timestamp();
     let initial_expiration = current_time + 86400;
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, initial_expiration);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
 
     // First update
     let expiration_1 = current_time + (86400 * 5);
@@ -2634,12 +2369,7 @@ fn test_update_simulation_expiration_does_not_affect_claims() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
     let token_id = dispatcher.create_token(12, 1000, 500);
     let current_time = starknet::get_block_timestamp();
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, current_time + (86400 * 5)); // 5 days expiration
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
 
@@ -2678,12 +2408,7 @@ fn test_update_simulation_expiration_allows_future_claims() {
     start_cheat_caller_address(dispatcher.contract_address, owner);
     let token_id = dispatcher.create_token(12, 1000, 500);
     let current_time = starknet::get_block_timestamp();
-    stop_cheat_caller_address(dispatcher.contract_address);
-    let registry = setup_registry(dispatcher, owner);
-    start_cheat_caller_address(dispatcher.contract_address, registry);
     dispatcher.register_simulation(123, token_id, current_time + 100);
-    stop_cheat_caller_address(dispatcher.contract_address);
-    start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.add_to_whitelist(token_id, wallet, 123);
     stop_cheat_caller_address(dispatcher.contract_address);
 
