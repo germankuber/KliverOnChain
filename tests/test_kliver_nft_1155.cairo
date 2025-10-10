@@ -50,6 +50,7 @@ trait IKliverRC1155<TContractState> {
     fn register_simulation(ref self: TContractState, simulation_id: felt252, token_id: u256, expiration_timestamp: u64) -> felt252;
     fn get_simulation(self: @TContractState, simulation_id: felt252) -> kliver_on_chain::kliver_1155_types::Simulation;
     fn is_simulation_expired(self: @TContractState, simulation_id: felt252) -> bool;
+    fn update_simulation_expiration(ref self: TContractState, simulation_id: felt252, new_expiration_timestamp: u64);
     fn add_to_whitelist(ref self: TContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252);
     fn remove_from_whitelist(ref self: TContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252);
     fn is_whitelisted(self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> bool;
@@ -2095,6 +2096,262 @@ fn test_get_claimable_amounts_batch_before_release_hour() {
 
     let result2 = results.at(1);
     assert(*result2.amount == 500, 'Result2: should be 500');
+
+    stop_cheat_block_timestamp_global();
+}
+
+// ==================== UPDATE SIMULATION EXPIRATION TESTS ====================
+
+#[test]
+fn test_update_simulation_expiration_success() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    // Create token
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500);
+
+    // Register simulation with expiration in 10 days
+    let current_time = starknet::get_block_timestamp();
+    let initial_expiration = current_time + (86400 * 10);
+    dispatcher.register_simulation(123, token_id, initial_expiration);
+
+    // Verify initial expiration
+    let simulation = dispatcher.get_simulation(123);
+    assert(simulation.expiration_timestamp == initial_expiration, 'Wrong initial expiration');
+
+    // Update expiration to 30 days from now
+    let new_expiration = current_time + (86400 * 30);
+    dispatcher.update_simulation_expiration(123, new_expiration);
+
+    // Verify expiration was updated
+    let updated_simulation = dispatcher.get_simulation(123);
+    assert(updated_simulation.expiration_timestamp == new_expiration, 'Expiration not updated');
+    assert(updated_simulation.simulation_id == 123, 'Simulation ID changed');
+    assert(updated_simulation.token_id == token_id, 'Token ID changed');
+
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Simulation does not exist',))]
+fn test_update_simulation_expiration_nonexistent() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+
+    // Try to update non-existent simulation
+    let current_time = starknet::get_block_timestamp();
+    let new_expiration = current_time + 86400;
+    dispatcher.update_simulation_expiration(999, new_expiration);
+
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Not owner',))]
+fn test_update_simulation_expiration_not_owner() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let non_owner: ContractAddress = 'non_owner'.try_into().unwrap();
+
+    // Create token and simulation as owner
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500);
+    let current_time = starknet::get_block_timestamp();
+    dispatcher.register_simulation(123, token_id, current_time + 86400);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Try to update as non-owner
+    start_cheat_caller_address(dispatcher.contract_address, non_owner);
+    dispatcher.update_simulation_expiration(123, current_time + (86400 * 2));
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Expiration must be future',))]
+fn test_update_simulation_expiration_past_timestamp() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+
+    // Create token and simulation
+    let token_id = dispatcher.create_token(12, 1000, 500);
+    let current_time = starknet::get_block_timestamp();
+    dispatcher.register_simulation(123, token_id, current_time + 86400);
+
+    // Fast forward time
+    stop_cheat_caller_address(dispatcher.contract_address);
+    start_cheat_block_timestamp_global(current_time + 1000);
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+
+    // Try to update with timestamp in the past (before current time)
+    dispatcher.update_simulation_expiration(123, current_time + 500);
+
+    stop_cheat_caller_address(dispatcher.contract_address);
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+#[should_panic(expected: ('Expiration must be future',))]
+fn test_update_simulation_expiration_current_timestamp() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+
+    // Create token and simulation
+    let token_id = dispatcher.create_token(12, 1000, 500);
+    let current_time = starknet::get_block_timestamp();
+    dispatcher.register_simulation(123, token_id, current_time + 86400);
+
+    // Try to update with current timestamp (not future)
+    dispatcher.update_simulation_expiration(123, current_time);
+
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
+fn test_update_simulation_expiration_extend_expired() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+
+    // Create token and simulation that expires soon
+    let token_id = dispatcher.create_token(12, 1000, 500);
+    let initial_time = starknet::get_block_timestamp();
+    dispatcher.register_simulation(123, token_id, initial_time + 100); // Expires in 100 seconds
+
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward time so simulation is expired
+    start_cheat_block_timestamp_global(initial_time + 200);
+
+    // Verify simulation is expired
+    let is_expired = dispatcher.is_simulation_expired(123);
+    assert(is_expired, 'Should be expired');
+
+    // Owner extends expiration
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let new_expiration = initial_time + 86400; // Extend to 1 day
+    dispatcher.update_simulation_expiration(123, new_expiration);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Verify simulation is no longer expired
+    let is_still_expired = dispatcher.is_simulation_expired(123);
+    assert(!is_still_expired, 'Should not be expired');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_update_simulation_expiration_multiple_times() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+
+    // Create token and simulation
+    let token_id = dispatcher.create_token(12, 1000, 500);
+    let current_time = starknet::get_block_timestamp();
+    let initial_expiration = current_time + 86400;
+    dispatcher.register_simulation(123, token_id, initial_expiration);
+
+    // First update
+    let expiration_1 = current_time + (86400 * 5);
+    dispatcher.update_simulation_expiration(123, expiration_1);
+    let sim_1 = dispatcher.get_simulation(123);
+    assert(sim_1.expiration_timestamp == expiration_1, 'First update failed');
+
+    // Second update
+    let expiration_2 = current_time + (86400 * 10);
+    dispatcher.update_simulation_expiration(123, expiration_2);
+    let sim_2 = dispatcher.get_simulation(123);
+    assert(sim_2.expiration_timestamp == expiration_2, 'Second update failed');
+
+    // Third update
+    let expiration_3 = current_time + (86400 * 20);
+    dispatcher.update_simulation_expiration(123, expiration_3);
+    let sim_3 = dispatcher.get_simulation(123);
+    assert(sim_3.expiration_timestamp == expiration_3, 'Third update failed');
+
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
+fn test_update_simulation_expiration_does_not_affect_claims() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet = deploy_mock_receiver();
+
+    // Create token and simulation with long expiration
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500);
+    let current_time = starknet::get_block_timestamp();
+    dispatcher.register_simulation(123, token_id, current_time + (86400 * 5)); // 5 days expiration
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward and claim
+    start_cheat_block_timestamp_global(current_time + (86400 / 2) + 13 * 3600); // Half day + 13h
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    let balance_before = dispatcher.balance_of(wallet, token_id);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Update expiration to even longer
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    dispatcher.update_simulation_expiration(123, current_time + (86400 * 10));
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Claim again after update
+    start_cheat_block_timestamp_global(current_time + 86400 + 13 * 3600); // 1 day + 13h
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    let balance_after = dispatcher.balance_of(wallet, token_id);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Verify claims still work normally
+    assert(balance_after > balance_before, 'Claim should have worked');
+
+    stop_cheat_block_timestamp_global();
+}
+
+#[test]
+fn test_update_simulation_expiration_allows_future_claims() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet = deploy_mock_receiver();
+
+    // Create token and simulation with short expiration
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 500);
+    let current_time = starknet::get_block_timestamp();
+    dispatcher.register_simulation(123, token_id, current_time + 100);
+    dispatcher.add_to_whitelist(token_id, wallet, 123);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Fast forward past expiration
+    start_cheat_block_timestamp_global(current_time + 200);
+
+    // Verify can't claim (expired)
+    let is_expired = dispatcher.is_simulation_expired(123);
+    assert(is_expired, 'Should be expired');
+
+    // Owner extends expiration
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    dispatcher.update_simulation_expiration(123, current_time + 86400);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Now claim should work
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, 123);
+    let balance = dispatcher.balance_of(wallet, token_id);
+    assert(balance > 0, 'Should have claimed tokens');
+    stop_cheat_caller_address(dispatcher.contract_address);
 
     stop_cheat_block_timestamp_global();
 }

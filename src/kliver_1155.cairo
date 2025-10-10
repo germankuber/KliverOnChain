@@ -1,7 +1,8 @@
 use super::kliver_1155_types::{
     AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RemovedFromWhitelist,
-    SessionPaid, SessionPayment, Simulation, SimulationClaimData, SimulationRegistered,
-    SimulationTrait, TokenCreated, TokenInfo, TokensClaimed, WalletTokenSummary,
+    SessionPaid, SessionPayment, Simulation, SimulationClaimData, SimulationExpirationUpdated,
+    SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo, TokensClaimed,
+    WalletTokenSummary,
 };
 
 #[starknet::contract]
@@ -14,8 +15,9 @@ mod KliverRC1155 {
     use starknet::{ContractAddress, get_caller_address};
     use super::{
         AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RemovedFromWhitelist,
-        SessionPaid, SessionPayment, Simulation, SimulationClaimData, SimulationRegistered,
-        SimulationTrait, TokenCreated, TokenInfo, TokensClaimed, WalletTokenSummary,
+        SessionPaid, SessionPayment, Simulation, SimulationClaimData,
+        SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated,
+        TokenInfo, TokensClaimed, WalletTokenSummary,
     };
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
@@ -62,6 +64,7 @@ mod KliverRC1155 {
         SimulationRegistered: SimulationRegistered,
         AddedToWhitelist: AddedToWhitelist,
         RemovedFromWhitelist: RemovedFromWhitelist,
+        SimulationExpirationUpdated: SimulationExpirationUpdated,
         TokensClaimed: TokensClaimed,
         SessionPaid: SessionPaid,
         HintPaid: HintPaid,
@@ -202,6 +205,38 @@ mod KliverRC1155 {
     }
 
     #[external(v0)]
+    fn update_simulation_expiration(
+        ref self: ContractState, simulation_id: felt252, new_expiration_timestamp: u64,
+    ) {
+        // 1. Only owner can update
+        self._assert_only_owner();
+
+        // 2. Get simulation and verify it exists
+        let mut simulation = self.simulations.entry(simulation_id).read();
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+        assert(simulation.creator != zero_address, 'Simulation does not exist');
+
+        // 3. Validate new expiration is in the future
+        let current_time = starknet::get_block_timestamp();
+        assert(new_expiration_timestamp > current_time, 'Expiration must be future');
+
+        // 4. Store old expiration for event
+        let old_expiration = simulation.expiration_timestamp;
+
+        // 5. Update expiration
+        simulation.expiration_timestamp = new_expiration_timestamp;
+        self.simulations.entry(simulation_id).write(simulation);
+
+        // 6. Emit event
+        self
+            .emit(
+                SimulationExpirationUpdated {
+                    simulation_id, old_expiration, new_expiration: new_expiration_timestamp,
+                },
+            );
+    }
+
+    #[external(v0)]
     fn add_to_whitelist(
         ref self: ContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252,
     ) {
@@ -240,7 +275,7 @@ mod KliverRC1155 {
         // Remove from whitelist (set to false)
         self.whitelist.entry((token_id, simulation_id, wallet)).write(false);
 
-        self.emit(RemovedFromWhitelist { token_id, wallet });
+        self.emit(RemovedFromWhitelist { token_id, wallet, simulation_id });
     }
 
     #[external(v0)]

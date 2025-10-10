@@ -94,6 +94,14 @@ pub struct AddedToWhitelist {
 pub struct RemovedFromWhitelist {
     pub token_id: u256,
     pub wallet: ContractAddress,
+    pub simulation_id: felt252,
+}
+
+#[derive(Drop, starknet::Event)]
+pub struct SimulationExpirationUpdated {
+    pub simulation_id: felt252,
+    pub old_expiration: u64,
+    pub new_expiration: u64,
 }
 
 #[derive(Drop, starknet::Event)]
