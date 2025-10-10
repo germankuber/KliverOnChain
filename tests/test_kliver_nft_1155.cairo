@@ -2,7 +2,7 @@ use snforge_std::{declare, ContractClassTrait, DeclareResultTrait, start_cheat_c
 use starknet::ContractAddress;
 
 // Import structs from the types file
-use kliver_on_chain::kliver_1155_types::{TokenInfo, SessionPayment, HintPayment, ClaimableAmountResult, WalletTokenSummary, SimulationClaimData};
+use kliver_on_chain::kliver_1155_types::{TokenInfo, SessionPayment, HintPayment, ClaimableAmountResult, WalletTokenSummary, WalletMultiTokenSummary};
 
 // Mock ERC1155 Receiver contract for testing using OpenZeppelin's component
 #[starknet::contract]
@@ -60,6 +60,7 @@ trait IKliverRC1155<TContractState> {
     fn get_claimable_amount(self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> u256;
     fn get_claimable_amounts_batch(self: @TContractState, token_id: u256, simulation_ids: Span<felt252>, wallets: Span<ContractAddress>) -> Array<ClaimableAmountResult>;
     fn get_wallet_token_summary(self: @TContractState, token_id: u256, wallet: ContractAddress, simulation_ids: Span<felt252>) -> WalletTokenSummary;
+    fn get_wallet_simulations_summary(self: @TContractState, wallet: ContractAddress, simulation_ids: Span<felt252>) -> WalletMultiTokenSummary;
     fn pay_for_session(ref self: TContractState, simulation_id: felt252, session_id: felt252, amount: u256);
     fn is_session_paid(self: @TContractState, session_id: felt252) -> bool;
     fn get_session_payment(self: @TContractState, session_id: felt252) -> SessionPayment;
@@ -2785,4 +2786,317 @@ fn test_update_simulation_expiration_allows_future_claims() {
     stop_cheat_caller_address(dispatcher.contract_address);
 
     stop_cheat_block_timestamp_global();
+}
+
+// ==================== GET WALLET SIMULATIONS SUMMARY TESTS ====================
+
+#[test]
+fn test_get_wallet_simulations_summary_single_token() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+    
+    // Create one token
+    let token_id = create_token_as_owner(dispatcher, owner, 12, 1000, 500);
+    
+    // Create two simulations for the same token
+    let sim_1 = register_simulation_with_registry(dispatcher, owner, 'sim_1', token_id, 1735689600);
+    let sim_2 = register_simulation_with_registry(dispatcher, owner, 'sim_2', token_id, 1735689600);
+    
+    // Add wallet to whitelist for both simulations
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, sim_1);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, sim_2);
+    
+    // Advance time
+    set_block_timestamp(86400); // 1 day later
+    
+    // Call get_wallet_simulations_summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(sim_1);
+    simulation_ids.append(sim_2);
+    
+    let result = dispatcher.get_wallet_simulations_summary(wallet, simulation_ids.span());
+
+    // Should have 1 summary (1 token)
+    assert(result.summaries.len() == 1, 'Should have 1 summary');
+
+    let summary = result.summaries.at(0);
+    assert(*summary.token_id == token_id, 'Token ID should match');
+    assert(*summary.wallet == wallet, 'Wallet should match');
+    assert(summary.simulations_data.len() == 2, 'Should have 2 simulations');
+    assert(*summary.total_claimable > 0, 'Should have claimable');
+    
+    reset_block_timestamp();
+}
+
+#[test]
+fn test_get_wallet_simulations_summary_multiple_tokens() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+    
+    // Create two different tokens
+    let token_id_1 = create_token_as_owner(dispatcher, owner, 12, 1000, 500);
+    let token_id_2 = create_token_as_owner(dispatcher, owner, 14, 2000, 0);
+    
+    // Create simulations for different tokens
+    let sim_1 = register_simulation_with_registry(dispatcher, owner, 'sim_1', token_id_1, 1735689600);
+    let sim_2 = register_simulation_with_registry(dispatcher, owner, 'sim_2', token_id_1, 1735689600);
+    let sim_3 = register_simulation_with_registry(dispatcher, owner, 'sim_3', token_id_2, 1735689600);
+    let sim_4 = register_simulation_with_registry(dispatcher, owner, 'sim_4', token_id_2, 1735689600);
+    
+    // Add wallet to whitelist
+    add_to_whitelist_as_owner(dispatcher, owner, token_id_1, wallet, sim_1);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id_1, wallet, sim_2);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id_2, wallet, sim_3);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id_2, wallet, sim_4);
+    
+    // Advance time
+    set_block_timestamp(86400 * 2); // 2 days later
+    
+    // Call get_wallet_simulations_summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(sim_1);
+    simulation_ids.append(sim_2);
+    simulation_ids.append(sim_3);
+    simulation_ids.append(sim_4);
+    
+    let result = dispatcher.get_wallet_simulations_summary(wallet, simulation_ids.span());
+
+    // Should have 2 summaries (2 tokens)
+    assert(result.summaries.len() == 2, 'Should have 2 summaries');
+
+    // Verify first summary
+    let summary_1 = result.summaries.at(0);
+    assert(*summary_1.token_id == token_id_1, 'Token 1 ID should match');
+    assert(summary_1.simulations_data.len() == 2, 'Token 1: 2 simulations');
+
+    // Verify second summary
+    let summary_2 = result.summaries.at(1);
+    assert(*summary_2.token_id == token_id_2, 'Token 2 ID should match');
+    assert(summary_2.simulations_data.len() == 2, 'Token 2: 2 simulations');
+    
+    reset_block_timestamp();
+}
+
+#[test]
+fn test_get_wallet_simulations_summary_filters_not_whitelisted() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+    
+    // Create token
+    let token_id = create_token_as_owner(dispatcher, owner, 12, 1000, 500);
+    
+    // Create three simulations
+    let sim_1 = register_simulation_with_registry(dispatcher, owner, 'sim_1', token_id, 1735689600);
+    let sim_2 = register_simulation_with_registry(dispatcher, owner, 'sim_2', token_id, 1735689600);
+    let sim_3 = register_simulation_with_registry(dispatcher, owner, 'sim_3', token_id, 1735689600);
+    
+    // Only add wallet to whitelist for sim_1 and sim_3 (not sim_2)
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, sim_1);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, sim_3);
+    
+    // Advance time
+    set_block_timestamp(86400);
+    
+    // Call get_wallet_simulations_summary with all 3 simulations
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(sim_1);
+    simulation_ids.append(sim_2); // Not whitelisted
+    simulation_ids.append(sim_3);
+    
+    let result = dispatcher.get_wallet_simulations_summary(wallet, simulation_ids.span());
+
+    // Should have 1 summary with only 2 simulations (sim_2 filtered out)
+    assert(result.summaries.len() == 1, 'Should have 1 summary');
+
+    let summary = result.summaries.at(0);
+    assert(summary.simulations_data.len() == 2, 'Should have 2 simulations');
+    
+    reset_block_timestamp();
+}
+
+#[test]
+fn test_get_wallet_simulations_summary_filters_expired() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+    
+    // Create token
+    let token_id = create_token_as_owner(dispatcher, owner, 12, 1000, 500);
+    
+    // Create simulations with different expiration times
+    let sim_1 = register_simulation_with_registry(dispatcher, owner, 'sim_1', token_id, 1735689600); // Future
+    let sim_2 = register_simulation_with_registry(dispatcher, owner, 'sim_2', token_id, 1000); // Past
+    
+    // Add wallet to whitelist for both
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, sim_1);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, sim_2);
+    
+    // Advance time past sim_2 expiration
+    set_block_timestamp(2000);
+    
+    // Call get_wallet_simulations_summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(sim_1);
+    simulation_ids.append(sim_2);
+    
+    let result = dispatcher.get_wallet_simulations_summary(wallet, simulation_ids.span());
+
+    // Should have 1 summary with only 1 simulation (sim_2 expired)
+    assert(result.summaries.len() == 1, 'Should have 1 summary');
+
+    let summary = result.summaries.at(0);
+    assert(summary.simulations_data.len() == 1, 'Should have 1 simulation');
+
+    // Verify it's sim_1 (not expired)
+    let sim_data = summary.simulations_data.at(0);
+    assert(*sim_data.simulation_id == sim_1, 'Should be sim_1');
+    
+    reset_block_timestamp();
+}
+
+#[test]
+fn test_get_wallet_simulations_summary_empty_array() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+    
+    // Call with empty array
+    let simulation_ids = ArrayTrait::new();
+    let result = dispatcher.get_wallet_simulations_summary(wallet, simulation_ids.span());
+
+    // Should return empty array
+    assert(result.summaries.len() == 0, 'Should have 0 summaries');
+}
+
+#[test]
+fn test_get_wallet_simulations_summary_with_balance() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = deploy_mock_receiver();
+    
+    // Create token
+    let token_id = create_token_as_owner(dispatcher, owner, 12, 1000, 500);
+    
+    // Create simulation
+    let sim_1 = register_simulation_with_registry(dispatcher, owner, 'sim_1', token_id, 1735689600);
+    
+    // Add wallet to whitelist
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, sim_1);
+    
+    // Advance time and claim some tokens
+    set_block_timestamp(86400);
+    start_cheat_caller_address(dispatcher.contract_address, wallet);
+    dispatcher.claim(token_id, sim_1);
+    stop_cheat_caller_address(dispatcher.contract_address);
+    
+    // Advance time more for additional claimable
+    set_block_timestamp(86400 * 2);
+    
+    // Call get_wallet_simulations_summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(sim_1);
+    
+    let result = dispatcher.get_wallet_simulations_summary(wallet, simulation_ids.span());
+
+    assert(result.summaries.len() == 1, 'Should have 1 summary');
+
+    let summary = result.summaries.at(0);
+    assert(*summary.current_balance > 0, 'Should have balance');
+    assert(*summary.total_claimable > 0, 'Should have more claimable');
+    
+    reset_block_timestamp();
+}
+
+#[test]
+fn test_get_wallet_simulations_summary_three_tokens() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+    
+    // Create three different tokens
+    let token_id_1 = create_token_as_owner(dispatcher, owner, 10, 1000, 100);
+    let token_id_2 = create_token_as_owner(dispatcher, owner, 12, 2000, 200);
+    let token_id_3 = create_token_as_owner(dispatcher, owner, 14, 3000, 300);
+    
+    // Create simulations across different tokens
+    let sim_1 = register_simulation_with_registry(dispatcher, owner, 'sim_1', token_id_1, 1735689600);
+    let sim_2 = register_simulation_with_registry(dispatcher, owner, 'sim_2', token_id_2, 1735689600);
+    let sim_3 = register_simulation_with_registry(dispatcher, owner, 'sim_3', token_id_2, 1735689600);
+    let sim_4 = register_simulation_with_registry(dispatcher, owner, 'sim_4', token_id_3, 1735689600);
+    
+    // Add wallet to whitelist
+    add_to_whitelist_as_owner(dispatcher, owner, token_id_1, wallet, sim_1);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id_2, wallet, sim_2);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id_2, wallet, sim_3);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id_3, wallet, sim_4);
+    
+    // Advance time
+    set_block_timestamp(86400);
+    
+    // Call get_wallet_simulations_summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(sim_1);
+    simulation_ids.append(sim_2);
+    simulation_ids.append(sim_3);
+    simulation_ids.append(sim_4);
+    
+    let result = dispatcher.get_wallet_simulations_summary(wallet, simulation_ids.span());
+
+    // Should have 3 summaries (3 tokens)
+    assert(result.summaries.len() == 3, 'Should have 3 summaries');
+
+    // Verify distribution
+    let summary_1 = result.summaries.at(0);
+    assert(summary_1.simulations_data.len() == 1, 'Token 1: 1 simulation');
+
+    let summary_2 = result.summaries.at(1);
+    assert(summary_2.simulations_data.len() == 2, 'Token 2: 2 simulations');
+
+    let summary_3 = result.summaries.at(2);
+    assert(summary_3.simulations_data.len() == 1, 'Token 3: 1 simulation');
+    
+    reset_block_timestamp();
+}
+
+#[test]
+fn test_get_wallet_simulations_summary_calculates_total_claimable() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let wallet: ContractAddress = 'wallet'.try_into().unwrap();
+    
+    // Create token: release_amount=1000, special_release=500
+    let token_id = create_token_as_owner(dispatcher, owner, 12, 1000, 500);
+    
+    // Create two simulations
+    let sim_1 = register_simulation_with_registry(dispatcher, owner, 'sim_1', token_id, 1735689600);
+    let sim_2 = register_simulation_with_registry(dispatcher, owner, 'sim_2', token_id, 1735689600);
+    
+    // Add wallet to whitelist
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, sim_1);
+    add_to_whitelist_as_owner(dispatcher, owner, token_id, wallet, sim_2);
+    
+    // Advance time (1 day after creation)
+    set_block_timestamp(86400 + 13 * 3600); // Day 1, 13:00 (after release_hour 12)
+    
+    // Call get_wallet_simulations_summary
+    let mut simulation_ids = ArrayTrait::new();
+    simulation_ids.append(sim_1);
+    simulation_ids.append(sim_2);
+    
+    let result = dispatcher.get_wallet_simulations_summary(wallet, simulation_ids.span());
+
+    assert(result.summaries.len() == 1, 'Should have 1 summary');
+
+    let summary = result.summaries.at(0);
+    // Timestamp: Day 1, 13:00 (after release_hour 12)
+    // Creation: Day 0, 00:00 (midnight, normalized)
+    // Claimable days: 2 (Day 0 complete + Day 1 because 13:00 >= 12:00)
+    // Each simulation: special (500) + 2 days (2000) = 2500
+    // Total for both: 2500 * 2 = 5000
+    assert(*summary.total_claimable == 5000, 'Total should be 5000');
+    
+    reset_block_timestamp();
 }

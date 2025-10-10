@@ -2,7 +2,7 @@ use super::kliver_1155_types::{
     AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
     RemovedFromWhitelist, SessionPaid, SessionPayment, Simulation, SimulationClaimData,
     SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo,
-    TokensClaimed, WalletTokenSummary,
+    TokensClaimed, WalletTokenSummary, WalletMultiTokenSummary,
 };
 
 #[starknet::contract]
@@ -17,7 +17,7 @@ mod KliverRC1155 {
         AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
         RemovedFromWhitelist, SessionPaid, SessionPayment, Simulation, SimulationClaimData,
         SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated,
-        TokenInfo, TokensClaimed, WalletTokenSummary,
+        TokenInfo, TokensClaimed, WalletTokenSummary, WalletMultiTokenSummary,
     };
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
@@ -598,6 +598,138 @@ mod KliverRC1155 {
             token_info,
             total_claimable,
             simulations_data,
+        }
+    }
+
+    #[external(v0)]
+    fn get_wallet_simulations_summary(
+        self: @ContractState,
+        wallet: ContractAddress,
+        simulation_ids: Span<felt252>,
+    ) -> WalletMultiTokenSummary {
+        // Step 1: Identificar todos los tokens únicos de las simulaciones
+        let mut unique_tokens: Array<u256> = ArrayTrait::new();
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+        
+        let mut i: u32 = 0;
+        while i < simulation_ids.len() {
+            let simulation_id = *simulation_ids.at(i);
+            let simulation = self.simulations.entry(simulation_id).read();
+            
+            // Verificar que la simulación existe
+            if simulation.creator != zero_address {
+                let token_id = simulation.token_id;
+                
+                // Verificar si este token ya está en la lista
+                let mut already_exists = false;
+                let mut j: u32 = 0;
+                while j < unique_tokens.len() {
+                    if *unique_tokens.at(j) == token_id {
+                        already_exists = true;
+                        break;
+                    }
+                    j += 1;
+                };
+                
+                // Si no existe, agregarlo
+                if !already_exists {
+                    unique_tokens.append(token_id);
+                }
+            }
+            
+            i += 1;
+        };
+        
+        // Step 2: Para cada token, recopilar las simulaciones y calcular el summary
+        let mut tokens_summary: Array<WalletTokenSummary> = ArrayTrait::new();
+        
+        let mut token_idx: u32 = 0;
+        while token_idx < unique_tokens.len() {
+            let current_token_id = *unique_tokens.at(token_idx);
+            
+            // Recopilar simulaciones para este token
+            let mut token_simulations: Array<felt252> = ArrayTrait::new();
+            
+            let mut sim_idx: u32 = 0;
+            while sim_idx < simulation_ids.len() {
+                let simulation_id = *simulation_ids.at(sim_idx);
+                let simulation = self.simulations.entry(simulation_id).read();
+                
+                if simulation.creator != zero_address && simulation.token_id == current_token_id {
+                    token_simulations.append(simulation_id);
+                }
+                
+                sim_idx += 1;
+            };
+            
+            // Obtener token summary manualmente (sin llamar al método external)
+            let token_info = self.token_info.entry(current_token_id).read();
+            let current_time = starknet::get_block_timestamp();
+            let current_balance = self.erc1155.balance_of(wallet, current_token_id);
+            
+            let mut simulations_data: Array<SimulationClaimData> = ArrayTrait::new();
+            let mut total_claimable: u256 = 0;
+
+            let mut k: u32 = 0;
+            while k < token_simulations.len() {
+                let simulation_id = *token_simulations.at(k);
+                let simulation = self.simulations.entry(simulation_id).read();
+
+                let is_whitelisted = self.whitelist.entry((current_token_id, simulation_id, wallet)).read();
+                let is_expired = current_time >= simulation.expiration_timestamp;
+
+                if is_whitelisted && !is_expired {
+                    let last_claim = self
+                        .last_claim_timestamp
+                        .entry((current_token_id, simulation_id, wallet))
+                        .read();
+
+                    let amount = if last_claim == 0 {
+                        let special_amount = token_info.special_release;
+                        let normal_days = self.calculate_claimable_days(
+                            current_time, simulation.creation_timestamp, token_info.release_hour,
+                        );
+                        let normal_amount = token_info.release_amount * normal_days;
+                        special_amount + normal_amount
+                    } else {
+                        let total_claimable_days = self.calculate_claimable_days(
+                            current_time, simulation.creation_timestamp, token_info.release_hour,
+                        );
+                        let days_already_claimed = self.calculate_claimable_days(
+                            last_claim, simulation.creation_timestamp, token_info.release_hour,
+                        );
+
+                        if total_claimable_days > days_already_claimed {
+                            let new_days = total_claimable_days - days_already_claimed;
+                            token_info.release_amount * new_days
+                        } else {
+                            0
+                        }
+                    };
+
+                    simulations_data.append(SimulationClaimData { simulation_id, claimable_amount: amount });
+                    total_claimable += amount;
+                }
+
+                k += 1;
+            };
+
+            let token_summary = WalletTokenSummary {
+                token_id: current_token_id,
+                wallet,
+                current_balance,
+                token_info,
+                total_claimable,
+                simulations_data,
+            };
+            
+            tokens_summary.append(token_summary);
+            token_idx += 1;
+        };
+        
+        WalletMultiTokenSummary {
+            wallet,
+            summaries: tokens_summary,
         }
     }
 

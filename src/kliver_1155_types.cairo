@@ -86,6 +86,7 @@ pub struct SimulationRegistered {
 #[derive(Drop, starknet::Event)]
 pub struct AddedToWhitelist {
     pub token_id: u256,
+    #[key]
     pub wallet: ContractAddress,
     pub simulation_id: felt252,
 }
@@ -93,6 +94,7 @@ pub struct AddedToWhitelist {
 #[derive(Drop, starknet::Event)]
 pub struct RemovedFromWhitelist {
     pub token_id: u256,
+    #[key]
     pub wallet: ContractAddress,
     pub simulation_id: felt252,
 }
@@ -175,4 +177,11 @@ pub struct WalletTokenSummary {
     pub token_info: TokenInfo,
     pub total_claimable: u256,
     pub simulations_data: Array<SimulationClaimData>,
+}
+
+// Wrapper struct for multiple token summaries
+#[derive(Drop, Serde)]
+pub struct WalletMultiTokenSummary {
+    pub wallet: ContractAddress,
+    pub summaries: Array<WalletTokenSummary>,
 }
