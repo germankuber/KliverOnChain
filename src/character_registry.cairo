@@ -1,13 +1,6 @@
 use starknet::ContractAddress;
 use crate::types::VerificationResult;
-
-/// Character metadata for registration
-#[derive(Drop, Serde, Copy)]
-pub struct CharacterMetadata {
-    pub character_id: felt252,
-    pub character_hash: felt252,
-    pub author: ContractAddress,
-}
+use kliver_on_chain::components::character_registry_component::CharacterMetadata;
 
 /// Character Registry Interface
 #[starknet::interface]

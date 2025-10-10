@@ -2,8 +2,9 @@ use core::array::ArrayTrait;
 
 // Import contract interfaces from modular structure
 use kliver_on_chain::character_registry::{
-    CharacterMetadata, ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait,
+    ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait,
 };
+use kliver_on_chain::components::character_registry_component::CharacterMetadata;
 use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
 use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
 use kliver_on_chain::scenario_registry::{

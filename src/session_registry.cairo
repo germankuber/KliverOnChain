@@ -1,16 +1,6 @@
 use starknet::ContractAddress;
 use crate::types::VerificationResult;
-
-/// Session metadata containing all session information
-#[derive(Drop, Serde, Copy, starknet::Event)]
-pub struct SessionMetadata {
-    #[key]
-    pub session_id: felt252,
-    pub root_hash: felt252,
-    pub simulation_id: felt252,
-    pub author: ContractAddress,
-    pub score: u32,
-}
+pub use kliver_on_chain::components::session_registry_component::SessionMetadata;
 
 /// Session Registry Interface
 #[starknet::interface]
@@ -33,13 +23,4 @@ pub trait ISessionRegistry<TContractState> {
     fn verify_complete_session(
         self: @TContractState, full_proof_with_hints: Span<felt252>,
     ) -> Option<Span<u256>>;
-}
-
-/// Session Access Granted Event
-#[derive(Drop, starknet::Event)]
-pub struct SessionAccessGranted {
-    #[key]
-    pub session_id: felt252,
-    pub grantee: ContractAddress,
-    pub granted_by: ContractAddress,
 }

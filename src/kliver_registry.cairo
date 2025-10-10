@@ -26,92 +26,65 @@ pub trait ITokenCore<TContractState> {
 #[starknet::contract]
 pub mod kliver_registry {
     use core::num::traits::Zero;
-    use starknet::storage::{
-        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
-        StoragePointerWriteAccess,
-    };
+    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_caller_address};
-    use crate::character_registry::CharacterMetadata;
+    use kliver_on_chain::components::character_registry_component::{
+        CharacterRegistryComponent, CharacterMetadata
+    };
+    use kliver_on_chain::components::scenario_registry_component::{
+        ScenarioRegistryComponent, ScenarioMetadata
+    };
+    use kliver_on_chain::components::simulation_registry_component::{
+        SimulationRegistryComponent, SimulationMetadata, SimulationWithTokenMetadata
+    };
+    use kliver_on_chain::components::session_registry_component::{
+        SessionRegistryComponent, SessionMetadata
+    };
     use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
-    use crate::scenario_registry::ScenarioMetadata;
-    use crate::session_registry::{SessionAccessGranted, SessionMetadata};
-    use crate::simulation_registry::{SimulationMetadata, SimulationWithTokenMetadata};
     use super::{
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
         ISimulationRegistry, ITokenCoreDispatcher, ITokenCoreDispatcherTrait, IVerifierDispatcher,
         IVerifierDispatcherTrait, VerificationResult,
     };
 
+    component!(path: CharacterRegistryComponent, storage: character_registry, event: CharacterRegistryEvent);
+    component!(path: ScenarioRegistryComponent, storage: scenario_registry, event: ScenarioRegistryEvent);
+    component!(path: SimulationRegistryComponent, storage: simulation_registry, event: SimulationRegistryEvent);
+    component!(path: SessionRegistryComponent, storage: session_registry, event: SessionRegistryEvent);
+
+    impl CharacterRegistryInternalImpl = CharacterRegistryComponent::InternalImpl<ContractState>;
+    impl ScenarioRegistryInternalImpl = ScenarioRegistryComponent::InternalImpl<ContractState>;
+    impl SimulationRegistryInternalImpl = SimulationRegistryComponent::InternalImpl<ContractState>;
+    impl SessionRegistryInternalImpl = SessionRegistryComponent::InternalImpl<ContractState>;
+
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
-        CharacterRegistered: CharacterRegistered,
-        ScenarioRegistered: ScenarioMetadata,
-        SimulationRegistered: SimulationRegistered,
-        SimulationWithTokenRegistered: SimulationWithTokenRegistered,
-        SessionRegistered: SessionMetadata,
-        SessionAccessGranted: SessionAccessGranted,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    pub struct CharacterRegistered {
-        #[key]
-        pub character_id: felt252,
-        pub character_hash: felt252,
-        pub registered_by: ContractAddress,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    pub struct SimulationRegistered {
-        #[key]
-        pub simulation_id: felt252,
-        pub simulation_hash: felt252,
-        pub author: ContractAddress,
-        pub character_id: felt252,
-        pub scenario_id: felt252,
-    }
-
-    #[derive(Drop, starknet::Event)]
-    pub struct SimulationWithTokenRegistered {
-        #[key]
-        pub simulation_id: felt252,
-        pub simulation_hash: felt252,
-        pub author: ContractAddress,
-        pub character_id: felt252,
-        pub scenario_id: felt252,
-        pub token_id: u256,
-        pub expiration_timestamp: u64,
+        #[flat]
+        CharacterRegistryEvent: CharacterRegistryComponent::Event,
+        #[flat]
+        ScenarioRegistryEvent: ScenarioRegistryComponent::Event,
+        #[flat]
+        SimulationRegistryEvent: SimulationRegistryComponent::Event,
+        #[flat]
+        SessionRegistryEvent: SessionRegistryComponent::Event,
     }
 
     #[storage]
     struct Storage {
+        #[substorage(v0)]
+        character_registry: CharacterRegistryComponent::Storage,
+        #[substorage(v0)]
+        scenario_registry: ScenarioRegistryComponent::Storage,
+        #[substorage(v0)]
+        simulation_registry: SimulationRegistryComponent::Storage,
+        #[substorage(v0)]
+        session_registry: SessionRegistryComponent::Storage,
         owner: ContractAddress,
         paused: bool,
         nft_address: ContractAddress,
         tokens_core_address: ContractAddress,
         verifier_address: ContractAddress,
-        /// Maps character ID to its hash
-        characters: Map<felt252, felt252>,
-        // Character metadata:
-        character_authors: Map<felt252, ContractAddress>, // character_id -> author
-        /// Maps scenario ID to its hash
-        scenarios: Map<felt252, felt252>,
-        // Scenario metadata:
-        scenario_authors: Map<felt252, ContractAddress>, // scenario_id -> author
-        /// Maps simulation ID to its hash
-        simulations: Map<felt252, felt252>,
-        // Simulations metadata:
-        simulation_authors: Map<felt252, ContractAddress>, // simulation_id -> author
-        simulation_characters: Map<felt252, felt252>, // simulation_id -> character_id
-        simulation_scenarios: Map<felt252, felt252>, // simulation_id -> scenario_id
-        simulation_token_ids: Map<felt252, u256>, // simulation_id -> token_id
-        simulation_expirations: Map<felt252, u64>, // simulation_id -> expiration_timestamp
-        // Sessions:
-        session_roots: Map<felt252, felt252>, // session_id -> root_hash
-        session_simulations: Map<felt252, felt252>, // session_id -> simulation_id
-        session_authors: Map<felt252, ContractAddress>, // session_id -> author (seller original)
-        session_scores: Map<felt252, u32>, // session_id -> score
-        session_access: Map<(felt252, ContractAddress), bool> // (session_id, addr) -> true
     }
 
     pub mod Errors {
@@ -163,7 +136,7 @@ pub mod kliver_registry {
             let character_hash = metadata.character_hash;
             let author = metadata.author;
 
-            // Validate inputs
+            // Validate inputs (business logic)
             assert(character_id != 0, 'Character ID cannot be zero');
             assert(character_hash != 0, 'Character hash cannot be zero');
             assert(!author.is_zero(), 'Author cannot be zero');
@@ -172,101 +145,54 @@ pub mod kliver_registry {
             self._assert_author_has_nft(author);
 
             // Check if character ID is already registered
-            let existing_hash = self.characters.read(character_id);
-            assert(existing_hash == 0, 'Character ID already registered');
+            assert(!self.character_registry.character_exists(character_id), 'Character ID already registered');
 
-            // Save the character and metadata
-            self.characters.write(character_id, character_hash);
-            self.character_authors.write(character_id, author);
-
-            // Emit event
-            self
-                .emit(
-                    CharacterRegistered {
-                        character_id, character_hash, registered_by: get_caller_address(),
-                    },
-                );
+            // Register using component
+            self.character_registry.register_character(character_id, character_hash, author, get_caller_address());
         }
 
         fn verify_character(
             self: @ContractState, character_id: felt252, character_hash: felt252,
         ) -> VerificationResult {
-            // Validate inputs
+            // Validate inputs (business logic)
             assert(character_id != 0, 'Character ID cannot be zero');
             assert(character_hash != 0, 'Character hash cannot be zero');
 
-            // Get the stored hash for this character ID
-            let stored_hash = self.characters.read(character_id);
-
-            // Determine verification result based on stored data
-            if stored_hash == 0 {
-                VerificationResult::NotFound // ID no existe
-            } else if stored_hash == character_hash {
-                VerificationResult::Match // ID existe y hash coincide
-            } else {
-                VerificationResult::Mismatch // ID existe pero hash no coincide
-            }
+            // Use component for verification
+            self.character_registry.verify_character(character_id, character_hash)
         }
 
         fn batch_verify_characters(
             self: @ContractState, characters: Array<CharacterMetadata>,
         ) -> Array<(felt252, VerificationResult)> {
-            let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
-            let mut i = 0;
-            let len = characters.len();
-
-            while i != len {
-                let metadata = *characters.at(i);
-                let character_id = metadata.character_id;
-                let character_hash = metadata.character_hash;
-
-                // For batch operations, handle zero values gracefully instead of panicking
-                let verification_result = if character_id == 0 || character_hash == 0 {
-                    VerificationResult::NotFound // Treat invalid inputs as NotFound
-                } else {
-                    let stored_hash = self.characters.read(character_id);
-
-                    if stored_hash == 0 {
-                        VerificationResult::NotFound // ID no existe
-                    } else if stored_hash == character_hash {
-                        VerificationResult::Match // ID existe y hash coincide
-                    } else {
-                        VerificationResult::Mismatch // ID existe pero hash no coincide
-                    }
-                };
-
-                results.append((character_id, verification_result));
-                i += 1;
-            }
-
-            results
+            // Use component for batch verification
+            self.character_registry.batch_verify_characters(characters)
         }
 
         fn get_character_hash(self: @ContractState, character_id: felt252) -> felt252 {
-            // Validate input
+            // Validate input (business logic)
             assert(character_id != 0, 'Character ID cannot be zero');
 
-            // Get the stored hash for this character ID
-            let stored_hash = self.characters.read(character_id);
+            // Get hash from component
+            let stored_hash = self.character_registry.get_character_hash(character_id);
 
-            // If no hash is stored, panic with error
+            // Validate that character exists
             assert(stored_hash != 0, 'Character not found');
 
             stored_hash
         }
 
         fn get_character_info(self: @ContractState, character_id: felt252) -> CharacterMetadata {
-            // Validate input
+            // Validate input (business logic)
             assert(character_id != 0, 'Character ID cannot be zero');
 
-            // Get the stored data for this character ID
-            let character_hash = self.characters.read(character_id);
-            assert(character_hash != 0, 'Character not found');
+            // Get info from component
+            let info = self.character_registry.get_character_info(character_id);
+            
+            // Validate that character exists
+            assert(info.character_hash != 0, 'Character not found');
 
-            let author = self.character_authors.read(character_id);
-
-            // Return the complete metadata
-            CharacterMetadata { character_id, character_hash, author }
+            info
         }
     }
 
@@ -292,97 +218,35 @@ pub mod kliver_registry {
             // Validate that author has a Kliver NFT
             self._assert_author_has_nft(author);
 
-            // Check if scenario is already registered
-            let existing_hash = self.scenarios.read(scenario_id);
-            assert(existing_hash == 0, 'Scenario already registered');
+            // Check if scenario already exists
+            assert(!self.scenario_registry.scenario_exists(scenario_id), 'Scenario already registered');
 
-            // Save the scenario and metadata
-            self.scenarios.write(scenario_id, scenario_hash);
-            self.scenario_authors.write(scenario_id, author);
-
-            // Emit event
-            self.emit(Event::ScenarioRegistered(metadata));
+            // Delegate to component
+            self.scenario_registry.register_scenario(scenario_id, scenario_hash, author);
         }
 
         fn verify_scenario(
             self: @ContractState, scenario_id: felt252, scenario_hash: felt252,
         ) -> VerificationResult {
-            // Validate inputs
-            assert(scenario_id != 0, 'Scenario ID cannot be zero');
-            assert(scenario_hash != 0, 'Scenario hash cannot be zero');
-
-            // Get the stored hash for this scenario ID
-            let stored_hash = self.scenarios.read(scenario_id);
-
-            // Determine verification result based on stored data
-            if stored_hash == 0 {
-                VerificationResult::NotFound // ID no existe
-            } else if stored_hash == scenario_hash {
-                VerificationResult::Match // ID existe y hash coincide
-            } else {
-                VerificationResult::Mismatch // ID existe pero hash no coincide
-            }
+            // Delegate to component
+            self.scenario_registry.verify_scenario(scenario_id, scenario_hash)
         }
 
         fn batch_verify_scenarios(
             self: @ContractState, scenarios: Array<ScenarioMetadata>,
         ) -> Array<(felt252, VerificationResult)> {
-            let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
-            let mut i = 0;
-            let len = scenarios.len();
-
-            while i != len {
-                let metadata = *scenarios.at(i);
-                let scenario_id = metadata.scenario_id;
-                let scenario_hash = metadata.scenario_hash;
-
-                // For batch operations, handle zero values gracefully instead of panicking
-                let verification_result = if scenario_id == 0 || scenario_hash == 0 {
-                    VerificationResult::NotFound // Treat invalid inputs as NotFound
-                } else {
-                    let stored_hash = self.scenarios.read(scenario_id);
-
-                    if stored_hash == 0 {
-                        VerificationResult::NotFound // ID no existe
-                    } else if stored_hash == scenario_hash {
-                        VerificationResult::Match // ID existe y hash coincide
-                    } else {
-                        VerificationResult::Mismatch // ID existe pero hash no coincide
-                    }
-                };
-
-                results.append((scenario_id, verification_result));
-                i += 1;
-            }
-
-            results
+            // Delegate to component
+            self.scenario_registry.batch_verify_scenarios(scenarios)
         }
 
         fn get_scenario_hash(self: @ContractState, scenario_id: felt252) -> felt252 {
-            // Validate input
-            assert(scenario_id != 0, 'Scenario ID cannot be zero');
-
-            // Get the stored hash for this scenario ID
-            let stored_hash = self.scenarios.read(scenario_id);
-
-            // If no hash is stored, panic with error
-            assert(stored_hash != 0, 'Scenario not found');
-
-            stored_hash
+            // Delegate to component
+            self.scenario_registry.get_scenario_hash(scenario_id)
         }
 
         fn get_scenario_info(self: @ContractState, scenario_id: felt252) -> ScenarioMetadata {
-            // Validate input
-            assert(scenario_id != 0, 'Scenario ID cannot be zero');
-
-            // Get the stored data for this scenario ID
-            let scenario_hash = self.scenarios.read(scenario_id);
-            assert(scenario_hash != 0, 'Scenario not found');
-
-            let author = self.scenario_authors.read(scenario_id);
-
-            // Return the complete metadata
-            ScenarioMetadata { scenario_id, scenario_hash, author }
+            // Delegate to component
+            self.scenario_registry.get_scenario_info(scenario_id)
         }
     }
 
@@ -417,25 +281,22 @@ pub mod kliver_registry {
             // Validate that author has a Kliver NFT
             self._assert_author_has_nft(metadata.author);
 
-            // Validate that character exists
-            let character_hash = self.characters.read(metadata.character_id);
-            assert(character_hash != 0, Errors::CHARACTER_NOT_FOUND);
+            // Validate that character exists using component
+            assert(self.character_registry.character_exists(metadata.character_id), Errors::CHARACTER_NOT_FOUND);
 
-            // Validate that scenario exists
-            let scenario_hash = self.scenarios.read(metadata.scenario_id);
-            assert(scenario_hash != 0, Errors::SCENARIO_NOT_FOUND);
+            // Validate that scenario exists using component
+            assert(self.scenario_registry.scenario_exists(metadata.scenario_id), Errors::SCENARIO_NOT_FOUND);
 
-            // Check if simulation is already registered
-            let existing_hash = self.simulations.read(metadata.simulation_id);
-            assert(existing_hash == 0, 'Simulation already registered');
-
-            // Save the simulation and metadata (including token info)
-            self.simulations.write(metadata.simulation_id, metadata.simulation_hash);
-            self.simulation_authors.write(metadata.simulation_id, metadata.author);
-            self.simulation_characters.write(metadata.simulation_id, metadata.character_id);
-            self.simulation_scenarios.write(metadata.simulation_id, metadata.scenario_id);
-            self.simulation_token_ids.write(metadata.simulation_id, metadata.token_id);
-            self.simulation_expirations.write(metadata.simulation_id, metadata.expiration_timestamp);
+            // Delegate to component
+            self.simulation_registry.register_simulation_with_token(
+                metadata.simulation_id,
+                metadata.simulation_hash,
+                metadata.author,
+                metadata.character_id,
+                metadata.scenario_id,
+                metadata.token_id,
+                metadata.expiration_timestamp,
+            );
 
             // Call token core to register the simulation
             let token_core_address = self.tokens_core_address.read();
@@ -445,138 +306,41 @@ pub mod kliver_registry {
                 metadata.token_id,
                 metadata.expiration_timestamp
             );
-
-            // Emit specific event for simulation with token
-            self
-                .emit(
-                    SimulationWithTokenRegistered {
-                        simulation_id: metadata.simulation_id,
-                        simulation_hash: metadata.simulation_hash,
-                        author: metadata.author,
-                        character_id: metadata.character_id,
-                        scenario_id: metadata.scenario_id,
-                        token_id: metadata.token_id,
-                        expiration_timestamp: metadata.expiration_timestamp,
-                    },
-                );
+            // Event is emitted from component
         }
 
         fn verify_simulation(
             self: @ContractState, simulation_id: felt252, simulation_hash: felt252,
         ) -> VerificationResult {
-            // Validate inputs
-            assert(simulation_id != 0, 'Simulation ID cannot be zero');
-            assert(simulation_hash != 0, 'Simulation hash cannot be zero');
-
-            // Get the stored hash for this simulation ID
-            let stored_hash = self.simulations.read(simulation_id);
-
-            // Determine verification result based on stored data
-            if stored_hash == 0 {
-                VerificationResult::NotFound // ID no existe
-            } else if stored_hash == simulation_hash {
-                VerificationResult::Match // ID existe y hash coincide
-            } else {
-                VerificationResult::Mismatch // ID existe pero hash no coincide
-            }
+            // Delegate to component
+            self.simulation_registry.verify_simulation(simulation_id, simulation_hash)
         }
 
         fn batch_verify_simulations(
             self: @ContractState, simulations: Array<SimulationMetadata>,
         ) -> Array<(felt252, VerificationResult)> {
-            let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
-            let mut i = 0;
-            let len = simulations.len();
-
-            while i != len {
-                let metadata = *simulations.at(i);
-                let simulation_id = metadata.simulation_id;
-                let simulation_hash = metadata.simulation_hash;
-
-                // For batch operations, handle zero values gracefully instead of panicking
-                let verification_result = if simulation_id == 0 || simulation_hash == 0 {
-                    VerificationResult::NotFound // Treat invalid inputs as NotFound
-                } else {
-                    let stored_hash = self.simulations.read(simulation_id);
-
-                    if stored_hash == 0 {
-                        VerificationResult::NotFound // ID no existe
-                    } else if stored_hash == simulation_hash {
-                        VerificationResult::Match // ID existe y hash coincide
-                    } else {
-                        VerificationResult::Mismatch // ID existe pero hash no coincide
-                    }
-                };
-
-                results.append((simulation_id, verification_result));
-                i += 1;
-            }
-
-            results
+            // Delegate to component
+            self.simulation_registry.batch_verify_simulations(simulations)
         }
 
         fn get_simulation_hash(self: @ContractState, simulation_id: felt252) -> felt252 {
-            // Validate input
-            assert(simulation_id != 0, 'Simulation ID cannot be zero');
-
-            // Get the stored hash for this simulation ID
-            let stored_hash = self.simulations.read(simulation_id);
-
-            // If no hash is stored, panic with error
-            assert(stored_hash != 0, 'Simulation not found');
-
-            stored_hash
+            // Delegate to component
+            self.simulation_registry.get_simulation_hash(simulation_id)
         }
 
         fn get_simulation_info(self: @ContractState, simulation_id: felt252) -> SimulationMetadata {
-            // Validate input
-            assert(simulation_id != 0, 'Simulation ID cannot be zero');
-
-            // Get the stored data for this simulation ID
-            let simulation_hash = self.simulations.read(simulation_id);
-            assert(simulation_hash != 0, 'Simulation not found');
-
-            let author = self.simulation_authors.read(simulation_id);
-            let character_id = self.simulation_characters.read(simulation_id);
-            let scenario_id = self.simulation_scenarios.read(simulation_id);
-
-            SimulationMetadata { simulation_id, author, character_id, scenario_id, simulation_hash }
+            // Delegate to component
+            self.simulation_registry.get_simulation_info(simulation_id)
         }
 
         fn get_simulation_with_token_info(self: @ContractState, simulation_id: felt252) -> SimulationWithTokenMetadata {
-            // Validate input
-            assert(simulation_id != 0, 'Simulation ID cannot be zero');
-
-            // Get the stored data for this simulation ID
-            let simulation_hash = self.simulations.read(simulation_id);
-            assert(simulation_hash != 0, 'Simulation not found');
-
-            let author = self.simulation_authors.read(simulation_id);
-            let character_id = self.simulation_characters.read(simulation_id);
-            let scenario_id = self.simulation_scenarios.read(simulation_id);
-            let token_id = self.simulation_token_ids.read(simulation_id);
-            let expiration_timestamp = self.simulation_expirations.read(simulation_id);
-
-            SimulationWithTokenMetadata { 
-                simulation_id, 
-                author, 
-                character_id, 
-                scenario_id, 
-                simulation_hash,
-                token_id,
-                expiration_timestamp
-            }
+            // Delegate to component
+            self.simulation_registry.get_simulation_with_token_info(simulation_id)
         }
 
         fn simulation_exists(self: @ContractState, simulation_id: felt252) -> bool {
-            // Validate input
-            if simulation_id == 0 {
-                return false;
-            }
-
-            // Check if simulation exists by looking at stored hash
-            let stored_hash = self.simulations.read(simulation_id);
-            stored_hash != 0
+            // Delegate to component
+            self.simulation_registry.simulation_exists(simulation_id)
         }
     }
 
@@ -595,35 +359,27 @@ pub mod kliver_registry {
             // Validate that the author has an NFT
             self._assert_author_has_nft(metadata.author);
 
-            // Validate that the simulation exists
-            let simulation_hash = self.simulations.read(metadata.simulation_id);
-            assert(simulation_hash != 0, Errors::SIMULATION_NOT_FOUND);
+            // Validate that the simulation exists using component
+            assert(self.simulation_registry.simulation_exists(metadata.simulation_id), Errors::SIMULATION_NOT_FOUND);
 
-            let existing = self.session_roots.read(metadata.session_id);
-            assert(existing == 0, Errors::SESSION_ALREADY_REGISTERED);
+            // Check if session already exists
+            assert(!self.session_registry.session_exists(metadata.session_id), Errors::SESSION_ALREADY_REGISTERED);
 
-            self.session_roots.write(metadata.session_id, metadata.root_hash);
-            self.session_simulations.write(metadata.session_id, metadata.simulation_id);
-            self.session_authors.write(metadata.session_id, metadata.author);
-            self.session_scores.write(metadata.session_id, metadata.score);
-
-            self.emit(Event::SessionRegistered(metadata));
+            // Delegate to component
+            self.session_registry.register_session(
+                metadata.session_id,
+                metadata.root_hash,
+                metadata.simulation_id,
+                metadata.author,
+                metadata.score
+            );
         }
 
         fn verify_session(
             self: @ContractState, session_id: felt252, root_hash: felt252,
         ) -> VerificationResult {
-            assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
-            assert(root_hash != 0, Errors::ROOT_HASH_CANNOT_BE_ZERO);
-
-            let stored = self.session_roots.read(session_id);
-            if stored == 0 {
-                VerificationResult::NotFound
-            } else if stored == root_hash {
-                VerificationResult::Match
-            } else {
-                VerificationResult::Mismatch
-            }
+            // Delegate to component
+            self.session_registry.verify_session(session_id, root_hash)
         }
 
         fn verify_complete_session(
@@ -634,14 +390,8 @@ pub mod kliver_registry {
         }
 
         fn get_session_info(self: @ContractState, session_id: felt252) -> SessionMetadata {
-            assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
-            let root_hash = self.session_roots.read(session_id);
-            assert(root_hash != 0, Errors::SESSION_NOT_FOUND);
-            let simulation_id = self.session_simulations.read(session_id);
-            let author = self.session_authors.read(session_id);
-            let score = self.session_scores.read(session_id);
-
-            SessionMetadata { session_id, root_hash, simulation_id, author, score }
+            // Delegate to component
+            self.session_registry.get_session_info(session_id)
         }
 
         // ---- Opcional: access list (trazabilidad de ventas) ----
@@ -653,21 +403,17 @@ pub mod kliver_registry {
             assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
             assert(!addr.is_zero(), Errors::GRANTEE_CANNOT_BE_ZERO);
 
-            let root = self.session_roots.read(session_id);
-            assert(root != 0, Errors::SESSION_NOT_FOUND);
+            // Verify session exists using component
+            assert(self.session_registry.session_exists(session_id), Errors::SESSION_NOT_FOUND);
 
-            self.session_access.write((session_id, addr), true);
-
-            self
-                .emit(
-                    SessionAccessGranted {
-                        session_id, grantee: addr, granted_by: get_caller_address(),
-                    },
-                );
+            // Delegate to component
+            let caller = get_caller_address();
+            self.session_registry.grant_access(session_id, addr, caller);
         }
 
         fn has_access(self: @ContractState, session_id: felt252, addr: ContractAddress) -> bool {
-            self.session_access.read((session_id, addr))
+            // Delegate to component
+            self.session_registry.has_access(session_id, addr)
         }
 
         fn get_verifier_address(self: @ContractState) -> ContractAddress {
@@ -753,35 +499,20 @@ pub mod kliver_registry {
             // Validate that author has a Kliver NFT
             self._assert_author_has_nft(author);
 
-            // Validate that character exists
-            let character_hash = self.characters.read(character_id);
-            assert(character_hash != 0, Errors::CHARACTER_NOT_FOUND);
+            // Validate that character exists using component
+            assert(self.character_registry.character_exists(character_id), Errors::CHARACTER_NOT_FOUND);
 
-            // Validate that scenario exists
-            let scenario_hash = self.scenarios.read(scenario_id);
-            assert(scenario_hash != 0, Errors::SCENARIO_NOT_FOUND);
+            // Validate that scenario exists using component
+            assert(self.scenario_registry.scenario_exists(scenario_id), Errors::SCENARIO_NOT_FOUND);
 
-            // Check if simulation is already registered
-            let existing_hash = self.simulations.read(simulation_id);
-            assert(existing_hash == 0, 'Simulation already registered');
-
-            // Save the simulation and metadata (without token info)
-            self.simulations.write(simulation_id, simulation_hash);
-            self.simulation_authors.write(simulation_id, author);
-            self.simulation_characters.write(simulation_id, character_id);
-            self.simulation_scenarios.write(simulation_id, scenario_id);
-
-            // Emit event
-            self
-                .emit(
-                    SimulationRegistered {
-                        simulation_id,
-                        simulation_hash,
-                        author,
-                        character_id,
-                        scenario_id,
-                    },
-                );
+            // Delegate to component
+            self.simulation_registry.register_simulation(
+                simulation_id,
+                simulation_hash,
+                author,
+                character_id,
+                scenario_id,
+            );
         }
     }
 }

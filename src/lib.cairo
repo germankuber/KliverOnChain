@@ -3,6 +3,15 @@
 
 // Common types module
 
+// Components module
+pub mod components {
+    pub mod whitelist_component;
+    pub mod character_registry_component;
+    pub mod scenario_registry_component;
+    pub mod simulation_registry_component;
+    pub mod session_registry_component;
+}
+
 // Registry interface modules - separated by functionality
 pub mod character_registry;
 pub mod kliver_tokens_core;

@@ -1,6 +1,6 @@
 use super::kliver_tokens_core_types::{
-    AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
-    RemovedFromWhitelist, SessionPaid, SessionPayment, Simulation, SimulationClaimData,
+    ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
+    SessionPaid, SessionPayment, Simulation, SimulationClaimData,
     SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo,
     TokensClaimed, WalletMultiTokenSummary, WalletTokenSummary,
 };
@@ -15,14 +15,16 @@ mod KliverTokensCore {
     };
     use starknet::{ContractAddress, get_caller_address};
     use super::{
-        AddedToWhitelist, ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
-        RemovedFromWhitelist, SessionPaid, SessionPayment, Simulation, SimulationClaimData,
+        ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
+        SessionPaid, SessionPayment, Simulation, SimulationClaimData,
         SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo,
         TokensClaimed, WalletMultiTokenSummary, WalletTokenSummary,
     };
+    use kliver_on_chain::components::whitelist_component::WhitelistComponent;
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
+    component!(path: WhitelistComponent, storage: whitelist, event: WhitelistEvent);
 
     #[abi(embed_v0)]
     impl ERC1155Impl = ERC1155Component::ERC1155Impl<ContractState>;
@@ -33,6 +35,7 @@ mod KliverTokensCore {
 
     impl ERC1155InternalImpl = ERC1155Component::InternalImpl<ContractState>;
     impl ERC1155HooksImpl = ERC1155HooksEmptyImpl<ContractState>;
+    impl WhitelistInternalImpl = WhitelistComponent::InternalImpl<ContractState>;
 
     #[storage]
     struct Storage {
@@ -40,13 +43,13 @@ mod KliverTokensCore {
         erc1155: ERC1155Component::Storage,
         #[substorage(v0)]
         src5: SRC5Component::Storage,
+        #[substorage(v0)]
+        whitelist: WhitelistComponent::Storage,
         owner: ContractAddress,
         registry_address: ContractAddress,
         token_info: Map<u256, TokenInfo>,
         next_token_id: u256,
         simulations: Map<felt252, Simulation>,
-        // (token_id, simulation_id, wallet) -> bool (whitelisted or not)
-        whitelist: Map<(u256, felt252, ContractAddress), bool>,
         // (token_id, simulation_id, wallet) -> last_claim_timestamp
         last_claim_timestamp: Map<(u256, felt252, ContractAddress), u64>,
         // session_id -> SessionPayment
@@ -62,10 +65,10 @@ mod KliverTokensCore {
         ERC1155Event: ERC1155Component::Event,
         #[flat]
         SRC5Event: SRC5Component::Event,
+        #[flat]
+        WhitelistEvent: WhitelistComponent::Event,
         TokenCreated: TokenCreated,
         SimulationRegistered: SimulationRegistered,
-        AddedToWhitelist: AddedToWhitelist,
-        RemovedFromWhitelist: RemovedFromWhitelist,
         SimulationExpirationUpdated: SimulationExpirationUpdated,
         TokensClaimed: TokensClaimed,
         SessionPaid: SessionPaid,
@@ -274,10 +277,8 @@ mod KliverTokensCore {
         let simulation = self.simulations.entry(simulation_id).read();
         assert(simulation.token_id == token_id, 'Simulation not for this token');
 
-        // Add to whitelist
-        self.whitelist.entry((token_id, simulation_id, wallet)).write(true);
-
-        self.emit(AddedToWhitelist { token_id, wallet, simulation_id });
+        // Add to whitelist using component
+        self.whitelist.add_to_whitelist(token_id, wallet, simulation_id);
     }
 
     #[external(v0)]
@@ -293,17 +294,15 @@ mod KliverTokensCore {
             token_info.release_hour != 0 || token_info.release_amount != 0, 'Token does not exist',
         );
 
-        // Remove from whitelist (set to false)
-        self.whitelist.entry((token_id, simulation_id, wallet)).write(false);
-
-        self.emit(RemovedFromWhitelist { token_id, wallet, simulation_id });
+        // Remove from whitelist using component
+        self.whitelist.remove_from_whitelist(token_id, wallet, simulation_id);
     }
 
     #[external(v0)]
     fn is_whitelisted(
         self: @ContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress,
     ) -> bool {
-        self.whitelist.entry((token_id, simulation_id, wallet)).read()
+        self.whitelist.is_whitelisted(token_id, simulation_id, wallet)
     }
 
     #[external(v0)]
@@ -325,7 +324,7 @@ mod KliverTokensCore {
         assert(simulation.token_id == token_id, 'Simulation not for this token');
 
         // 4. Verify user is whitelisted for this token and simulation
-        let is_whitelisted = self.whitelist.entry((token_id, simulation_id, caller)).read();
+        let is_whitelisted = self.whitelist.is_whitelisted(token_id, simulation_id, caller);
         assert(is_whitelisted, 'Not whitelisted');
 
         // 5. Check if simulation is expired
@@ -592,7 +591,7 @@ mod KliverTokensCore {
         let token_id = simulation.token_id;
 
         // 3. Verify caller is whitelisted for this simulation
-        let is_whitelisted = self.whitelist.entry((token_id, simulation_id, caller)).read();
+        let is_whitelisted = self.whitelist.is_whitelisted(token_id, simulation_id, caller);
         assert(is_whitelisted, 'Not whitelisted');
 
         // 4. Verify simulation has not expired
@@ -644,7 +643,7 @@ mod KliverTokensCore {
         let token_id = simulation.token_id;
 
         // 3. Verify caller is whitelisted for this simulation
-        let is_whitelisted = self.whitelist.entry((token_id, simulation_id, caller)).read();
+        let is_whitelisted = self.whitelist.is_whitelisted(token_id, simulation_id, caller);
         assert(is_whitelisted, 'Not whitelisted');
 
         // 4. Verify simulation has not expired
@@ -752,7 +751,7 @@ mod KliverTokensCore {
                 let simulation = self.simulations.entry(simulation_id).read();
 
                 // Check if whitelisted
-                let is_whitelisted = self.whitelist.entry((token_id, simulation_id, wallet)).read();
+                let is_whitelisted = self.whitelist.is_whitelisted(token_id, simulation_id, wallet);
 
                 // Check if simulation is expired
                 let is_expired = current_time >= simulation.expiration_timestamp;

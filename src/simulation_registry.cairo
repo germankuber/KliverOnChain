@@ -1,28 +1,7 @@
-use starknet::ContractAddress;
 use crate::types::VerificationResult;
-
-/// Simulation metadata for registration (without token)
-#[derive(Drop, Serde, Copy)]
-pub struct SimulationMetadata {
-    pub simulation_id: felt252,
-    pub author: ContractAddress,
-    pub character_id: felt252,
-    pub scenario_id: felt252,
-    pub simulation_hash: felt252,
-}
-
-/// Simulation metadata for registration with token
-#[derive(Drop, Serde, Copy)]
-pub struct SimulationWithTokenMetadata {
-    pub simulation_id: felt252,
-    pub author: ContractAddress,
-    pub character_id: felt252,
-    pub scenario_id: felt252,
-    pub simulation_hash: felt252,
-    pub token_id: u256,
-    pub expiration_timestamp: u64,
-}
-
+pub use kliver_on_chain::components::simulation_registry_component::{
+    SimulationMetadata, SimulationWithTokenMetadata
+};
 
 /// Simulation Registry Interface
 #[starknet::interface]
@@ -47,15 +26,4 @@ pub trait ISimulationRegistry<TContractState> {
     fn get_simulation_with_token_info(self: @TContractState, simulation_id: felt252) -> SimulationWithTokenMetadata;
     /// Check if a simulation exists
     fn simulation_exists(self: @TContractState, simulation_id: felt252) -> bool;
-}
-
-/// Simulation Registered Event
-#[derive(Drop, starknet::Event)]
-pub struct SimulationRegistered {
-    #[key]
-    pub simulation_id: felt252,
-    pub simulation_hash: felt252,
-    pub author: ContractAddress,
-    pub character_id: felt252,
-    pub scenario_id: felt252,
 }
