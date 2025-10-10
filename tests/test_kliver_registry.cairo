@@ -14,7 +14,6 @@ use kliver_on_chain::session_registry::{
 };
 use kliver_on_chain::simulation_registry::{
     ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata,
-    SimulationWithTokenMetadata,
 };
 use kliver_on_chain::types::VerificationResult;
 use snforge_std::{
