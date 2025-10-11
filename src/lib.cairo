@@ -30,8 +30,15 @@ pub mod session_registry;
 pub mod sessions_marketplace;
 pub mod simulation_registry;
 pub mod types;
+pub mod interfaces {
+    pub mod payment_token;
+}
+pub mod mocks {
+    pub mod mock_erc20;
+    pub mod mock_session_registry;
+    pub mod mock_verifier;
+}
 
 
 // Re-export key types for easier access
 pub use types::VerificationResult;
-

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 use starknet::ContractAddress;
+use crate::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
 
 // Session listing status
 #[allow(starknet::store_no_default_variant)]
@@ -17,7 +18,6 @@ pub struct SessionListing {
     pub session_id: felt252,
     pub simulation_id: felt252,
     pub root_hash: felt252,
-    pub score: u128,
     pub price: u128,
     pub seller: ContractAddress,
     pub buyer: ContractAddress,
@@ -31,8 +31,6 @@ pub trait ISessionMarketplace<TContractState> {
         ref self: TContractState,
         simulation_id: felt252,
         session_id: felt252,
-        root_hash: felt252,
-        score: u128,
         price: u128,
     );
 
@@ -63,11 +61,14 @@ mod SessionMarketplace {
         Map, MutableVecTrait, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
         Vec, VecTrait,
     };
+    use core::num::traits::Zero;
     use starknet::{ContractAddress, get_caller_address};
+    use crate::session_registry::ISessionRegistryDispatcherTrait;
     use super::{ListingStatus, SessionListing};
 
     #[storage]
     struct Storage {
+        registry: ContractAddress,
         // Map from session_id to SessionListing
         sessions: Map<felt252, SessionListing>,
         // Map from simulation_id to list of session_ids
@@ -93,7 +94,6 @@ mod SessionMarketplace {
         #[key]
         seller: ContractAddress,
         root_hash: felt252,
-        score: u128,
         price: u128,
     }
 
@@ -117,7 +117,9 @@ mod SessionMarketplace {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState) {// Constructor vacío, no necesita inicialización especial
+    fn constructor(ref self: ContractState, registry_address: ContractAddress) {
+        assert(!registry_address.is_zero(), 'Invalid registry address');
+        self.registry.write(registry_address);
     }
 
     #[abi(embed_v0)]
@@ -127,8 +129,6 @@ mod SessionMarketplace {
             ref self: ContractState,
             simulation_id: felt252,
             session_id: felt252,
-            root_hash: felt252,
-            score: u128,
             price: u128,
         ) {
             let caller = get_caller_address();
@@ -139,13 +139,21 @@ mod SessionMarketplace {
             // Verificar que el precio sea mayor a 0
             assert(price > 0, 'Price must be greater than 0');
 
+            // Validar en el registry que la sesión existe y pertenece al caller
+            let registry = crate::session_registry::ISessionRegistryDispatcher { contract_address: self.registry.read() };
+            let info = registry.get_session_info(session_id);
+            assert(info.root_hash != 0, 'Session not found in registry');
+            assert(info.author == caller, 'Not session owner');
+            // Opcional: validar simulation_id coincide con lo registrado
+            assert(info.simulation_id == simulation_id, 'Simulation mismatch');
+            let root_hash = info.root_hash;
+
             // Crear el listing de la sesión
             let zero_address: ContractAddress = 0.try_into().unwrap();
             let listing = SessionListing {
                 session_id,
                 simulation_id,
                 root_hash,
-                score,
                 price,
                 seller: caller,
                 buyer: zero_address,
@@ -164,7 +172,7 @@ mod SessionMarketplace {
             self
                 .emit(
                     SessionPublished {
-                        session_id, simulation_id, seller: caller, root_hash, score, price,
+                        session_id, simulation_id, seller: caller, root_hash, price,
                     },
                 );
         }

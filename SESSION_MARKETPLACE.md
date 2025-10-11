@@ -41,6 +41,81 @@ Permite a un usuario comprar una sesión publicada.
 
 **Nota:** La transferencia de fondos debe implementarse externamente (integración con ERC20).
 
+---
+
+## Extensión avanzada: Órdenes de compra (SessionsMarketplace)
+
+Además del contrato simple `session_marketplace.cairo`, existe una variante avanzada `sessions_marketplace.cairo` que implementa un flujo de órdenes de compra con escrow y verificación mediante challenge y pruebas.
+
+### Resumen del flujo
+
+1. El vendedor crea un listing a partir de una sesión registrada en el Registry (se valida propiedad y `root`).
+2. El comprador abre una orden de compra indicando `listing_id`, `challenge` y enviando el `amount` exacto (precio) al contrato vía `ERC20.transfer_from` (escrow on‑chain).
+3. El contrato guarda `buyer`, `challenge`, `escrow_amount` y `opened_at` (timestamp de la orden).
+4. El vendedor completa la venta enviando una prueba válida y public inputs que incluyen `root` y `challenge`.
+5. Si la prueba es válida, el contrato marca `Sold` y libera el escrow al seller.
+6. Si el seller no responde dentro de un `purchase_timeout` (config del contrato), el buyer puede pedir reembolso y la orden se cancela volviendo a `Open`.
+
+### Constructor (SessionsMarketplace)
+
+```text
+constructor(
+  registry_address: ContractAddress,
+  verifier_address: ContractAddress,
+  payment_token_address: ContractAddress,
+  purchase_timeout_seconds: u64
+)
+```
+
+- `payment_token`: ERC20 utilizado para escrow.
+- `purchase_timeout`: ventana de tiempo tras la cual el buyer puede reclamar reembolso.
+
+### Funciones nuevas/extendidas
+
+- `open_purchase(listing_id: u256, challenge: felt252, amount: u256)`
+  - Requiere `status == Open`, `amount == price`, `challenge != 0`, caller ≠ seller.
+  - Transfiere `amount` desde el buyer al contrato (`transfer_from`).
+  - Guarda `escrow_amount[listing_id]` y `purchase_opened_at[listing_id] = block_timestamp`.
+  - Evento: `PurchaseOpened { listing_id, buyer, challenge, amount, opened_at }`.
+
+- `submit_proof_and_verify(listing_id: u256, proof: Span<felt252>, public_inputs: Span<felt252>)`
+  - Valida que `public_inputs[0]` sea `root` y `public_inputs[1]` sea el `challenge` del listing.
+  - Si la verificación es válida: `status = Sold`, emite `Sold` y transfiere el escrow al seller.
+
+- `refund_purchase(listing_id: u256)`
+  - Solo buyer, con `status == Purchased`.
+  - Requiere `now >= opened_at + purchase_timeout`.
+  - Devuelve escrow al buyer, limpia estado y vuelve a `Open`.
+- Evento: `PurchaseRefunded { listing_id, buyer, amount }`.
+
+### Consultas de orden
+
+- `is_order_closed(session_id: felt252, buyer: ContractAddress) -> bool`
+  - Retorna true si la orden para ese `buyer` quedó en estado `Sold`.
+
+- `get_order(session_id: felt252, buyer: ContractAddress) -> Order`
+  - Retorna la metadata completa de la orden, incluyendo `challenge`, `amount` y `status`.
+
+- `get_order_status(session_id: felt252, buyer: ContractAddress) -> OrderStatus`
+  - Retorna el estado de la orden (Open, Sold, Refunded).
+
+- `get_order_info(session_id: felt252, buyer: ContractAddress) -> (challenge: felt252, amount: u256)`
+  - Retorna los datos mínimos de la orden para UIs off-chain sin deserializar structs.
+
+### Eventos
+
+```text
+PurchaseOpened { listing_id, buyer, challenge, amount, opened_at }
+PurchaseRefunded { listing_id, buyer, amount }
+```
+
+### Notas de integración
+
+- El buyer debe ejecutar `ERC20.approve(marketplace, price)` antes de `open_purchase`.
+- El contrato mantiene compatibilidad con el flujo de verificación por `challenge` + `root` y un `IVerifier`.
+- El `payment_token` y `purchase_timeout` se pueden consultar con `get_payment_token()` y `get_purchase_timeout()`.
+
+
 ### 3. Obtener Sesiones por Simulación (`get_sessions_by_simulation`)
 
 Devuelve todas las sesiones activas de una simulación específica.

@@ -476,6 +476,64 @@ fn upgrade(new_class_hash: ClassHash)  // Owner only
 
 ---
 
+### 🛒 Session Marketplace
+
+Marketplace de sesiones registradas con dos variantes según tus necesidades.
+
+```
+Seller            Marketplace              Registry              Buyer
+  |  publish(session, price) → validate(owner, root, sim) →
+  |                         ←      ok (root, author)
+
+Simple: purchase(session) → mark Sold, emit events
+
+Avanzado:
+  approve + open_order(listing, challenge, amount)
+  submit_proof(listing, buyer, zk, [root, challenge]) → verify → release escrow → Sold
+  refund_purchase(listing) si timeout
+```
+
+- Versión simple (`SessionMarketplace`)
+  - Constructor: `constructor(registry_address)`.
+  - Publicar: `publish_session(simulation_id, session_id, price)`.
+    - Valida en el Registry que la sesión exista, que el caller sea el autor y que `simulation_id` coincida.
+    - Usa `root_hash` del Registry; el listing no guarda score.
+  - Comprar: `purchase_session(session_id)` marca `Sold` y emite eventos.
+
+- Versión avanzada (`SessionsMarketplace`)
+  - Constructor: `constructor(registry, verifier, payment_token, purchase_timeout_seconds)`.
+  - Orden por comprador (escrow ERC20 + timeout):
+    - `open_purchase(listing_id, challenge, amount)` mueve `amount` al escrow del contrato y guarda `opened_at`.
+    - `submit_proof_and_verify(listing_id, buyer, proof, [root, challenge])` verifica y libera el escrow al seller → `Sold`.
+    - `refund_purchase(listing_id)` devuelve el escrow al buyer si expira el timeout.
+  - Consultas de orden: `is_order_closed(session_id, buyer)`, `get_order_status(...)`, `get_order_info(...)`.
+
+Cuándo usar cada una
+- Simple: cuando no necesitas escrow on-chain ni pruebas ZK.
+- Avanzada: cuando quieres pagos atómicos con ERC20 + challenge/zk y reembolsos temporizados.
+
+Ejemplos rápidos
+- Simple
+  ```cairo
+  // Publicar (valida en Registry autor y root)
+  session_marketplace.publish_session('SIM_A', 'SESSION_1', 50);
+  // Comprar
+  session_marketplace.purchase_session('SESSION_1');
+  ```
+
+- Avanzado
+  ```cairo
+  // Buyer aprueba y abre orden con challenge
+  erc20.approve(sessions_marketplace, 100);
+  sessions_marketplace.open_purchase(1, 'CHALLENGE_X', 100);
+  // Seller sube prueba ZK con [root, challenge]
+  sessions_marketplace.submit_proof_and_verify(1, buyer, proof, array![root, 'CHALLENGE_X'].span());
+  // (Si expira el timeout) Buyer puede reembolsar
+  sessions_marketplace.refund_purchase(1);
+  ```
+
+---
+
 ## 🔐 Security & Access Control
 
 ### Kliver 1155 Security

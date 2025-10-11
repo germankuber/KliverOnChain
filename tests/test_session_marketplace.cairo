@@ -1,15 +1,25 @@
 use kliver_on_chain::session_marketplace::{
     ISessionMarketplaceDispatcher, ISessionMarketplaceDispatcherTrait, ListingStatus,
 };
+use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
+use kliver_on_chain::components::session_registry_component::SessionMetadata;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
     stop_cheat_caller_address,
 };
 use starknet::ContractAddress;
 
-fn deploy_session_marketplace() -> ISessionMarketplaceDispatcher {
+fn deploy_registry() -> ISessionRegistryDispatcher {
+    let contract = declare("MockSessionRegistry").unwrap().contract_class();
+    let (addr, _) = contract.deploy(@ArrayTrait::new()).unwrap();
+    ISessionRegistryDispatcher { contract_address: addr }
+}
+
+fn deploy_session_marketplace(registry: ContractAddress) -> ISessionMarketplaceDispatcher {
     let contract = declare("SessionMarketplace").unwrap().contract_class();
-    let (contract_address, _) = contract.deploy(@ArrayTrait::new()).unwrap();
+    let mut calldata = ArrayTrait::new();
+    calldata.append(registry.into());
+    let (contract_address, _) = contract.deploy(@calldata).unwrap();
     ISessionMarketplaceDispatcher { contract_address }
 }
 
@@ -27,17 +37,19 @@ fn OTHER_USER() -> ContractAddress {
 
 #[test]
 fn test_publish_session() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    // Register a session (owner SELLER)
+    let meta = SessionMetadata { session_id: 'session_1', root_hash: 'root_hash_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 };
+    registry.register_session(meta);
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
-    let root_hash = 'root_hash_1';
-    let score = 100;
     let price = 50;
 
     start_cheat_caller_address(marketplace.contract_address, SELLER());
 
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
 
     stop_cheat_caller_address(marketplace.contract_address);
 
@@ -49,8 +61,7 @@ fn test_publish_session() {
     let listing = marketplace.get_session(session_id);
     assert!(listing.session_id == session_id, "Session ID mismatch");
     assert!(listing.simulation_id == simulation_id, "Simulation ID mismatch");
-    assert!(listing.root_hash == root_hash, "Root hash mismatch");
-    assert!(listing.score == score, "Score mismatch");
+    assert!(listing.root_hash == 'root_hash_1', "Root hash mismatch");
     assert!(listing.price == price, "Price mismatch");
     assert!(listing.seller == SELLER(), "Seller mismatch");
     assert!(listing.status == ListingStatus::Available, "Status should be Available");
@@ -59,52 +70,55 @@ fn test_publish_session() {
 #[test]
 #[should_panic(expected: ('Session already exists',))]
 fn test_publish_duplicate_session() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    let meta = SessionMetadata { session_id: 'session_1', root_hash: 'root_hash_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 };
+    registry.register_session(meta);
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
-    let root_hash = 'root_hash_1';
-    let score = 100;
     let price = 50;
 
     start_cheat_caller_address(marketplace.contract_address, SELLER());
 
     // Publicar la primera vez
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
 
     // Intentar publicar de nuevo (debería fallar)
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
 }
 
 #[test]
 #[should_panic(expected: ('Price must be greater than 0',))]
 fn test_publish_session_zero_price() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    let meta = SessionMetadata { session_id: 'session_1', root_hash: 'root_hash_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 };
+    registry.register_session(meta);
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
-    let root_hash = 'root_hash_1';
-    let score = 100;
     let price = 0;
 
     start_cheat_caller_address(marketplace.contract_address, SELLER());
 
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
 }
 
 #[test]
 fn test_purchase_session() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    let meta = SessionMetadata { session_id: 'session_1', root_hash: 'root_hash_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 };
+    registry.register_session(meta);
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
-    let root_hash = 'root_hash_1';
-    let score = 100;
     let price = 50;
 
     // Publicar sesión como SELLER
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Comprar sesión como BUYER
@@ -122,18 +136,19 @@ fn test_purchase_session() {
 #[test]
 #[should_panic(expected: ('Cannot buy your own session',))]
 fn test_purchase_own_session() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    let meta = SessionMetadata { session_id: 'session_1', root_hash: 'root_hash_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 };
+    registry.register_session(meta);
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
-    let root_hash = 'root_hash_1';
-    let score = 100;
     let price = 50;
 
     start_cheat_caller_address(marketplace.contract_address, SELLER());
 
     // Publicar sesión
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
 
     // Intentar comprar propia sesión (debería fallar)
     marketplace.purchase_session(session_id);
@@ -142,17 +157,18 @@ fn test_purchase_own_session() {
 #[test]
 #[should_panic(expected: ('Session not available',))]
 fn test_purchase_sold_session() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    let meta = SessionMetadata { session_id: 'session_1', root_hash: 'root_hash_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 };
+    registry.register_session(meta);
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
-    let root_hash = 'root_hash_1';
-    let score = 100;
     let price = 50;
 
     // Publicar sesión como SELLER
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Comprar sesión como BUYER
@@ -167,16 +183,21 @@ fn test_purchase_sold_session() {
 
 #[test]
 fn test_get_sessions_by_simulation() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    // Register three sessions for SELLER
+    registry.register_session(SessionMetadata { session_id: 'session_1', root_hash: 'root_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 });
+    registry.register_session(SessionMetadata { session_id: 'session_2', root_hash: 'root_2', simulation_id: 'sim_1', author: SELLER(), score: 200_u32 });
+    registry.register_session(SessionMetadata { session_id: 'session_3', root_hash: 'root_3', simulation_id: 'sim_1', author: SELLER(), score: 150_u32 });
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
 
     start_cheat_caller_address(marketplace.contract_address, SELLER());
 
     // Publicar múltiples sesiones para la misma simulación
-    marketplace.publish_session(simulation_id, 'session_1', 'root_1', 100, 50);
-    marketplace.publish_session(simulation_id, 'session_2', 'root_2', 200, 75);
-    marketplace.publish_session(simulation_id, 'session_3', 'root_3', 150, 60);
+    marketplace.publish_session(simulation_id, 'session_1', 50);
+    marketplace.publish_session(simulation_id, 'session_2', 75);
+    marketplace.publish_session(simulation_id, 'session_3', 60);
 
     stop_cheat_caller_address(marketplace.contract_address);
 
@@ -193,18 +214,18 @@ fn test_get_sessions_by_simulation() {
 
 #[test]
 fn test_remove_session() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    registry.register_session(SessionMetadata { session_id: 'session_1', root_hash: 'root_hash_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 });
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
-    let root_hash = 'root_hash_1';
-    let score = 100;
     let price = 50;
 
     start_cheat_caller_address(marketplace.contract_address, SELLER());
 
     // Publicar sesión
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
 
     // Verificar que existe
     assert!(marketplace.session_exists(session_id), "Session should exist");
@@ -222,17 +243,17 @@ fn test_remove_session() {
 #[test]
 #[should_panic(expected: ('Not the seller',))]
 fn test_remove_session_wrong_seller() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    registry.register_session(SessionMetadata { session_id: 'session_1', root_hash: 'root_hash_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 });
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
-    let root_hash = 'root_hash_1';
-    let score = 100;
     let price = 50;
 
     // Publicar como SELLER
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Intentar cancelar como OTHER_USER (debería fallar)
@@ -243,17 +264,17 @@ fn test_remove_session_wrong_seller() {
 #[test]
 #[should_panic(expected: ('Cannot cancel sold session',))]
 fn test_remove_sold_session() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    registry.register_session(SessionMetadata { session_id: 'session_1', root_hash: 'root_hash_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 });
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
-    let root_hash = 'root_hash_1';
-    let score = 100;
     let price = 50;
 
     // Publicar sesión como SELLER
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    marketplace.publish_session(simulation_id, session_id, root_hash, score, price);
+    marketplace.publish_session(simulation_id, session_id, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Comprar sesión como BUYER
@@ -268,16 +289,20 @@ fn test_remove_sold_session() {
 
 #[test]
 fn test_cancelled_session_not_in_list() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    registry.register_session(SessionMetadata { session_id: 'session_1', root_hash: 'root_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 });
+    registry.register_session(SessionMetadata { session_id: 'session_2', root_hash: 'root_2', simulation_id: 'sim_1', author: SELLER(), score: 200_u32 });
+    registry.register_session(SessionMetadata { session_id: 'session_3', root_hash: 'root_3', simulation_id: 'sim_1', author: SELLER(), score: 150_u32 });
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
 
     start_cheat_caller_address(marketplace.contract_address, SELLER());
 
     // Publicar tres sesiones
-    marketplace.publish_session(simulation_id, 'session_1', 'root_1', 100, 50);
-    marketplace.publish_session(simulation_id, 'session_2', 'root_2', 200, 75);
-    marketplace.publish_session(simulation_id, 'session_3', 'root_3', 150, 60);
+    marketplace.publish_session(simulation_id, 'session_1', 50);
+    marketplace.publish_session(simulation_id, 'session_2', 75);
+    marketplace.publish_session(simulation_id, 'session_3', 60);
 
     // Cancelar la segunda sesión
     marketplace.remove_session('session_2');
@@ -297,15 +322,21 @@ fn test_cancelled_session_not_in_list() {
 
 #[test]
 fn test_multiple_simulations() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    // Sessions for two simulations
+    registry.register_session(SessionMetadata { session_id: 'session_1', root_hash: 'root_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 });
+    registry.register_session(SessionMetadata { session_id: 'session_2', root_hash: 'root_2', simulation_id: 'sim_1', author: SELLER(), score: 200_u32 });
+    registry.register_session(SessionMetadata { session_id: 'session_3', root_hash: 'root_3', simulation_id: 'sim_2', author: SELLER(), score: 150_u32 });
+    registry.register_session(SessionMetadata { session_id: 'session_4', root_hash: 'root_4', simulation_id: 'sim_2', author: SELLER(), score: 180_u32 });
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     start_cheat_caller_address(marketplace.contract_address, SELLER());
 
     // Publicar sesiones para diferentes simulaciones
-    marketplace.publish_session('sim_1', 'session_1', 'root_1', 100, 50);
-    marketplace.publish_session('sim_1', 'session_2', 'root_2', 200, 75);
-    marketplace.publish_session('sim_2', 'session_3', 'root_3', 150, 60);
-    marketplace.publish_session('sim_2', 'session_4', 'root_4', 180, 65);
+    marketplace.publish_session('sim_1', 'session_1', 50);
+    marketplace.publish_session('sim_1', 'session_2', 75);
+    marketplace.publish_session('sim_2', 'session_3', 60);
+    marketplace.publish_session('sim_2', 'session_4', 65);
 
     stop_cheat_caller_address(marketplace.contract_address);
 
@@ -321,7 +352,8 @@ fn test_multiple_simulations() {
 #[test]
 #[should_panic(expected: ('Session does not exist',))]
 fn test_get_nonexistent_session() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     // Intentar obtener una sesión que no existe
     marketplace.get_session('nonexistent');
@@ -329,7 +361,9 @@ fn test_get_nonexistent_session() {
 
 #[test]
 fn test_is_available() {
-    let marketplace = deploy_session_marketplace();
+    let registry = deploy_registry();
+    registry.register_session(SessionMetadata { session_id: 'session_1', root_hash: 'root_1', simulation_id: 'sim_1', author: SELLER(), score: 100_u32 });
+    let marketplace = deploy_session_marketplace(registry.contract_address);
 
     let simulation_id = 'sim_1';
     let session_id = 'session_1';
@@ -338,7 +372,7 @@ fn test_is_available() {
     assert!(!marketplace.is_available(session_id), "Nonexistent session should not be available");
 
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    marketplace.publish_session(simulation_id, session_id, 'root_1', 100, 50);
+    marketplace.publish_session(simulation_id, session_id, 50);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Verificar que está disponible después de publicarla
