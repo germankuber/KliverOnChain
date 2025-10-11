@@ -284,7 +284,6 @@ pub mod SessionsMarketplace {
             buyer: ContractAddress,
             challenge_key: u64,
             proof: Span<felt252>,
-            public_inputs: Span<felt252>,
         ) {
             let caller = get_caller_address();
             let mut listing = self.listings.read(listing_id);
@@ -293,16 +292,12 @@ pub mod SessionsMarketplace {
             assert(listing.seller == caller, 'Not the seller');
             assert(listing.status == ListingStatus::Open, 'Listing not open');
 
-            // Verificar que los public inputs coincidan
-            assert(public_inputs.len() >= 2, 'Invalid public inputs');
-            let session_root = *public_inputs.at(0);
-            let challenge = *public_inputs.at(1);
-
-            assert(session_root == listing.root, 'Root mismatch');
+            // Datos públicos esperados
+            let session_root = listing.root;
             // Validar orden del buyer
             let order_key = (listing.session_id, buyer);
             let mut order = self.orders.read(order_key);
-            assert(order.challenge == challenge, 'Challenge mismatch');
+            let challenge = order.challenge;
             // Ensure numeric challenge matches order.challenge
             let expected_key: u64 = order.challenge.try_into().unwrap();
             assert(challenge_key == expected_key, 'Challenge key mismatch');
@@ -449,7 +444,6 @@ pub mod SessionsMarketplace {
             buyer: ContractAddress,
             challenge_key: u64,
             proof: Span<felt252>,
-            public_inputs: Span<felt252>,
         );
 
         // View functions

@@ -162,10 +162,7 @@ fn test_successful_sale_releases_escrow() {
     // Seller submits proof and completes sale
     start_cheat_caller_address(marketplace.contract_address, SELLER());
     let proof: Array<felt252> = array![1, 2, 3];
-    let mut inputs: Array<felt252> = ArrayTrait::new();
-    inputs.append(root);
-    inputs.append(challenge_felt2);
-    marketplace.settle_purchase(listing_id, BUYER(), challenge_key2, proof.span(), inputs.span());
+    marketplace.settle_purchase(listing_id, BUYER(), challenge_key2, proof.span());
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Listing should be Sold
