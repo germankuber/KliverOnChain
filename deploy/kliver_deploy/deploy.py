@@ -246,8 +246,8 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
     click.echo(f"{Colors.BOLD}Step 3/4: Deploying Registry Contract{Colors.RESET}")
     registry_deployer = ContractDeployer(environment, 'registry', config_manager)
 
-    # Get verifier_address from config if not provided (for Registry deployments)
-    if not verifier_address and contract == 'registry':
+    # Get verifier_address from config if not provided
+    if not verifier_address:
         registry_config = config_manager.get_contract_config(environment, 'registry')
         verifier_address = registry_config.verifier_address or "0x0"
 

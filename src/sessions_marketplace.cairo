@@ -12,7 +12,6 @@ pub mod SessionsMarketplace {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
-    use super::super::kliver_registry::{IVerifierDispatcher, IVerifierDispatcherTrait};
     use super::super::session_registry::{
         ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait,
     };
@@ -45,7 +44,6 @@ pub mod SessionsMarketplace {
     struct Storage {
         // Direcciones de los contratos
         registry: ContractAddress,
-        verifier: ContractAddress,
         // Token de pago (ERC20) y timeout de compra (en segundos)
         payment_token: ContractAddress,
         purchase_timeout: u64,
@@ -163,17 +161,14 @@ pub mod SessionsMarketplace {
     fn constructor(
         ref self: ContractState,
         registry_address: ContractAddress,
-        verifier_address: ContractAddress,
         payment_token_address: ContractAddress,
         purchase_timeout_seconds: u64,
     ) {
         assert(!registry_address.is_zero(), 'Invalid registry address');
-        assert(!verifier_address.is_zero(), 'Invalid verifier address');
         assert(!payment_token_address.is_zero(), 'Invalid payment token');
         assert(purchase_timeout_seconds > 0, 'Invalid purchase timeout');
 
         self.registry.write(registry_address);
-        self.verifier.write(verifier_address);
         self.payment_token.write(payment_token_address);
         self.purchase_timeout.write(purchase_timeout_seconds);
         self.listing_counter.write(0);
