@@ -478,7 +478,7 @@ fn upgrade(new_class_hash: ClassHash)  // Owner only
 
 ### 🛒 Session Marketplace
 
-Marketplace de sesiones registradas con dos variantes según tus necesidades.
+Marketplace for registered sessions with two options depending on your needs.
 
 ```
 Seller            Marketplace              Registry              Buyer
@@ -493,44 +493,66 @@ Avanzado:
   refund_purchase(listing) si timeout
 ```
 
-- Versión simple (`SessionMarketplace`)
+- Simple version (`SessionMarketplace`)
   - Constructor: `constructor(registry_address)`.
-  - Publicar: `publish_session(simulation_id, session_id, price)`.
-    - Valida en el Registry que la sesión exista, que el caller sea el autor y que `simulation_id` coincida.
-    - Usa `root_hash` del Registry; el listing no guarda score.
-  - Comprar: `purchase_session(session_id)` marca `Sold` y emite eventos.
+  - Publish: `publish_session(simulation_id, session_id, price)`.
+    - Validates in the Registry that the session exists, the caller is the author, and the `simulation_id` matches.
+    - Uses the Registry `root_hash`; the listing does not store score.
+  - Purchase: `purchase_session(session_id)` marks `Sold` and emits events.
 
-- Versión avanzada (`SessionsMarketplace`)
+- Advanced version (`SessionsMarketplace`)
   - Constructor: `constructor(registry, verifier, payment_token, purchase_timeout_seconds)`.
-  - Orden por comprador (escrow ERC20 + timeout):
-    - `open_purchase(listing_id, challenge, amount)` mueve `amount` al escrow del contrato y guarda `opened_at`.
-    - `submit_proof_and_verify(listing_id, buyer, proof, [root, challenge])` verifica y libera el escrow al seller → `Sold`.
-    - `refund_purchase(listing_id)` devuelve el escrow al buyer si expira el timeout.
-  - Consultas de orden: `is_order_closed(session_id, buyer)`, `get_order_status(...)`, `get_order_info(...)`.
+  - Per-buyer order (ERC20 escrow + timeout):
+    - `open_purchase(listing_id, challenge, amount)` moves `amount` into the contract escrow and records `opened_at`.
+    - `settle_purchase(listing_id, buyer, challenge_key, proof, [root, challenge])` verifies and releases escrow to the seller → `Sold`.
+    - `refund_purchase(listing_id)` returns escrow to the buyer if the timeout expires.
+  - Order queries: `is_order_closed(session_id, buyer)`, `get_order_status(...)`, `get_order_info(...)`.
 
-Cuándo usar cada una
-- Simple: cuando no necesitas escrow on-chain ni pruebas ZK.
-- Avanzada: cuando quieres pagos atómicos con ERC20 + challenge/zk y reembolsos temporizados.
+When to use which
+- Simple: when you don’t need on-chain escrow or ZK proofs.
+- Advanced: when you want atomic ERC20 payments with challenge/zk and time-boxed refunds.
 
-Ejemplos rápidos
+Quick examples
 - Simple
   ```cairo
-  // Publicar (valida en Registry autor y root)
+  // Publish (validates author + root against Registry)
   session_marketplace.publish_session('SIM_A', 'SESSION_1', 50);
-  // Comprar
+  // Purchase
   session_marketplace.purchase_session('SESSION_1');
   ```
 
 - Avanzado
   ```cairo
-  // Buyer aprueba y abre orden con challenge
+  // Buyer approves and opens an order with a challenge
   erc20.approve(sessions_marketplace, 100);
   sessions_marketplace.open_purchase(1, 'CHALLENGE_X', 100);
-  // Seller sube prueba ZK con [root, challenge]
-  sessions_marketplace.submit_proof_and_verify(1, buyer, proof, array![root, 'CHALLENGE_X'].span());
-  // (Si expira el timeout) Buyer puede reembolsar
+  // Seller settles with zk-proof + challenge key
+  sessions_marketplace.settle_purchase(1, buyer, 1234567890_u64, proof, array![root, 'CHALLENGE_X'].span());
+  // If timeout expires, the buyer can refund
   sessions_marketplace.refund_purchase(1);
   ```
+
+Code locations
+- Simple contract: `src/session_marketplace.cairo`
+- Advanced contract: `src/sessions_marketplace.cairo`
+- Simple tests: `tests/test_session_marketplace.cairo`
+- Advanced tests (orders): `tests/test_sessions_marketplace_orders.cairo`
+
+Deployment checklist
+- Simple
+  - Deploy/get `Registry` and note its `address`.
+  - Deploy `SessionMarketplace` with `constructor(registry_address)`.
+  - Publish sessions with `publish_session(sim_id, session_id, price)`.
+  - Consume with `purchase_session(session_id)` and listen to events.
+
+- Advanced
+  - Deploy/get `Registry` and `Verifier`.
+  - Deploy/get the payment `ERC20` (or your protocol token).
+  - Deploy `SessionsMarketplace` with `(registry, verifier, payment_token, purchase_timeout_seconds)`.
+  - Seller: `create_listing(session_id, price)` (validates against Registry and stores root).
+  - Buyer: `approve(marketplace, amount)` then `open_purchase(listing_id, challenge, amount)`.
+  - Seller: `settle_purchase(listing_id, buyer, challenge_key, proof, [root, challenge])`.
+  - Buyer: if expired, `refund_purchase(listing_id)`.
 
 ---
 

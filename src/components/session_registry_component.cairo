@@ -38,17 +38,31 @@ pub mod SessionRegistryComponent {
     }
     use super::SessionAccessGranted;
 
+    #[derive(Drop, starknet::Event)]
+    pub struct ProofVerificationEvent {
+        pub root_hash: felt252,
+        pub challenge: u64,
+        pub verified: bool,
+    }
+
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
         SessionRegistered: SessionMetadata,
         SessionAccessGranted: SessionAccessGranted,
+        ProofVerified: ProofVerificationEvent,
     }
 
     #[generate_trait]
     pub impl InternalImpl<
         TContractState, +HasComponent<TContractState>,
     > of InternalTrait<TContractState> {
+        /// Emit a ProofVerificationEvent from the component
+        fn emit_proof_verified(
+            ref self: ComponentState<TContractState>, root_hash: felt252, challenge: u64, verified: bool,
+        ) {
+            self.emit(ProofVerificationEvent { root_hash, challenge, verified });
+        }
         /// Register a session
         fn register_session(
             ref self: ComponentState<TContractState>,

@@ -23,6 +23,8 @@ pub trait ITokenCore<TContractState> {
 }
 
 /// Kliver Registry Contract
+//
+
 #[starknet::contract]
 pub mod kliver_registry {
     use core::num::traits::Zero;
@@ -430,6 +432,17 @@ pub mod kliver_registry {
             verifier.verify_ultra_starknet_honk_proof(full_proof_with_hints)
         }
 
+        fn verify_proof(
+            self: @ContractState, full_proof_with_hints: Span<felt252>, root_hash: felt252, challenge: u64
+        ) -> Option<Span<u256>> {
+            // Validate 10-digit numeric key
+            assert(challenge >= 1000000000_u64, 'Invalid challenge');
+            assert(challenge <= 9999999999_u64, 'Invalid challenge');
+            let verifier = IVerifierDispatcher { contract_address: self.verifier_address.read() };
+            let result = verifier.verify_ultra_starknet_honk_proof(full_proof_with_hints);
+            result
+        }
+
         fn get_session_info(self: @ContractState, session_id: felt252) -> SessionMetadata {
             // Delegate to component
             self.session_registry.get_session_info(session_id)
@@ -557,4 +570,3 @@ pub mod kliver_registry {
         }
     }
 }
-

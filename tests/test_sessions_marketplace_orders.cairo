@@ -94,10 +94,11 @@ fn test_open_purchase_and_refund_flow() {
     stop_cheat_caller_address(token.contract_address);
 
     // Open purchase as BUYER (set timestamp first)
-    let challenge = 'challenge_1';
+    let challenge_felt = 1234567890; // felt
+    let challenge_key: u64 = 1234567890_u64;
     start_cheat_block_timestamp(marketplace.contract_address, 1000);
     start_cheat_caller_address(marketplace.contract_address, BUYER());
-    marketplace.open_purchase(listing_id, challenge, price);
+    marketplace.open_purchase(listing_id, challenge_felt, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Listing remains Open; order is tracked per (session_id, buyer)
@@ -106,7 +107,7 @@ fn test_open_purchase_and_refund_flow() {
 
     // Check order view
     let (challenge_r, amount_r) = marketplace.get_order_info('session_1', BUYER());
-    assert!(challenge_r == challenge, "Challenge stored in order");
+    assert!(challenge_r == challenge_felt, "Challenge stored in order");
     assert!(amount_r == price, "Amount stored in order");
     let status_r = marketplace.get_order_status('session_1', BUYER());
     assert!(status_r == OrderStatus::Open, "Order should be open");
@@ -153,8 +154,9 @@ fn test_successful_sale_releases_escrow() {
     let _ok = token.approve(marketplace.contract_address, price);
     stop_cheat_caller_address(token.contract_address);
     start_cheat_caller_address(marketplace.contract_address, BUYER());
-    let challenge = 'challenge_2';
-    marketplace.open_purchase(listing_id, challenge, price);
+    let challenge_felt2 = 2222222222;
+    let challenge_key2: u64 = 2222222222_u64;
+    marketplace.open_purchase(listing_id, challenge_felt2, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Seller submits proof and completes sale
@@ -162,8 +164,8 @@ fn test_successful_sale_releases_escrow() {
     let proof: Array<felt252> = array![1, 2, 3];
     let mut inputs: Array<felt252> = ArrayTrait::new();
     inputs.append(root);
-    inputs.append(challenge);
-    marketplace.submit_proof_and_verify(listing_id, BUYER(), proof.span(), inputs.span());
+    inputs.append(challenge_felt2);
+    marketplace.settle_purchase(listing_id, BUYER(), challenge_key2, proof.span(), inputs.span());
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Listing should be Sold
@@ -196,7 +198,8 @@ fn test_refund_before_timeout_panics() {
 
     start_cheat_block_timestamp(marketplace.contract_address, 500);
     start_cheat_caller_address(marketplace.contract_address, BUYER());
-    marketplace.open_purchase(listing_id, 'challenge_r', price);
+    let challenge_r_felt = 3333333333;
+    marketplace.open_purchase(listing_id, challenge_r_felt, price);
     // Try to refund immediately (should panic Not expired)
     marketplace.refund_purchase(listing_id);
 }

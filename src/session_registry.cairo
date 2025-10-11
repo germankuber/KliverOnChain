@@ -23,4 +23,8 @@ pub trait ISessionRegistry<TContractState> {
     fn verify_complete_session(
         self: @TContractState, full_proof_with_hints: Span<felt252>,
     ) -> Option<Span<u256>>;
+    /// Verify a proof with a numeric challenge key (10 digits) and public root hash
+    fn verify_proof(
+        self: @TContractState, full_proof_with_hints: Span<felt252>, root_hash: felt252, challenge: u64
+    ) -> Option<Span<u256>>;
 }

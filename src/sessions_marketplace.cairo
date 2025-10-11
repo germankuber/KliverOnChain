@@ -70,6 +70,7 @@ pub mod SessionsMarketplace {
         Sold: Sold,
         ListingCancelled: ListingCancelled,
         PurchaseRefunded: PurchaseRefunded,
+        OrderClosedDetailed: OrderClosedDetailed,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -122,6 +123,21 @@ pub mod SessionsMarketplace {
         #[key]
         buyer: ContractAddress,
         amount: u256,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct OrderClosedDetailed {
+        #[key]
+        listing_id: u256,
+        session_id: felt252,
+        seller: ContractAddress,
+        buyer: ContractAddress,
+        price: u256,
+        public_root: felt252,
+        public_challenge: felt252,
+        challenge_key: u64,
+        opened_at: u64,
+        settled_at: u64,
     }
 
     // Estados de una orden
@@ -262,10 +278,11 @@ pub mod SessionsMarketplace {
         // ============ PROOF SUBMISSION (On-chain) ============
 
         // Verificación on-chain completa
-        fn submit_proof_and_verify(
+        fn settle_purchase(
             ref self: ContractState,
             listing_id: u256,
             buyer: ContractAddress,
+            challenge_key: u64,
             proof: Span<felt252>,
             public_inputs: Span<felt252>,
         ) {
@@ -286,12 +303,14 @@ pub mod SessionsMarketplace {
             let order_key = (listing.session_id, buyer);
             let mut order = self.orders.read(order_key);
             assert(order.challenge == challenge, 'Challenge mismatch');
+            // Ensure numeric challenge matches order.challenge
+            let expected_key: u64 = order.challenge.try_into().unwrap();
+            assert(challenge_key == expected_key, 'Challenge key mismatch');
             assert(order.status == OrderStatus::Open, 'Order not open');
 
-            // Llamar al verifier
-            let verifier_address = self.verifier.read();
-            let verifier = IVerifierDispatcher { contract_address: verifier_address };
-            let result = verifier.verify_ultra_starknet_honk_proof(proof);
+            // Llamar al verify_proof del registry (con challenge numérico)
+            let registry = ISessionRegistryDispatcher { contract_address: self.registry.read() };
+            let result = registry.verify_proof(proof, session_root, challenge_key);
             let is_valid = result.is_some();
 
             // Emitir evento de proof
@@ -312,6 +331,21 @@ pub mod SessionsMarketplace {
                 if amount > 0 {
                     let _ok2 = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcherTrait::transfer(token, listing.seller, amount);
                 }
+                // Emitir evento detallado con datos públicos
+                let opened_at = self.purchase_opened_at.read(order_key);
+                let settled_at = get_block_timestamp();
+                self.emit(OrderClosedDetailed {
+                    listing_id,
+                    session_id: listing.session_id,
+                    seller: listing.seller,
+                    buyer,
+                    price: listing.price,
+                    public_root: session_root,
+                    public_challenge: challenge,
+                    challenge_key,
+                    opened_at,
+                    settled_at,
+                });
                 // Limpiar escrow y timestamp
                 self.escrow_amount.write(order_key, 0);
                 self.purchase_opened_at.write(order_key, 0);
@@ -409,10 +443,11 @@ pub mod SessionsMarketplace {
         fn refund_purchase(ref self: TContractState, listing_id: u256);
 
         // Proof submission
-        fn submit_proof_and_verify(
+        fn settle_purchase(
             ref self: TContractState,
             listing_id: u256,
             buyer: ContractAddress,
+            challenge_key: u64,
             proof: Span<felt252>,
             public_inputs: Span<felt252>,
         );
