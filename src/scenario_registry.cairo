@@ -1,5 +1,5 @@
-use crate::types::VerificationResult;
 pub use kliver_on_chain::components::scenario_registry_component::ScenarioMetadata;
+use crate::types::VerificationResult;
 
 /// Scenario Registry Interface
 #[starknet::interface]

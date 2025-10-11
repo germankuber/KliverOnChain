@@ -1,7 +1,7 @@
 use starknet::ContractAddress;
 use super::kliver_tokens_core_types::{
-    ClaimableAmountResult, Simulation, TokenInfo, WalletMultiTokenSummary, WalletTokenSummary,
-    SessionPayment, HintPayment,
+    ClaimableAmountResult, HintPayment, SessionPayment, Simulation, TokenInfo,
+    WalletMultiTokenSummary, WalletTokenSummary,
 };
 
 #[starknet::interface]
@@ -12,56 +12,36 @@ trait IKliverTokensCore<TContractState> {
 
     // Token management
     fn create_token(
-        ref self: TContractState,
-        release_hour: u64,
-        release_amount: u256,
-        special_release: u256,
+        ref self: TContractState, release_hour: u64, release_amount: u256, special_release: u256,
     ) -> u256;
     fn get_token_info(self: @TContractState, token_id: u256) -> TokenInfo;
     fn time_until_release(self: @TContractState, token_id: u256) -> u64;
 
     // Simulation management
     fn register_simulation(
-        ref self: TContractState,
-        simulation_id: felt252,
-        token_id: u256,
-        expiration_timestamp: u64,
+        ref self: TContractState, simulation_id: felt252, token_id: u256, expiration_timestamp: u64,
     ) -> felt252;
     fn get_simulation(self: @TContractState, simulation_id: felt252) -> Simulation;
     fn is_simulation_expired(self: @TContractState, simulation_id: felt252) -> bool;
     fn update_simulation_expiration(
-        ref self: TContractState,
-        simulation_id: felt252,
-        new_expiration_timestamp: u64,
+        ref self: TContractState, simulation_id: felt252, new_expiration_timestamp: u64,
     );
 
     // Whitelist management
     fn add_to_whitelist(
-        ref self: TContractState,
-        token_id: u256,
-        wallet: ContractAddress,
-        simulation_id: felt252,
+        ref self: TContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252,
     );
     fn remove_from_whitelist(
-        ref self: TContractState,
-        token_id: u256,
-        wallet: ContractAddress,
-        simulation_id: felt252,
+        ref self: TContractState, token_id: u256, wallet: ContractAddress, simulation_id: felt252,
     );
     fn is_whitelisted(
-        self: @TContractState,
-        token_id: u256,
-        simulation_id: felt252,
-        wallet: ContractAddress,
+        self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress,
     ) -> bool;
 
     // Token claiming
     fn claim(ref self: TContractState, token_id: u256, simulation_id: felt252);
     fn get_claimable_amount(
-        self: @TContractState,
-        token_id: u256,
-        simulation_id: felt252,
-        wallet: ContractAddress,
+        self: @TContractState, token_id: u256, simulation_id: felt252, wallet: ContractAddress,
     ) -> u256;
     fn get_claimable_amounts_batch(
         self: @TContractState,
@@ -78,26 +58,18 @@ trait IKliverTokensCore<TContractState> {
         simulation_ids: Span<felt252>,
     ) -> WalletTokenSummary;
     fn get_wallet_simulations_summary(
-        self: @TContractState,
-        wallet: ContractAddress,
-        simulation_ids: Span<felt252>,
+        self: @TContractState, wallet: ContractAddress, simulation_ids: Span<felt252>,
     ) -> WalletMultiTokenSummary;
 
     // Payment functions
     fn pay_for_session(
-        ref self: TContractState,
-        simulation_id: felt252,
-        session_id: felt252,
-        amount: u256,
+        ref self: TContractState, simulation_id: felt252, session_id: felt252, amount: u256,
     );
     fn is_session_paid(self: @TContractState, session_id: felt252) -> bool;
     fn get_session_payment(self: @TContractState, session_id: felt252) -> SessionPayment;
 
     fn pay_for_hint(
-        ref self: TContractState,
-        simulation_id: felt252,
-        hint_id: felt252,
-        amount: u256,
+        ref self: TContractState, simulation_id: felt252, hint_id: felt252, amount: u256,
     );
     fn is_hint_paid(self: @TContractState, hint_id: felt252) -> bool;
     fn get_hint_payment(self: @TContractState, hint_id: felt252) -> HintPayment;

@@ -26,20 +26,20 @@ pub trait ITokenCore<TContractState> {
 #[starknet::contract]
 pub mod kliver_registry {
     use core::num::traits::Zero;
-    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
-    use starknet::{ContractAddress, get_caller_address};
     use kliver_on_chain::components::character_registry_component::{
-        CharacterRegistryComponent, CharacterMetadata
+        CharacterMetadata, CharacterRegistryComponent,
     };
     use kliver_on_chain::components::scenario_registry_component::{
-        ScenarioRegistryComponent, ScenarioMetadata
-    };
-    use kliver_on_chain::components::simulation_registry_component::{
-        SimulationRegistryComponent, SimulationMetadata, SimulationWithTokenMetadata
+        ScenarioMetadata, ScenarioRegistryComponent,
     };
     use kliver_on_chain::components::session_registry_component::{
-        SessionRegistryComponent, SessionMetadata
+        SessionMetadata, SessionRegistryComponent,
     };
+    use kliver_on_chain::components::simulation_registry_component::{
+        SimulationMetadata, SimulationRegistryComponent, SimulationWithTokenMetadata,
+    };
+    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
+    use starknet::{ContractAddress, get_caller_address};
     use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
     use super::{
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
@@ -47,10 +47,22 @@ pub mod kliver_registry {
         IVerifierDispatcherTrait, VerificationResult,
     };
 
-    component!(path: CharacterRegistryComponent, storage: character_registry, event: CharacterRegistryEvent);
-    component!(path: ScenarioRegistryComponent, storage: scenario_registry, event: ScenarioRegistryEvent);
-    component!(path: SimulationRegistryComponent, storage: simulation_registry, event: SimulationRegistryEvent);
-    component!(path: SessionRegistryComponent, storage: session_registry, event: SessionRegistryEvent);
+    component!(
+        path: CharacterRegistryComponent,
+        storage: character_registry,
+        event: CharacterRegistryEvent,
+    );
+    component!(
+        path: ScenarioRegistryComponent, storage: scenario_registry, event: ScenarioRegistryEvent,
+    );
+    component!(
+        path: SimulationRegistryComponent,
+        storage: simulation_registry,
+        event: SimulationRegistryEvent,
+    );
+    component!(
+        path: SessionRegistryComponent, storage: session_registry, event: SessionRegistryEvent,
+    );
 
     impl CharacterRegistryInternalImpl = CharacterRegistryComponent::InternalImpl<ContractState>;
     impl ScenarioRegistryInternalImpl = ScenarioRegistryComponent::InternalImpl<ContractState>;
@@ -145,10 +157,15 @@ pub mod kliver_registry {
             self._assert_author_has_nft(author);
 
             // Check if character ID is already registered
-            assert(!self.character_registry.character_exists(character_id), 'Character ID already registered');
+            assert(
+                !self.character_registry.character_exists(character_id),
+                'Character ID already registered',
+            );
 
             // Register using component
-            self.character_registry.register_character(character_id, character_hash, author, get_caller_address());
+            self
+                .character_registry
+                .register_character(character_id, character_hash, author, get_caller_address());
         }
 
         fn verify_character(
@@ -188,7 +205,7 @@ pub mod kliver_registry {
 
             // Get info from component
             let info = self.character_registry.get_character_info(character_id);
-            
+
             // Validate that character exists
             assert(info.character_hash != 0, 'Character not found');
 
@@ -219,7 +236,9 @@ pub mod kliver_registry {
             self._assert_author_has_nft(author);
 
             // Check if scenario already exists
-            assert(!self.scenario_registry.scenario_exists(scenario_id), 'Scenario already registered');
+            assert(
+                !self.scenario_registry.scenario_exists(scenario_id), 'Scenario already registered',
+            );
 
             // Delegate to component
             self.scenario_registry.register_scenario(scenario_id, scenario_hash, author);
@@ -254,16 +273,19 @@ pub mod kliver_registry {
     #[abi(embed_v0)]
     impl SimulationRegistryImpl of ISimulationRegistry<ContractState> {
         fn register_simulation(ref self: ContractState, metadata: SimulationMetadata) {
-            self._register_simulation_internal(
-                metadata.simulation_id,
-                metadata.simulation_hash,
-                metadata.author,
-                metadata.character_id,
-                metadata.scenario_id,
-            );
+            self
+                ._register_simulation_internal(
+                    metadata.simulation_id,
+                    metadata.simulation_hash,
+                    metadata.author,
+                    metadata.character_id,
+                    metadata.scenario_id,
+                );
         }
 
-        fn register_simulation_with_token(ref self: ContractState, metadata: SimulationWithTokenMetadata) {
+        fn register_simulation_with_token(
+            ref self: ContractState, metadata: SimulationWithTokenMetadata,
+        ) {
             // Check if contract is paused
             self._assert_not_paused();
             // Only owner can register simulations
@@ -282,30 +304,39 @@ pub mod kliver_registry {
             self._assert_author_has_nft(metadata.author);
 
             // Validate that character exists using component
-            assert(self.character_registry.character_exists(metadata.character_id), Errors::CHARACTER_NOT_FOUND);
+            assert(
+                self.character_registry.character_exists(metadata.character_id),
+                Errors::CHARACTER_NOT_FOUND,
+            );
 
             // Validate that scenario exists using component
-            assert(self.scenario_registry.scenario_exists(metadata.scenario_id), Errors::SCENARIO_NOT_FOUND);
+            assert(
+                self.scenario_registry.scenario_exists(metadata.scenario_id),
+                Errors::SCENARIO_NOT_FOUND,
+            );
 
             // Delegate to component
-            self.simulation_registry.register_simulation_with_token(
-                metadata.simulation_id,
-                metadata.simulation_hash,
-                metadata.author,
-                metadata.character_id,
-                metadata.scenario_id,
-                metadata.token_id,
-                metadata.expiration_timestamp,
-            );
+            self
+                .simulation_registry
+                .register_simulation_with_token(
+                    metadata.simulation_id,
+                    metadata.simulation_hash,
+                    metadata.author,
+                    metadata.character_id,
+                    metadata.scenario_id,
+                    metadata.token_id,
+                    metadata.expiration_timestamp,
+                );
 
             // Call token core to register the simulation
             let token_core_address = self.tokens_core_address.read();
-            let token_core_dispatcher = ITokenCoreDispatcher { contract_address: token_core_address };
-            token_core_dispatcher.register_simulation(
-                metadata.simulation_id,
-                metadata.token_id,
-                metadata.expiration_timestamp
-            );
+            let token_core_dispatcher = ITokenCoreDispatcher {
+                contract_address: token_core_address,
+            };
+            token_core_dispatcher
+                .register_simulation(
+                    metadata.simulation_id, metadata.token_id, metadata.expiration_timestamp,
+                );
             // Event is emitted from component
         }
 
@@ -333,7 +364,9 @@ pub mod kliver_registry {
             self.simulation_registry.get_simulation_info(simulation_id)
         }
 
-        fn get_simulation_with_token_info(self: @ContractState, simulation_id: felt252) -> SimulationWithTokenMetadata {
+        fn get_simulation_with_token_info(
+            self: @ContractState, simulation_id: felt252,
+        ) -> SimulationWithTokenMetadata {
             // Delegate to component
             self.simulation_registry.get_simulation_with_token_info(simulation_id)
         }
@@ -360,19 +393,27 @@ pub mod kliver_registry {
             self._assert_author_has_nft(metadata.author);
 
             // Validate that the simulation exists using component
-            assert(self.simulation_registry.simulation_exists(metadata.simulation_id), Errors::SIMULATION_NOT_FOUND);
+            assert(
+                self.simulation_registry.simulation_exists(metadata.simulation_id),
+                Errors::SIMULATION_NOT_FOUND,
+            );
 
             // Check if session already exists
-            assert(!self.session_registry.session_exists(metadata.session_id), Errors::SESSION_ALREADY_REGISTERED);
+            assert(
+                !self.session_registry.session_exists(metadata.session_id),
+                Errors::SESSION_ALREADY_REGISTERED,
+            );
 
             // Delegate to component
-            self.session_registry.register_session(
-                metadata.session_id,
-                metadata.root_hash,
-                metadata.simulation_id,
-                metadata.author,
-                metadata.score
-            );
+            self
+                .session_registry
+                .register_session(
+                    metadata.session_id,
+                    metadata.root_hash,
+                    metadata.simulation_id,
+                    metadata.author,
+                    metadata.score,
+                );
         }
 
         fn verify_session(
@@ -500,19 +541,19 @@ pub mod kliver_registry {
             self._assert_author_has_nft(author);
 
             // Validate that character exists using component
-            assert(self.character_registry.character_exists(character_id), Errors::CHARACTER_NOT_FOUND);
+            assert(
+                self.character_registry.character_exists(character_id), Errors::CHARACTER_NOT_FOUND,
+            );
 
             // Validate that scenario exists using component
             assert(self.scenario_registry.scenario_exists(scenario_id), Errors::SCENARIO_NOT_FOUND);
 
             // Delegate to component
-            self.simulation_registry.register_simulation(
-                simulation_id,
-                simulation_hash,
-                author,
-                character_id,
-                scenario_id,
-            );
+            self
+                .simulation_registry
+                .register_simulation(
+                    simulation_id, simulation_hash, author, character_id, scenario_id,
+                );
         }
     }
 }

@@ -22,12 +22,12 @@ pub struct SimulationWithTokenMetadata {
 
 #[starknet::component]
 pub mod SimulationRegistryComponent {
+    use kliver_on_chain::types::VerificationResult;
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use super::{SimulationMetadata, SimulationWithTokenMetadata};
-    use kliver_on_chain::types::VerificationResult;
 
     #[storage]
     pub struct Storage {
@@ -134,9 +134,7 @@ pub mod SimulationRegistryComponent {
 
         /// Verify if a simulation ID matches its expected hash
         fn verify_simulation(
-            self: @ComponentState<TContractState>,
-            simulation_id: felt252,
-            simulation_hash: felt252,
+            self: @ComponentState<TContractState>, simulation_id: felt252, simulation_hash: felt252,
         ) -> VerificationResult {
             let stored_hash = self.simulations.entry(simulation_id).read();
 
@@ -202,9 +200,7 @@ pub mod SimulationRegistryComponent {
             let character_id = self.simulation_characters.entry(simulation_id).read();
             let scenario_id = self.simulation_scenarios.entry(simulation_id).read();
 
-            SimulationMetadata {
-                simulation_id, author, character_id, scenario_id, simulation_hash,
-            }
+            SimulationMetadata { simulation_id, author, character_id, scenario_id, simulation_hash }
         }
 
         /// Get complete simulation information including token data

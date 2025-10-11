@@ -1,6 +1,6 @@
+pub use kliver_on_chain::components::session_registry_component::SessionMetadata;
 use starknet::ContractAddress;
 use crate::types::VerificationResult;
-pub use kliver_on_chain::components::session_registry_component::SessionMetadata;
 
 /// Session Registry Interface
 #[starknet::interface]

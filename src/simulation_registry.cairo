@@ -1,7 +1,7 @@
-use crate::types::VerificationResult;
 pub use kliver_on_chain::components::simulation_registry_component::{
-    SimulationMetadata, SimulationWithTokenMetadata
+    SimulationMetadata, SimulationWithTokenMetadata,
 };
+use crate::types::VerificationResult;
 
 /// Simulation Registry Interface
 #[starknet::interface]
@@ -9,7 +9,9 @@ pub trait ISimulationRegistry<TContractState> {
     /// Register a simulation with its metadata (only owner) - Does not call token core
     fn register_simulation(ref self: TContractState, metadata: SimulationMetadata);
     /// Register a simulation with its metadata AND register it in the token core (only owner)
-    fn register_simulation_with_token(ref self: TContractState, metadata: SimulationWithTokenMetadata);
+    fn register_simulation_with_token(
+        ref self: TContractState, metadata: SimulationWithTokenMetadata,
+    );
     /// Verify if a simulation ID matches its expected hash
     fn verify_simulation(
         self: @TContractState, simulation_id: felt252, simulation_hash: felt252,
@@ -23,7 +25,9 @@ pub trait ISimulationRegistry<TContractState> {
     /// Get complete simulation information (without token data)
     fn get_simulation_info(self: @TContractState, simulation_id: felt252) -> SimulationMetadata;
     /// Get complete simulation information including token data
-    fn get_simulation_with_token_info(self: @TContractState, simulation_id: felt252) -> SimulationWithTokenMetadata;
+    fn get_simulation_with_token_info(
+        self: @TContractState, simulation_id: felt252,
+    ) -> SimulationWithTokenMetadata;
     /// Check if a simulation exists
     fn simulation_exists(self: @TContractState, simulation_id: felt252) -> bool;
 }

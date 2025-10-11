@@ -20,12 +20,12 @@ pub struct SessionAccessGranted {
 
 #[starknet::component]
 pub mod SessionRegistryComponent {
+    use kliver_on_chain::types::VerificationResult;
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use super::SessionMetadata;
-    use kliver_on_chain::types::VerificationResult;
 
     #[storage]
     pub struct Storage {
@@ -36,7 +36,6 @@ pub mod SessionRegistryComponent {
         pub session_scores: Map<felt252, u32>,
         pub session_access: Map<(felt252, ContractAddress), bool>,
     }
-
     use super::SessionAccessGranted;
 
     #[event]
@@ -66,10 +65,7 @@ pub mod SessionRegistryComponent {
             self.session_scores.entry(session_id).write(score);
 
             // Emit event
-            self
-                .emit(
-                    SessionMetadata { session_id, root_hash, simulation_id, author, score },
-                );
+            self.emit(SessionMetadata { session_id, root_hash, simulation_id, author, score });
         }
 
         /// Verify if a session ID matches its expected root hash

@@ -10,12 +10,12 @@ pub struct ScenarioMetadata {
 
 #[starknet::component]
 pub mod ScenarioRegistryComponent {
+    use kliver_on_chain::types::VerificationResult;
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use super::ScenarioMetadata;
-    use kliver_on_chain::types::VerificationResult;
 
     #[storage]
     pub struct Storage {
@@ -52,9 +52,7 @@ pub mod ScenarioRegistryComponent {
 
         /// Verify if a scenario ID matches its expected hash
         fn verify_scenario(
-            self: @ComponentState<TContractState>,
-            scenario_id: felt252,
-            scenario_hash: felt252,
+            self: @ComponentState<TContractState>, scenario_id: felt252, scenario_hash: felt252,
         ) -> VerificationResult {
             let stored_hash = self.scenarios.entry(scenario_id).read();
 

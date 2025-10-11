@@ -1,6 +1,6 @@
+use kliver_on_chain::components::character_registry_component::CharacterMetadata;
 use starknet::ContractAddress;
 use crate::types::VerificationResult;
-use kliver_on_chain::components::character_registry_component::CharacterMetadata;
 
 /// Character Registry Interface
 #[starknet::interface]

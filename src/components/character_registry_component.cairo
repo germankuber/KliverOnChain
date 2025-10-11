@@ -9,12 +9,12 @@ pub struct CharacterMetadata {
 
 #[starknet::component]
 pub mod CharacterRegistryComponent {
+    use kliver_on_chain::types::VerificationResult;
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
     };
     use super::CharacterMetadata;
-    use kliver_on_chain::types::VerificationResult;
 
     #[storage]
     pub struct Storage {
@@ -61,9 +61,7 @@ pub mod CharacterRegistryComponent {
 
         /// Verify if a character ID matches its expected hash
         fn verify_character(
-            self: @ComponentState<TContractState>,
-            character_id: felt252,
-            character_hash: felt252,
+            self: @ComponentState<TContractState>, character_id: felt252, character_hash: felt252,
         ) -> VerificationResult {
             // Get the stored hash for this character ID
             let stored_hash = self.characters.entry(character_id).read();
@@ -131,9 +129,7 @@ pub mod CharacterRegistryComponent {
         }
 
         /// Check if a character exists
-        fn character_exists(
-            self: @ComponentState<TContractState>, character_id: felt252,
-        ) -> bool {
+        fn character_exists(self: @ComponentState<TContractState>, character_id: felt252) -> bool {
             self.characters.entry(character_id).read() != 0
         }
     }

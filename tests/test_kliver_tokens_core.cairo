@@ -132,7 +132,9 @@ fn deploy_mock_receiver() -> ContractAddress {
 
 /// Helper function to setup registry for testing
 /// This function sets the registry address and returns it
-fn setup_registry(dispatcher: IKliverTokensCoreDispatcher, owner: ContractAddress) -> ContractAddress {
+fn setup_registry(
+    dispatcher: IKliverTokensCoreDispatcher, owner: ContractAddress,
+) -> ContractAddress {
     let registry: ContractAddress = 'registry'.try_into().unwrap();
     start_cheat_caller_address(dispatcher.contract_address, owner);
     dispatcher.set_registry_address(registry);

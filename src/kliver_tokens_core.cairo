@@ -1,13 +1,14 @@
 use super::kliver_tokens_core_types::{
-    ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
-    SessionPaid, SessionPayment, Simulation, SimulationClaimData,
-    SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo,
-    TokensClaimed, WalletMultiTokenSummary, WalletTokenSummary,
+    ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated, SessionPaid,
+    SessionPayment, Simulation, SimulationClaimData, SimulationExpirationUpdated,
+    SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo, TokensClaimed,
+    WalletMultiTokenSummary, WalletTokenSummary,
 };
 
 
 #[starknet::contract]
 mod KliverTokensCore {
+    use kliver_on_chain::components::whitelist_component::WhitelistComponent;
     use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::token::erc1155::{ERC1155Component, ERC1155HooksEmptyImpl};
     use starknet::storage::{
@@ -15,12 +16,11 @@ mod KliverTokensCore {
     };
     use starknet::{ContractAddress, get_caller_address};
     use super::{
-        ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated,
-        SessionPaid, SessionPayment, Simulation, SimulationClaimData,
-        SimulationExpirationUpdated, SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo,
-        TokensClaimed, WalletMultiTokenSummary, WalletTokenSummary,
+        ClaimableAmountResult, HintPaid, HintPayment, RegistryAddressUpdated, SessionPaid,
+        SessionPayment, Simulation, SimulationClaimData, SimulationExpirationUpdated,
+        SimulationRegistered, SimulationTrait, TokenCreated, TokenInfo, TokensClaimed,
+        WalletMultiTokenSummary, WalletTokenSummary,
     };
-    use kliver_on_chain::components::whitelist_component::WhitelistComponent;
 
     component!(path: ERC1155Component, storage: erc1155, event: ERC1155Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -697,12 +697,12 @@ mod KliverTokensCore {
             let caller = get_caller_address();
             let registry = self.registry_address.read();
             let zero_address: ContractAddress = 0.try_into().unwrap();
-    
+
             // Si el registry no está configurado, permitir (para tests)
             if registry == zero_address {
                 return;
             }
-    
+
             // Verificar que el caller sea el registry
             assert(caller == registry, 'Only registry can call');
         }
