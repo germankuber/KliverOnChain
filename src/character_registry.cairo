@@ -1,13 +1,6 @@
+use kliver_on_chain::components::character_registry_component::CharacterMetadata;
 use starknet::ContractAddress;
 use crate::types::VerificationResult;
-
-/// Character metadata for registration
-#[derive(Drop, Serde, Copy)]
-pub struct CharacterMetadata {
-    pub character_id: felt252,
-    pub character_hash: felt252,
-    pub author: ContractAddress,
-}
 
 /// Character Registry Interface
 #[starknet::interface]
@@ -15,9 +8,13 @@ pub trait ICharacterRegistry<TContractState> {
     /// Register a character with its metadata (only owner)
     fn register_character(ref self: TContractState, metadata: CharacterMetadata);
     /// Verify if a character ID matches its expected hash
-    fn verify_character(self: @TContractState, character_id: felt252, character_hash: felt252) -> VerificationResult;
+    fn verify_character(
+        self: @TContractState, character_id: felt252, character_hash: felt252,
+    ) -> VerificationResult;
     /// Verify multiple characters at once
-    fn batch_verify_characters(self: @TContractState, characters: Array<CharacterMetadata>) -> Array<(felt252, VerificationResult)>;
+    fn batch_verify_characters(
+        self: @TContractState, characters: Array<CharacterMetadata>,
+    ) -> Array<(felt252, VerificationResult)>;
     /// Get the hash for a character ID
     fn get_character_hash(self: @TContractState, character_id: felt252) -> felt252;
     /// Get complete character information

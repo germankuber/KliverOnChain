@@ -20,6 +20,7 @@ class Colors:
     ERROR = Fore.RED
     WARNING = Fore.YELLOW
     INFO = Fore.BLUE
+    CYAN = Fore.CYAN
     BOLD = Style.BRIGHT
     RESET = Style.RESET_ALL
 
@@ -248,7 +249,7 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
             json_output['Nft'] = contract_address
         elif contract_name == 'kliver_registry':
             json_output['Registry'] = contract_address
-        elif contract_name == 'kliverrc1155':
+        elif contract_name == 'klivertokenscore':
             json_output['TokensCore'] = contract_address
 
     

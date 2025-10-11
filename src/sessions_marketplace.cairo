@@ -1,18 +1,28 @@
 // SPDX-License-Identifier: MIT
+// Minimal ERC20 interface for escrow transfers (module-level)
+use starknet::ContractAddress;
+//
+// Payment token interface dispatcher
+
 #[starknet::contract]
-mod SessionsMarketplace {
-    use starknet::{ContractAddress, get_caller_address};
-    use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, StoragePointerWriteAccess};
+pub mod SessionsMarketplace {
     use core::num::traits::Zero;
-    use super::super::session_registry::{
-        ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
     };
+    use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
     use super::super::kliver_registry::{IVerifierDispatcher, IVerifierDispatcherTrait};
+    use super::super::session_registry::{
+        ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait,
+    };
+
+    // use dispatcher imported at module level
 
     // Estados posibles de un listing
     #[allow(starknet::store_no_default_variant)]
     #[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
-    enum ListingStatus {
+    pub enum ListingStatus {
         Open,
         Purchased,
         Sold,
@@ -21,7 +31,7 @@ mod SessionsMarketplace {
 
     // Estructura de un listing
     #[derive(Drop, Serde, Copy, starknet::Store)]
-    struct Listing {
+    pub struct Listing {
         session_id: felt252,
         root: felt252,
         seller: ContractAddress,
@@ -36,13 +46,19 @@ mod SessionsMarketplace {
         // Direcciones de los contratos
         registry: ContractAddress,
         verifier: ContractAddress,
-        
+        // Token de pago (ERC20) y timeout de compra (en segundos)
+        payment_token: ContractAddress,
+        purchase_timeout: u64,
         // Gestión de listings
         listings: Map<u256, Listing>,
         listing_counter: u256,
-        
         // Mapeo de session_id a listing_id
         session_to_listing: Map<felt252, u256>,
+        // Órdenes por (session_id, buyer)
+        orders: Map<(felt252, ContractAddress), Order>,
+        // Escrow y tiempos por orden (session_id, buyer)
+        escrow_amount: Map<(felt252, ContractAddress), u256>,
+        purchase_opened_at: Map<(felt252, ContractAddress), u64>,
     }
 
     #[event]
@@ -53,6 +69,7 @@ mod SessionsMarketplace {
         ProofSubmitted: ProofSubmitted,
         Sold: Sold,
         ListingCancelled: ListingCancelled,
+        PurchaseRefunded: PurchaseRefunded,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -73,6 +90,8 @@ mod SessionsMarketplace {
         #[key]
         buyer: ContractAddress,
         challenge: felt252,
+        amount: u256,
+        opened_at: u64,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -96,40 +115,70 @@ mod SessionsMarketplace {
         listing_id: u256,
     }
 
+    #[derive(Drop, starknet::Event)]
+    struct PurchaseRefunded {
+        #[key]
+        listing_id: u256,
+        #[key]
+        buyer: ContractAddress,
+        amount: u256,
+    }
+
+    // Estados de una orden
+    #[allow(starknet::store_no_default_variant)]
+    #[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
+    pub enum OrderStatus {
+        Open,
+        Sold,
+        Refunded,
+    }
+
+    // Estructura de una orden de compra (por buyer)
+    #[derive(Drop, Serde, Copy, starknet::Store)]
+    pub struct Order {
+        session_id: felt252,
+        buyer: ContractAddress,
+        challenge: felt252,
+        amount: u256,
+        status: OrderStatus,
+    }
+
     #[constructor]
     fn constructor(
         ref self: ContractState,
         registry_address: ContractAddress,
-        verifier_address: ContractAddress
+        verifier_address: ContractAddress,
+        payment_token_address: ContractAddress,
+        purchase_timeout_seconds: u64,
     ) {
         assert(!registry_address.is_zero(), 'Invalid registry address');
         assert(!verifier_address.is_zero(), 'Invalid verifier address');
+        assert(!payment_token_address.is_zero(), 'Invalid payment token');
+        assert(purchase_timeout_seconds > 0, 'Invalid purchase timeout');
 
         self.registry.write(registry_address);
         self.verifier.write(verifier_address);
+        self.payment_token.write(payment_token_address);
+        self.purchase_timeout.write(purchase_timeout_seconds);
         self.listing_counter.write(0);
     }
 
     #[abi(embed_v0)]
     impl MarketplaceImpl of IMarketplace<ContractState> {
+        fn get_payment_token(self: @ContractState) -> ContractAddress { self.payment_token.read() }
+        fn get_purchase_timeout(self: @ContractState) -> u64 { self.purchase_timeout.read() }
         // ============ SELLER FUNCTIONS ============
 
         // Crear un nuevo listing
-        fn create_listing(
-            ref self: ContractState,
-            session_id: felt252,
-            price: u256
-        ) -> u256 {
+        fn create_listing(ref self: ContractState, session_id: felt252, price: u256) -> u256 {
             let caller = get_caller_address();
-            
+
             // Verificar que no exista un listing para esta sesión
             let existing = self.session_to_listing.read(session_id);
             assert(existing == 0, 'Listing already exists');
 
             // Obtener el root del registry
-            let registry = ISessionRegistryDispatcher {
-                contract_address: self.registry.read()
-            };
+            let registry = ISessionRegistryDispatcher { contract_address: self.registry.read() };
             let session_info = registry.get_session_info(session_id);
             let root = session_info.root_hash;
             assert(root != 0, 'Session not found in registry');
@@ -156,13 +205,7 @@ mod SessionsMarketplace {
             self.session_to_listing.write(session_id, listing_id);
 
             // Emitir evento
-            self.emit(ListingCreated {
-                listing_id,
-                seller: caller,
-                session_id,
-                root,
-                price,
-            });
+            self.emit(ListingCreated { listing_id, seller: caller, session_id, root, price });
 
             listing_id
         }
@@ -183,12 +226,8 @@ mod SessionsMarketplace {
 
         // ============ BUYER FUNCTIONS ============
 
-        // Abrir una compra y establecer el challenge
-        fn open_purchase(
-            ref self: ContractState,
-            listing_id: u256,
-            challenge: felt252
-        ) {
+        // Abrir una compra y establecer el challenge (por buyer). Admite múltiples buyers por listing.
+        fn open_purchase(ref self: ContractState, listing_id: u256, challenge: felt252, amount: u256) {
             let caller = get_caller_address();
             let mut listing = self.listings.read(listing_id);
 
@@ -196,22 +235,28 @@ mod SessionsMarketplace {
             assert(listing.status == ListingStatus::Open, 'Listing not open');
             assert(challenge != 0, 'Invalid challenge');
             assert(caller != listing.seller, 'Seller cannot buy own listing');
+            assert(amount == listing.price, 'Invalid amount');
 
-            // Actualizar el listing
-            listing.buyer = caller;
-            listing.challenge = challenge;
-            listing.status = ListingStatus::Purchased;
-            self.listings.write(listing_id, listing);
+            // Transferir fondos al escrow del contrato
+            let token = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcher { contract_address: self.payment_token.read() };
+            let this = get_contract_address();
+            let _ok = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcherTrait::transfer_from(token, caller, this, amount);
+
+            // Crear orden por (session_id, buyer)
+            let order_key = (listing.session_id, caller);
+            // evitar orden existente abierta
+            assert(self.escrow_amount.read(order_key) == 0, 'Order already exists');
+
+            let order = Order { session_id: listing.session_id, buyer: caller, challenge, amount, status: OrderStatus::Open };
+            self.orders.write(order_key, order);
+
+            // Guardar escrow y timestamp de apertura
+            let now = get_block_timestamp();
+            self.escrow_amount.write(order_key, amount);
+            self.purchase_opened_at.write(order_key, now);
 
             // Emitir evento
-            self.emit(PurchaseOpened {
-                listing_id,
-                buyer: caller,
-                challenge,
-            });
-
-            // TODO: Aquí podrías agregar lógica de pago/escrow
-            // Por ejemplo, transferir fondos a un contrato de escrow
+            self.emit(PurchaseOpened { listing_id, buyer: caller, challenge, amount, opened_at: now });
         }
 
         // ============ PROOF SUBMISSION (On-chain) ============
@@ -220,51 +265,92 @@ mod SessionsMarketplace {
         fn submit_proof_and_verify(
             ref self: ContractState,
             listing_id: u256,
+            buyer: ContractAddress,
             proof: Span<felt252>,
-            public_inputs: Span<felt252>
+            public_inputs: Span<felt252>,
         ) {
             let caller = get_caller_address();
             let mut listing = self.listings.read(listing_id);
 
             // Validaciones
             assert(listing.seller == caller, 'Not the seller');
-            assert(listing.status == ListingStatus::Purchased, 'Not in purchased state');
-            
+            assert(listing.status == ListingStatus::Open, 'Listing not open');
+
             // Verificar que los public inputs coincidan
             assert(public_inputs.len() >= 2, 'Invalid public inputs');
             let session_root = *public_inputs.at(0);
             let challenge = *public_inputs.at(1);
-            
+
             assert(session_root == listing.root, 'Root mismatch');
-            assert(challenge == listing.challenge, 'Challenge mismatch');
+            // Validar orden del buyer
+            let order_key = (listing.session_id, buyer);
+            let mut order = self.orders.read(order_key);
+            assert(order.challenge == challenge, 'Challenge mismatch');
+            assert(order.status == OrderStatus::Open, 'Order not open');
 
             // Llamar al verifier
             let verifier_address = self.verifier.read();
-            let verifier = IVerifierDispatcher {
-                contract_address: verifier_address
-            };
+            let verifier = IVerifierDispatcher { contract_address: verifier_address };
             let result = verifier.verify_ultra_starknet_honk_proof(proof);
             let is_valid = result.is_some();
 
             // Emitir evento de proof
-            self.emit(ProofSubmitted {
-                listing_id,
-                verified: is_valid,
-            });
+            self.emit(ProofSubmitted { listing_id, verified: is_valid });
 
             // Si la prueba es válida, marcar como vendido
             if is_valid {
                 listing.status = ListingStatus::Sold;
                 self.listings.write(listing_id, listing);
 
-                self.emit(Sold {
-                    listing_id,
-                    seller: listing.seller,
-                    buyer: listing.buyer,
-                });
-
-                // TODO: Aquí se liberaría el pago del escrow al seller
+                // Marcar orden y pagar
+                order.status = OrderStatus::Sold;
+                self.orders.write(order_key, order);
+                self.emit(Sold { listing_id, seller: listing.seller, buyer });
+                // Liberar pago del escrow al seller
+                let token = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcher { contract_address: self.payment_token.read() };
+                let amount = self.escrow_amount.read(order_key);
+                if amount > 0 {
+                    let _ok2 = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcherTrait::transfer(token, listing.seller, amount);
+                }
+                // Limpiar escrow y timestamp
+                self.escrow_amount.write(order_key, 0);
+                self.purchase_opened_at.write(order_key, 0);
             }
+        }
+
+        // ============ REFUND FLOW (Buyer) ============
+
+        /// Permite al comprador reclamar el saldo si el seller no responde dentro del timeout.
+        fn refund_purchase(ref self: ContractState, listing_id: u256) {
+            let caller = get_caller_address();
+            let listing = self.listings.read(listing_id);
+            let order_key = (listing.session_id, caller);
+            let mut order = self.orders.read(order_key);
+
+            assert(order.status == OrderStatus::Open, 'Not refundable');
+
+            let opened_at = self.purchase_opened_at.read(order_key);
+            let timeout = self.purchase_timeout.read();
+            let now = get_block_timestamp();
+            assert(now >= opened_at + timeout, 'Not expired');
+
+            // Refund escrow
+            let amount = self.escrow_amount.read(order_key);
+            if amount > 0 {
+                let token = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcher { contract_address: self.payment_token.read() };
+                let _ok = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcherTrait::transfer(token, caller, amount);
+            }
+
+            // Marcar orden como refundeada
+            order.status = OrderStatus::Refunded;
+            self.orders.write(order_key, order);
+
+            // Clear escrow and timestamp
+            self.escrow_amount.write(order_key, 0);
+            self.purchase_opened_at.write(order_key, 0);
+
+            // Evento
+            self.emit(PurchaseRefunded { listing_id, buyer: caller, amount });
         }
 
         // ============ VIEW FUNCTIONS ============
@@ -289,38 +375,61 @@ mod SessionsMarketplace {
         fn get_listing_by_session(self: @ContractState, session_id: felt252) -> u256 {
             self.session_to_listing.read(session_id)
         }
+
+        fn is_order_closed(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> bool {
+            let order = self.orders.read((session_id, buyer));
+            order.status == OrderStatus::Sold
+        }
+
+        fn get_order(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> Order {
+            self.orders.read((session_id, buyer))
+        }
+
+        fn get_order_status(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> OrderStatus {
+            let order = self.orders.read((session_id, buyer));
+            order.status
+        }
+
+        fn get_order_info(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> (felt252, u256) {
+            let order = self.orders.read((session_id, buyer));
+            (order.challenge, order.amount)
+        }
     }
 
     #[starknet::interface]
-    trait IMarketplace<TContractState> {
+    pub trait IMarketplace<TContractState> {
         // Seller functions
-        fn create_listing(
-            ref self: TContractState,
-            session_id: felt252,
-            price: u256
-        ) -> u256;
+        fn create_listing(ref self: TContractState, session_id: felt252, price: u256) -> u256;
         fn cancel_listing(ref self: TContractState, listing_id: u256);
-        
+
         // Buyer functions
         fn open_purchase(
-            ref self: TContractState,
-            listing_id: u256,
-            challenge: felt252
+            ref self: TContractState, listing_id: u256, challenge: felt252, amount: u256
         );
-        
+        fn refund_purchase(ref self: TContractState, listing_id: u256);
+
         // Proof submission
         fn submit_proof_and_verify(
             ref self: TContractState,
             listing_id: u256,
+            buyer: ContractAddress,
             proof: Span<felt252>,
-            public_inputs: Span<felt252>
+            public_inputs: Span<felt252>,
         );
-        
+
         // View functions
         fn get_listing(self: @TContractState, listing_id: u256) -> Listing;
         fn get_listing_status(self: @TContractState, listing_id: u256) -> ListingStatus;
         fn get_listing_count(self: @TContractState) -> u256;
         fn get_registry_address(self: @TContractState) -> ContractAddress;
         fn get_listing_by_session(self: @TContractState, session_id: felt252) -> u256;
+        // Config getters
+        fn get_payment_token(self: @TContractState) -> ContractAddress;
+        fn get_purchase_timeout(self: @TContractState) -> u64;
+        // Consultas de orden
+        fn is_order_closed(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> bool;
+        fn get_order(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> Order;
+        fn get_order_status(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> OrderStatus;
+        fn get_order_info(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> (felt252, u256);
     }
 }

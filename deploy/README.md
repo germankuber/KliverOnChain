@@ -47,8 +47,8 @@ poetry run python -m kliver_deploy.deploy --environment dev --contract all
 # Deploy NFT only
 poetry run python -m kliver_deploy.deploy --environment dev --contract nft
 
-# Deploy Token1155 only  
-poetry run python -m kliver_deploy.deploy --environment dev --contract kliver_1155
+# Deploy Tokens Core only
+poetry run python -m kliver_deploy.deploy --environment dev --contract kliver_tokens_core
 
 # Deploy Registry (requires NFT address)
 poetry run python -m kliver_deploy.deploy --environment dev --contract registry --nft-address 0x123...

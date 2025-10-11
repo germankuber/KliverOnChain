@@ -5,7 +5,7 @@ Main deployment orchestrator for Kliver contracts.
 import json
 import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from .config import ConfigManager, NetworkConfig, ContractConfig, DeploymentSettings
 from .contracts import get_contract, BaseContract
@@ -145,8 +145,8 @@ class ContractDeployer:
             print(f"{Colors.ERROR}Error: {all_output}{Colors.RESET}")
             return None
 
-    def deploy_contract(self, class_hash: str, owner_address: str, **kwargs) -> Optional[str]:
-        """Deploy the contract and return the contract address."""
+    def deploy_contract(self, class_hash: str, owner_address: str, **kwargs) -> Optional[Dict[str, Any]]:
+        """Deploy the contract and return deployment details."""
         print(f"{Colors.INFO}🚀 Deploying {self.contract_config.name}...{Colors.RESET}")
 
         # Validate dependencies
@@ -161,42 +161,226 @@ class ContractDeployer:
             "--class-hash", class_hash,
             "--constructor-calldata"
         ] + constructor_calldata + ["--url", self.network_config.rpc_url]
-        
+
         result = CommandRunner.run_command(command, f"Deploying {self.contract_config.name}")
-        
+
         if not result["success"]:
             print(f"{Colors.ERROR}Deployment command failed:{Colors.RESET}")
             print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
             print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
             return None
-        
+
         try:
             contract_address = StarknetUtils.parse_contract_address(result["stdout"])
             print(f"{Colors.SUCCESS}✓ Contract deployed at address: {contract_address}{Colors.RESET}")
-            
+
+            deployment_tx_hash = None
             # Wait for deployment transaction confirmation
             try:
-                tx_hash = StarknetUtils.parse_transaction_hash(result["stdout"])
-                print(f"{Colors.INFO}📋 Deployment transaction hash: {tx_hash}{Colors.RESET}")
-                
+                deployment_tx_hash = StarknetUtils.parse_transaction_hash(result["stdout"])
+                print(f"{Colors.INFO}📋 Deployment transaction hash: {deployment_tx_hash}{Colors.RESET}")
+
                 print(f"{Colors.BOLD}⏳ Waiting for deployment to be confirmed on the network...{Colors.RESET}")
-                if not self.tx_waiter.wait_for_confirmation(tx_hash):
+                if not self.tx_waiter.wait_for_confirmation(deployment_tx_hash):
                     print(f"{Colors.ERROR}✗ Deployment transaction not confirmed. Contract may not be available yet.{Colors.RESET}")
                     return None
-                    
+
                 print(f"{Colors.SUCCESS}✓ Contract deployment confirmed on L2!{Colors.RESET}")
-                
+
             except ValueError:
                 print(f"{Colors.WARNING}⚠️  No transaction hash found in deployment output{Colors.RESET}")
-            
-            return contract_address
-            
+
+            # Return deployment details
+            return {
+                "contract_address": contract_address,
+                "deployment_tx_hash": deployment_tx_hash,
+                "constructor_calldata": constructor_calldata,
+                "constructor_params": self._format_constructor_params(owner_address, **kwargs)
+            }
+
         except ValueError as e:
             print(f"{Colors.ERROR}Could not parse contract address from deployment output{Colors.RESET}")
             print(f"{Colors.ERROR}Error: {str(e)}{Colors.RESET}")
             print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
             print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
             return None
+
+    def set_registry_on_tokencore(self, tokencore_address: str, registry_address: str, owner_address: str) -> Optional[Dict[str, Any]]:
+        """Set the registry address on the TokenCore contract."""
+        print(f"{Colors.INFO}🔗 Setting registry address on TokenCore contract...{Colors.RESET}")
+
+        command = [
+            "sncast", "--account", self.network_config.account, "invoke",
+            "--contract-address", tokencore_address,
+            "--function", "set_registry_address",
+            "--calldata", registry_address,
+            "--url", self.network_config.rpc_url
+        ]
+
+        result = CommandRunner.run_command(command, f"Setting registry address on TokenCore")
+
+        if not result["success"]:
+            print(f"{Colors.ERROR}Failed to set registry address on TokenCore:{Colors.RESET}")
+            print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
+            print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
+            return None
+
+        try:
+            tx_hash = StarknetUtils.parse_transaction_hash(result["stdout"])
+            print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
+
+            print(f"{Colors.BOLD}⏳ Waiting for transaction to be confirmed...{Colors.RESET}")
+            if not self.tx_waiter.wait_for_confirmation(tx_hash):
+                print(f"{Colors.ERROR}✗ Transaction not confirmed.{Colors.RESET}")
+                return None
+
+            print(f"{Colors.SUCCESS}✓ Registry address set successfully on TokenCore!{Colors.RESET}")
+
+            # Validate that the registry address was set correctly
+            if not self.validate_registry_address_set(tokencore_address, registry_address):
+                print(f"{Colors.ERROR}✗ Registry address validation failed.{Colors.RESET}")
+                return None
+
+            return {
+                "method": "set_registry_address",
+                "tx_hash": tx_hash,
+                "calldata": [registry_address],
+                "params": {"registry_address": registry_address},
+                "validation": "✓ Registry address validated"
+            }
+
+        except ValueError as e:
+            print(f"{Colors.ERROR}Could not parse transaction hash from output{Colors.RESET}")
+            print(f"{Colors.ERROR}Error: {str(e)}{Colors.RESET}")
+            return None
+
+    def validate_registry_address_set(self, tokencore_address: str, expected_registry_address: str) -> bool:
+        """Validate that the registry address was set correctly on the TokenCore contract."""
+        print(f"{Colors.INFO}🔍 Validating registry address on TokenCore contract...{Colors.RESET}")
+
+        command = [
+            "sncast", "--account", self.network_config.account, "call",
+            "--contract-address", tokencore_address,
+            "--function", "get_registry_address",
+            "--url", self.network_config.rpc_url
+        ]
+
+        result = CommandRunner.run_command(command, f"Validating registry address on TokenCore")
+
+        if not result["success"]:
+            print(f"{Colors.ERROR}Failed to call get_registry_address on TokenCore:{Colors.RESET}")
+            print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
+            print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
+            return False
+
+        try:
+            # Parse the returned registry address from the output
+            import re
+            # The output should contain something like "0x[address]"
+            match = re.search(r'0x[a-fA-F0-9]+', result["stdout"])
+            if not match:
+                print(f"{Colors.ERROR}Could not parse registry address from call output{Colors.RESET}")
+                print(f"{Colors.ERROR}Output: {result['stdout']}{Colors.RESET}")
+                return False
+
+            returned_address = match.group(0).lower()
+            expected_address = expected_registry_address.lower()
+
+            # Normalize addresses by removing leading zeros after 0x for comparison
+            def normalize_address(addr: str) -> str:
+                if addr.startswith('0x'):
+                    # Remove leading zeros after 0x, but keep at least one zero if the address is all zeros
+                    hex_part = addr[2:].lstrip('0')
+                    return '0x' + (hex_part if hex_part else '0')
+                return addr
+
+            normalized_returned = normalize_address(returned_address)
+            normalized_expected = normalize_address(expected_address)
+
+            if normalized_returned == normalized_expected:
+                print(f"{Colors.SUCCESS}✓ Registry address validated successfully: {returned_address}{Colors.RESET}")
+                return True
+            else:
+                print(f"{Colors.ERROR}✗ Registry address mismatch!{Colors.RESET}")
+                print(f"{Colors.ERROR}Expected: {expected_address}{Colors.RESET}")
+                print(f"{Colors.ERROR}Got: {returned_address}{Colors.RESET}")
+                print(f"{Colors.ERROR}Normalized Expected: {normalized_expected}{Colors.RESET}")
+                print(f"{Colors.ERROR}Normalized Got: {normalized_returned}{Colors.RESET}")
+                return False
+
+        except Exception as e:
+            print(f"{Colors.ERROR}Error validating registry address: {str(e)}{Colors.RESET}")
+            return False
+
+    def _format_constructor_params(self, owner_address: str, **kwargs) -> Dict[str, Any]:
+        """Format constructor parameters for display."""
+        params = {"owner": owner_address}
+
+        # Add contract-specific parameters
+        for key, value in kwargs.items():
+            if key == 'base_uri':
+                params['base_uri'] = value
+            elif key.endswith('_address'):
+                params[key] = value
+            elif key == 'verifier_address':
+                params['verifier_address'] = value
+
+        return params
+
+    def print_professional_summary(self, deployment_details: Dict[str, Any], post_deployment_ops: List[Dict[str, Any]] = None):
+        """Print a professional deployment summary."""
+        print(f"\n{Colors.BOLD}{'='*80}{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.CYAN}🎯 CONTRACT DEPLOYMENT SUMMARY{Colors.RESET}")
+        print(f"{Colors.BOLD}{'='*80}{Colors.RESET}")
+
+        # Contract Info
+        print(f"{Colors.BOLD}📋 Contract Information:{Colors.RESET}")
+        print(f"  Name: {deployment_details['contract_name']}")
+        print(f"  Type: {deployment_details['contract_type']}")
+        print(f"  Address: {Colors.SUCCESS}{deployment_details['contract_address']}{Colors.RESET}")
+        print(f"  Class Hash: {deployment_details['class_hash']}")
+        print(f"  Network: {deployment_details['network']}")
+        print(f"  Owner: {format_address(deployment_details['owner'])}")
+
+        # Deployment Transaction
+        if deployment_details.get('deployment_tx_hash'):
+            print(f"\n{Colors.BOLD}🚀 Deployment Transaction:{Colors.RESET}")
+            print(f"  Transaction Hash: {Colors.INFO}{deployment_details['deployment_tx_hash']}{Colors.RESET}")
+            print(f"  Status: {Colors.SUCCESS}✓ Confirmed{Colors.RESET}")
+
+        # Constructor Parameters
+        if deployment_details.get('constructor_params'):
+            print(f"\n{Colors.BOLD}⚙️  Constructor Parameters:{Colors.RESET}")
+            for param, value in deployment_details['constructor_params'].items():
+                if param == 'base_uri':
+                    print(f"  {param}: {Colors.CYAN}{value}{Colors.RESET}")
+                elif param.endswith('_address') or param == 'verifier_address':
+                    print(f"  {param}: {Colors.INFO}{value}{Colors.RESET}")
+                else:
+                    print(f"  {param}: {value}")
+
+        # Post-deployment Operations
+        if post_deployment_ops:
+            print(f"\n{Colors.BOLD}🔧 Post-Deployment Operations:{Colors.RESET}")
+            for i, op in enumerate(post_deployment_ops, 1):
+                print(f"  {i}. {Colors.BOLD}{op['method']}(){Colors.RESET}")
+                if op.get('tx_hash'):
+                    print(f"     Transaction: {Colors.INFO}{op['tx_hash']}{Colors.RESET}")
+                if op.get('params'):
+                    print(f"     Parameters: {op['params']}")
+                if op.get('validation'):
+                    print(f"     Validation: {Colors.SUCCESS}{op['validation']}{Colors.RESET}")
+
+        # Explorer Links
+        if deployment_details.get('contract_address'):
+            explorer_url = f"{self.network_config.explorer}/contract/{deployment_details['contract_address']}"
+            print(f"\n{Colors.BOLD}🔗 Explorer Links:{Colors.RESET}")
+            print(f"  Contract: {Colors.CYAN}{explorer_url}{Colors.RESET}")
+            if deployment_details.get('class_hash'):
+                class_url = f"{self.network_config.explorer}/class/{deployment_details['class_hash']}"
+                print(f"  Class: {Colors.CYAN}{class_url}{Colors.RESET}")
+
+        print(f"{Colors.BOLD}{'='*80}{Colors.RESET}")
 
     def validate_contract(self, contract_address: str, contract_type: str) -> bool:
         """Validate that a contract exists and is of the expected type."""
@@ -280,28 +464,28 @@ class ContractDeployer:
         print(f"{Colors.BOLD}🎯 Deploying {self.contract_config.name} to {self.network_config.network}{Colors.RESET}")
         print(f"{Colors.INFO}Account: {self.network_config.account} | Network: {self.network_config.network}{Colors.RESET}")
         print("-" * 50)
-        
+
         # Check prerequisites
         if not self.check_prerequisites():
             return None
-            
+
         # Get account info
         account_address = self.get_account_info()
         if not account_address:
             return None
-            
+
         # Use account address as owner if not specified
         if not owner_address:
             owner_address = account_address
             print(f"{Colors.INFO}Owner: {format_address(owner_address)}{Colors.RESET}")
-        
+
         # Validate dependencies (e.g., NFT contract for Registry)
         for dep_type, dep_address in kwargs.items():
             if dep_type.endswith('_address') and dep_address:
                 dep_contract_type = dep_type.replace('_address', '')
                 if not self.validate_contract(dep_address, dep_contract_type):
                     return None
-            
+
         # Compile contract (skip if no_compile is True)
         if not no_compile:
             if not self.compile_contract():
@@ -309,46 +493,42 @@ class ContractDeployer:
                 return None
         else:
             print(f"{Colors.INFO}⏭️ Skipping compilation (--no-compile flag set){Colors.RESET}")
-            
+
         # Declare contract
         class_hash = self.declare_contract()
         if not class_hash:
             print(f"{Colors.ERROR}Declaration failed. Deployment aborted.{Colors.RESET}")
             return None
-            
+
         # Deploy contract
-        contract_address = self.deploy_contract(class_hash, owner_address, **kwargs)
-        if not contract_address:
+        deployment_result = self.deploy_contract(class_hash, owner_address, **kwargs)
+        if not deployment_result:
             print(f"{Colors.ERROR}Deployment failed.{Colors.RESET}")
             return None
-            
+
+        contract_address = deployment_result["contract_address"]
+
         # Save deployment info
         self.save_deployment_info(class_hash, contract_address, owner_address, **kwargs)
-        
-        # Print success summary
-        print(f"\n{Colors.SUCCESS}🎉 DEPLOYMENT SUCCESSFUL!{Colors.RESET}")
-        print(f"{Colors.BOLD}Contract: {Colors.SUCCESS}{contract_address}{Colors.RESET}")
-        print(f"{Colors.BOLD}Explorer: {Colors.INFO}{self.network_config.explorer}/contract/{contract_address}{Colors.RESET}")
-        print(f"Class Hash: {class_hash}")
-        print(f"Network: {self.network_config.network} | Owner: {format_address(owner_address)}")
-        
-        # Show dependencies
-        for info in self.contract.get_dependency_info(**kwargs):
-            print(f"{info}")
-        
-        # Return deployment info for summary
-        result = {
+
+        # Collect deployment details for professional summary
+        deployment_details = {
             "contract_name": self.contract_config.name,
             "contract_type": self.contract_type,
             "contract_address": contract_address,
             "class_hash": class_hash,
             "network": self.network_config.network,
             "owner": owner_address,
+            "deployment_tx_hash": deployment_result.get("deployment_tx_hash"),
+            "constructor_params": deployment_result.get("constructor_params", {}),
         }
-        
+
         # Add dependency addresses
         for key, value in kwargs.items():
             if key.endswith('_address') and value:
-                result[key] = value
-                
-        return result
+                deployment_details[key] = value
+
+        # Print professional summary
+        self.print_professional_summary(deployment_details)
+
+        return deployment_details
