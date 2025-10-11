@@ -14,7 +14,7 @@ deploy/
 │   ├── utils.py            # Utility functions
 │   ├── deploy.py           # CLI implementation
 │   └── cli.py              # CLI module
-├── deployment_config.yml    # Environment configurations
+├── deployment_config.yml    # Environment configurations (single source of truth)
 ├── pyproject.toml          # Poetry configuration
 └── README.md               # This file
 ```
@@ -65,7 +65,7 @@ poetry run kliver-deploy --environment dev --contract all
 
 ## 🔧 Configuration
 
-The system uses `deployment_config.yml` for environment-specific configurations:
+The system uses the `deployment_config.yml` in this folder as the single source of truth for environment-specific configurations. Run the CLI from `deploy/` so it picks this file automatically.
 
 ```yaml
 environments:

@@ -246,8 +246,8 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
     click.echo(f"{Colors.BOLD}Step 3/4: Deploying Registry Contract{Colors.RESET}")
     registry_deployer = ContractDeployer(environment, 'registry', config_manager)
 
-    # Get verifier_address from config if not provided
-    if not verifier_address:
+    # Get verifier_address from config if not provided (for Registry deployments)
+    if not verifier_address and contract == 'registry':
         registry_config = config_manager.get_contract_config(environment, 'registry')
         verifier_address = registry_config.verifier_address or "0x0"
 
@@ -310,8 +310,6 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
             click.echo(f"\n{Colors.BOLD}Step 6: Deploying SessionsMarketplace (advanced){Colors.RESET}")
             adv_conf = config_manager.get_contract_config(environment, 'sessions_marketplace')
             adv_deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
-            # Resolve verifier
-            adv_verifier = verifier_address or adv_conf.verifier_address or "0x0"
             # Resolve payment token and timeout
             pay_token = payment_token_address or adv_conf.payment_token_address
             timeout_s = purchase_timeout or adv_conf.purchase_timeout_seconds
@@ -320,7 +318,6 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
             else:
                 adv_result = adv_deployer.deploy_full_flow(owner, no_compile=no_compile,
                                                            registry_address=deployed_addresses['registry'],
-                                                           verifier_address=adv_verifier,
                                                            payment_token_address=pay_token,
                                                            purchase_timeout_seconds=timeout_s)
                 if adv_result:
@@ -388,10 +385,6 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
         deploy_kwargs['registry_address'] = registry_address
     elif contract == 'sessions_marketplace':
         click.echo(f"\n{Colors.BOLD}🎯 SESSIONS MARKETPLACE DEPLOYMENT{Colors.RESET}\n")
-        # Resolve verifier from config if not provided
-        if not verifier_address:
-            contract_config = config_manager.get_contract_config(environment, contract)
-            verifier_address = contract_config.verifier_address or "0x0"
         if not registry_address:
             click.echo(f"{Colors.ERROR}❌ Registry address is required --registry-address 0x...{Colors.RESET}")
             return False
@@ -406,7 +399,6 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
             return False
         deploy_kwargs.update({
             'registry_address': registry_address,
-            'verifier_address': verifier_address,
             'payment_token_address': payment_token_address,
             'purchase_timeout_seconds': purchase_timeout,
         })

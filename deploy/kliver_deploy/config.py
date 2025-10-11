@@ -52,7 +52,18 @@ class ConfigManager:
                         deployment_config.yml in the current directory.
         """
         if config_path is None:
-            config_path = Path.cwd() / "deployment_config.yml"
+            # Search upwards for deployment_config.yml so it works from repo root or deploy/ folder
+            search = Path.cwd()
+            found = None
+            while True:
+                candidate = search / "deployment_config.yml"
+                if candidate.exists():
+                    found = candidate
+                    break
+                if search == search.parent:
+                    break
+                search = search.parent
+            config_path = found or (Path.cwd() / "deployment_config.yml")
         
         self.config_path = config_path
         self._config_data: Optional[Dict[str, Any]] = None
