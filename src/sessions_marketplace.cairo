@@ -12,7 +12,6 @@ pub mod SessionsMarketplace {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
-    use super::super::kliver_registry::{IVerifierDispatcher, IVerifierDispatcherTrait};
     use super::super::session_registry::{
         ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait,
     };
@@ -45,7 +44,6 @@ pub mod SessionsMarketplace {
     struct Storage {
         // Direcciones de los contratos
         registry: ContractAddress,
-        verifier: ContractAddress,
         // Token de pago (ERC20) y timeout de compra (en segundos)
         payment_token: ContractAddress,
         purchase_timeout: u64,
@@ -70,6 +68,7 @@ pub mod SessionsMarketplace {
         Sold: Sold,
         ListingCancelled: ListingCancelled,
         PurchaseRefunded: PurchaseRefunded,
+        OrderClosedDetailed: OrderClosedDetailed,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -124,6 +123,21 @@ pub mod SessionsMarketplace {
         amount: u256,
     }
 
+    #[derive(Drop, starknet::Event)]
+    struct OrderClosedDetailed {
+        #[key]
+        listing_id: u256,
+        session_id: felt252,
+        seller: ContractAddress,
+        buyer: ContractAddress,
+        price: u256,
+        public_root: felt252,
+        public_challenge: felt252,
+        challenge_key: u64,
+        opened_at: u64,
+        settled_at: u64,
+    }
+
     // Estados de una orden
     #[allow(starknet::store_no_default_variant)]
     #[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
@@ -147,17 +161,14 @@ pub mod SessionsMarketplace {
     fn constructor(
         ref self: ContractState,
         registry_address: ContractAddress,
-        verifier_address: ContractAddress,
         payment_token_address: ContractAddress,
         purchase_timeout_seconds: u64,
     ) {
         assert(!registry_address.is_zero(), 'Invalid registry address');
-        assert(!verifier_address.is_zero(), 'Invalid verifier address');
         assert(!payment_token_address.is_zero(), 'Invalid payment token');
         assert(purchase_timeout_seconds > 0, 'Invalid purchase timeout');
 
         self.registry.write(registry_address);
-        self.verifier.write(verifier_address);
         self.payment_token.write(payment_token_address);
         self.purchase_timeout.write(purchase_timeout_seconds);
         self.listing_counter.write(0);
@@ -262,12 +273,12 @@ pub mod SessionsMarketplace {
         // ============ PROOF SUBMISSION (On-chain) ============
 
         // Verificación on-chain completa
-        fn submit_proof_and_verify(
+        fn settle_purchase(
             ref self: ContractState,
             listing_id: u256,
             buyer: ContractAddress,
+            challenge_key: u64,
             proof: Span<felt252>,
-            public_inputs: Span<felt252>,
         ) {
             let caller = get_caller_address();
             let mut listing = self.listings.read(listing_id);
@@ -276,22 +287,20 @@ pub mod SessionsMarketplace {
             assert(listing.seller == caller, 'Not the seller');
             assert(listing.status == ListingStatus::Open, 'Listing not open');
 
-            // Verificar que los public inputs coincidan
-            assert(public_inputs.len() >= 2, 'Invalid public inputs');
-            let session_root = *public_inputs.at(0);
-            let challenge = *public_inputs.at(1);
-
-            assert(session_root == listing.root, 'Root mismatch');
+            // Datos públicos esperados
+            let session_root = listing.root;
             // Validar orden del buyer
             let order_key = (listing.session_id, buyer);
             let mut order = self.orders.read(order_key);
-            assert(order.challenge == challenge, 'Challenge mismatch');
+            let challenge = order.challenge;
+            // Ensure numeric challenge matches order.challenge
+            let expected_key: u64 = order.challenge.try_into().unwrap();
+            assert(challenge_key == expected_key, 'Challenge key mismatch');
             assert(order.status == OrderStatus::Open, 'Order not open');
 
-            // Llamar al verifier
-            let verifier_address = self.verifier.read();
-            let verifier = IVerifierDispatcher { contract_address: verifier_address };
-            let result = verifier.verify_ultra_starknet_honk_proof(proof);
+            // Llamar al verify_proof del registry (con challenge numérico)
+            let registry = ISessionRegistryDispatcher { contract_address: self.registry.read() };
+            let result = registry.verify_proof(proof, session_root, challenge_key);
             let is_valid = result.is_some();
 
             // Emitir evento de proof
@@ -312,6 +321,21 @@ pub mod SessionsMarketplace {
                 if amount > 0 {
                     let _ok2 = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcherTrait::transfer(token, listing.seller, amount);
                 }
+                // Emitir evento detallado con datos públicos
+                let opened_at = self.purchase_opened_at.read(order_key);
+                let settled_at = get_block_timestamp();
+                self.emit(OrderClosedDetailed {
+                    listing_id,
+                    session_id: listing.session_id,
+                    seller: listing.seller,
+                    buyer,
+                    price: listing.price,
+                    public_root: session_root,
+                    public_challenge: challenge,
+                    challenge_key,
+                    opened_at,
+                    settled_at,
+                });
                 // Limpiar escrow y timestamp
                 self.escrow_amount.write(order_key, 0);
                 self.purchase_opened_at.write(order_key, 0);
@@ -409,12 +433,12 @@ pub mod SessionsMarketplace {
         fn refund_purchase(ref self: TContractState, listing_id: u256);
 
         // Proof submission
-        fn submit_proof_and_verify(
+        fn settle_purchase(
             ref self: TContractState,
             listing_id: u256,
             buyer: ContractAddress,
+            challenge_key: u64,
             proof: Span<felt252>,
-            public_inputs: Span<felt252>,
         );
 
         // View functions

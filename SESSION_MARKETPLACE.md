@@ -52,8 +52,8 @@ Además del contrato simple `session_marketplace.cairo`, existe una variante ava
 1. El vendedor crea un listing a partir de una sesión registrada en el Registry (se valida propiedad y `root`).
 2. El comprador abre una orden de compra indicando `listing_id`, `challenge` y enviando el `amount` exacto (precio) al contrato vía `ERC20.transfer_from` (escrow on‑chain).
 3. El contrato guarda `buyer`, `challenge`, `escrow_amount` y `opened_at` (timestamp de la orden).
-4. El vendedor completa la venta enviando una prueba válida y public inputs que incluyen `root` y `challenge`.
-5. Si la prueba es válida, el contrato marca `Sold` y libera el escrow al seller.
+4. El vendedor cierra la orden con `settle_purchase(listing_id, buyer, challenge_key, proof, [root, challenge])`.
+5. Si la prueba es válida, el contrato marca `Sold`, libera el escrow al seller y emite un evento con root/challenge/buyer/seller/price/timestamps.
 6. Si el seller no responde dentro de un `purchase_timeout` (config del contrato), el buyer puede pedir reembolso y la orden se cancela volviendo a `Open`.
 
 ### Constructor (SessionsMarketplace)
@@ -78,9 +78,10 @@ constructor(
   - Guarda `escrow_amount[listing_id]` y `purchase_opened_at[listing_id] = block_timestamp`.
   - Evento: `PurchaseOpened { listing_id, buyer, challenge, amount, opened_at }`.
 
-- `submit_proof_and_verify(listing_id: u256, proof: Span<felt252>, public_inputs: Span<felt252>)`
-  - Valida que `public_inputs[0]` sea `root` y `public_inputs[1]` sea el `challenge` del listing.
-  - Si la verificación es válida: `status = Sold`, emite `Sold` y transfiere el escrow al seller.
+- `settle_purchase(listing_id: u256, buyer: ContractAddress, challenge_key: u64, proof: Span<felt252>, public_inputs: Span<felt252>)`
+  - Valida que `public_inputs[0]` sea `root` y `public_inputs[1]` sea el `challenge` de la orden.
+  - Llama al Registry `verify_proof(proof, root_hash, challenge_key)`.
+  - Si es válida: `status = Sold`, transfiere el escrow al seller y emite un evento detallado.
 
 - `refund_purchase(listing_id: u256)`
   - Solo buyer, con `status == Purchased`.

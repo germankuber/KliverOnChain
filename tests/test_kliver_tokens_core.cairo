@@ -1917,6 +1917,8 @@ fn test_get_wallet_token_summary_basic() {
     assert(summary.token_info.special_release == 500, 'Wrong special_release');
     assert(summary.total_claimable == expected_amount, 'Wrong total_claimable');
     assert(summary.simulations_data.len() == 1, 'Should have 1 simulation');
+    // Next release should be tomorrow at 12:00; we are at 2 days + 13:00 → 23h remaining
+    assert(summary.time_until_release == 23 * 3600_u64, 'Wrong time_until_release');
 
     let sim_data = summary.simulations_data.at(0);
     assert(*sim_data.simulation_id == 123, 'Wrong simulation_id');
@@ -2885,6 +2887,8 @@ fn test_get_wallet_simulations_summary_single_token() {
     assert(*summary.wallet == wallet, 'Wallet should match');
     assert(summary.simulations_data.len() == 2, 'Should have 2 simulations');
     assert(*summary.total_claimable > 0, 'Should have claimable');
+    // Just ensure it's a positive value
+    assert(*summary.time_until_release > 0_u64, 'time_until>0');
 
     reset_block_timestamp();
 }

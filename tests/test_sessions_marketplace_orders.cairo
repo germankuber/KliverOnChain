@@ -3,7 +3,6 @@ use kliver_on_chain::sessions_marketplace::SessionsMarketplace::{
 };
 use kliver_on_chain::mocks::mock_erc20::MockERC20::{IERC20Dispatcher, IERC20DispatcherTrait};
 use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
-use kliver_on_chain::mocks::mock_verifier::MockVerifier;
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
@@ -33,22 +32,15 @@ fn deploy_mock_registry() -> ISessionRegistryDispatcher {
     ISessionRegistryDispatcher { contract_address: addr }
 }
 
-fn deploy_mock_verifier() -> ContractAddress {
-    let contract = declare("MockVerifier").unwrap().contract_class();
-    let (addr, _) = contract.deploy(@ArrayTrait::new()).unwrap();
-    addr
-}
 
 fn deploy_marketplace(
     registry: ContractAddress,
-    verifier: ContractAddress,
     token: ContractAddress,
     timeout: u64,
 ) -> IMarketplaceDispatcher {
     let contract = declare("SessionsMarketplace").unwrap().contract_class();
     let mut calldata = ArrayTrait::new();
     calldata.append(registry.into());
-    calldata.append(verifier.into());
     calldata.append(token.into());
     calldata.append(timeout.into());
     let (addr, _) = contract.deploy(@calldata).unwrap();
@@ -73,9 +65,8 @@ fn test_open_purchase_and_refund_flow() {
     let price: u256 = 1000;
     let token = deploy_mock_erc20(BUYER(), price * 2);
     let registry = deploy_mock_registry();
-    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(registry.contract_address, verifier, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(registry.contract_address, token.contract_address, timeout);
 
     // Register a session owned by SELLER
     let session_id = 'session_1';
@@ -94,10 +85,11 @@ fn test_open_purchase_and_refund_flow() {
     stop_cheat_caller_address(token.contract_address);
 
     // Open purchase as BUYER (set timestamp first)
-    let challenge = 'challenge_1';
+    let challenge_felt = 1234567890; // felt
+    let challenge_key: u64 = 1234567890_u64;
     start_cheat_block_timestamp(marketplace.contract_address, 1000);
     start_cheat_caller_address(marketplace.contract_address, BUYER());
-    marketplace.open_purchase(listing_id, challenge, price);
+    marketplace.open_purchase(listing_id, challenge_felt, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Listing remains Open; order is tracked per (session_id, buyer)
@@ -106,7 +98,7 @@ fn test_open_purchase_and_refund_flow() {
 
     // Check order view
     let (challenge_r, amount_r) = marketplace.get_order_info('session_1', BUYER());
-    assert!(challenge_r == challenge, "Challenge stored in order");
+    assert!(challenge_r == challenge_felt, "Challenge stored in order");
     assert!(amount_r == price, "Amount stored in order");
     let status_r = marketplace.get_order_status('session_1', BUYER());
     assert!(status_r == OrderStatus::Open, "Order should be open");
@@ -135,9 +127,8 @@ fn test_successful_sale_releases_escrow() {
     let price: u256 = 500;
     let token = deploy_mock_erc20(BUYER(), price);
     let registry = deploy_mock_registry();
-    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(registry.contract_address, verifier, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(registry.contract_address, token.contract_address, timeout);
 
     // Register session owned by SELLER and list
     let session_id = 'session_2';
@@ -153,17 +144,15 @@ fn test_successful_sale_releases_escrow() {
     let _ok = token.approve(marketplace.contract_address, price);
     stop_cheat_caller_address(token.contract_address);
     start_cheat_caller_address(marketplace.contract_address, BUYER());
-    let challenge = 'challenge_2';
-    marketplace.open_purchase(listing_id, challenge, price);
+    let challenge_felt2 = 2222222222;
+    let challenge_key2: u64 = 2222222222_u64;
+    marketplace.open_purchase(listing_id, challenge_felt2, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Seller submits proof and completes sale
     start_cheat_caller_address(marketplace.contract_address, SELLER());
     let proof: Array<felt252> = array![1, 2, 3];
-    let mut inputs: Array<felt252> = ArrayTrait::new();
-    inputs.append(root);
-    inputs.append(challenge);
-    marketplace.submit_proof_and_verify(listing_id, BUYER(), proof.span(), inputs.span());
+    marketplace.settle_purchase(listing_id, BUYER(), challenge_key2, proof.span());
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Listing should be Sold
@@ -179,9 +168,8 @@ fn test_refund_before_timeout_panics() {
     let price: u256 = 777;
     let token = deploy_mock_erc20(BUYER(), price);
     let registry = deploy_mock_registry();
-    let verifier = deploy_mock_verifier();
     let timeout: u64 = 100;
-    let marketplace = deploy_marketplace(registry.contract_address, verifier, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(registry.contract_address, token.contract_address, timeout);
 
     // Register session and create listing
     register_session(registry, 'session_refund', 'sim_r', 'root_r', SELLER(), 1);
@@ -196,7 +184,8 @@ fn test_refund_before_timeout_panics() {
 
     start_cheat_block_timestamp(marketplace.contract_address, 500);
     start_cheat_caller_address(marketplace.contract_address, BUYER());
-    marketplace.open_purchase(listing_id, 'challenge_r', price);
+    let challenge_r_felt = 3333333333;
+    marketplace.open_purchase(listing_id, challenge_r_felt, price);
     // Try to refund immediately (should panic Not expired)
     marketplace.refund_purchase(listing_id);
 }
@@ -207,9 +196,8 @@ fn test_open_purchase_invalid_amount() {
     let price: u256 = 1000;
     let token = deploy_mock_erc20(BUYER(), price);
     let registry = deploy_mock_registry();
-    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(registry.contract_address, verifier, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(registry.contract_address, token.contract_address, timeout);
 
     // Register session owned by SELLER and list
     register_session(registry, 'session_3', 'sim_3', 'root_3', SELLER(), 1);

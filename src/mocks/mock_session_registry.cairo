@@ -55,5 +55,15 @@ pub mod MockSessionRegistry {
         fn verify_complete_session(self: @ContractState, full_proof_with_hints: Span<felt252>) -> Option<Span<u256>> {
             Option::None(())
         }
+        fn verify_proof(self: @ContractState, full_proof_with_hints: Span<felt252>, root_hash: felt252, challenge: u64) -> Option<Span<u256>> {
+            assert(challenge >= 1000000000_u64, 'Invalid challenge');
+            assert(challenge <= 9999999999_u64, 'Invalid challenge');
+            if full_proof_with_hints.len() > 0 {
+                let arr: Array<u256> = array![1, 2, 3];
+                Option::Some(arr.span())
+            } else {
+                Option::None(())
+            }
+        }
     }
 }

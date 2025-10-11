@@ -105,8 +105,7 @@ class ContractDeployer:
         ]
         
         result = CommandRunner.run_command(command, f"Declaring {self.contract_config.name} to {self.network_config.network}")
-        print(command)
-        # Handle both success and "already declared" cases
+
         all_output = result.get("stdout", "") + result.get("stderr", "")
         
         try:
@@ -324,6 +323,8 @@ class ContractDeployer:
                 params[key] = value
             elif key == 'verifier_address':
                 params['verifier_address'] = value
+            elif key == 'purchase_timeout_seconds':
+                params['purchase_timeout_seconds'] = value
 
         return params
 
@@ -388,9 +389,10 @@ class ContractDeployer:
         
         # Define validation functions based on contract type
         validation_functions = {
-            "nft": "name",  # ERC721
+            "nft": "name",           # ERC721
             "registry": "get_owner",  # Registry specific
-            "token": "balance_of",  # ERC1155 (KliverNFT1155)
+            "token": "balance_of",   # ERC1155 (KliverTokensCore)
+            "payment_token": "decimals",  # ERC20-style payment token
         }
         
         function_name = validation_functions.get(contract_type)

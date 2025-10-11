@@ -177,6 +177,7 @@ pub struct WalletTokenSummary {
     pub token_info: TokenInfo,
     pub total_claimable: u256,
     pub simulations_data: Array<SimulationClaimData>,
+    pub time_until_release: u64,
 }
 
 // Wrapper struct for multiple token summaries

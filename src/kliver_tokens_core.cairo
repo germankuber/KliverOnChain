@@ -809,8 +809,24 @@ mod KliverTokensCore {
                 i += 1;
             }
 
+            // Compute time until next release for this token
+            let seconds_per_day: u64 = 86400;
+            let seconds_per_hour: u64 = 3600;
+            let seconds_today = current_time % seconds_per_day;
+            let release_seconds = token_info.release_hour * seconds_per_hour;
+            let time_until = if seconds_today < release_seconds {
+                release_seconds - seconds_today
+            } else {
+                seconds_per_day - seconds_today + release_seconds
+            };
             WalletTokenSummary {
-                token_id, wallet, current_balance, token_info, total_claimable, simulations_data,
+                token_id,
+                wallet,
+                current_balance,
+                token_info,
+                total_claimable,
+                simulations_data,
+                time_until_release: time_until,
             }
         }
     }
