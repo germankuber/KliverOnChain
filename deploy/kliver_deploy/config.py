@@ -28,6 +28,8 @@ class ContractConfig:
     sierra_file: str
     base_uri: Optional[str] = None
     verifier_address: Optional[str] = None
+    payment_token_address: Optional[str] = None
+    purchase_timeout_seconds: Optional[int] = None
 
 
 @dataclass 
@@ -110,7 +112,9 @@ class ConfigManager:
             name=contract_data['name'],
             sierra_file=contract_data['sierra_file'],
             base_uri=contract_data.get('base_uri'),
-            verifier_address=contract_data.get('verifier_address')
+            verifier_address=contract_data.get('verifier_address'),
+            payment_token_address=contract_data.get('payment_token_address'),
+            purchase_timeout_seconds=contract_data.get('purchase_timeout_seconds'),
         )
     
     def get_deployment_settings(self, environment: str) -> DeploymentSettings:

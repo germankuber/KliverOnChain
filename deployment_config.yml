@@ -24,6 +24,15 @@ environments:
         name: "KliverTokensCore"
         sierra_file: "target/dev/kliver_on_chain_KliverTokensCore.contract_class.json"
         base_uri: "https://api-dev.kliver.ai/api/metadata/"
+      session_marketplace:
+        name: "SessionMarketplace"
+        sierra_file: "target/dev/kliver_on_chain_SessionMarketplace.contract_class.json"
+      sessions_marketplace:
+        name: "SessionsMarketplace"
+        sierra_file: "target/dev/kliver_on_chain_SessionsMarketplace.contract_class.json"
+        verifier_address: "0x0"
+        payment_token_address: "0x0"  # TODO: set your ERC20
+        purchase_timeout_seconds: 86400
     deployment_settings:
       wait_timeout: 120
       retry_interval: 2
@@ -51,6 +60,15 @@ environments:
         name: "KliverTokensCore"
         sierra_file: "target/dev/kliver_on_chain_KliverRC1155.contract_class.json"
         base_uri: "https://83df86aa2352.ngrok-free.app/api/metadata/"
+      session_marketplace:
+        name: "SessionMarketplace"
+        sierra_file: "target/dev/kliver_on_chain_SessionMarketplace.contract_class.json"
+      sessions_marketplace:
+        name: "SessionsMarketplace"
+        sierra_file: "target/dev/kliver_on_chain_SessionsMarketplace.contract_class.json"
+        verifier_address: "0x0"
+        payment_token_address: "0x0"
+        purchase_timeout_seconds: 86400
     deployment_settings:
       wait_timeout: 180
       retry_interval: 3
@@ -78,6 +96,15 @@ environments:
         name: "KliverTokensCore"
         sierra_file: "target/release/kliver_on_chain_KliverTokensCore.contract_class.json"
         base_uri: "https://api.kliver.ai/api/metadata/"
+      session_marketplace:
+        name: "SessionMarketplace"
+        sierra_file: "target/release/kliver_on_chain_SessionMarketplace.contract_class.json"
+      sessions_marketplace:
+        name: "SessionsMarketplace"
+        sierra_file: "target/release/kliver_on_chain_SessionsMarketplace.contract_class.json"
+        verifier_address: "0x0"
+        payment_token_address: "0x0"
+        purchase_timeout_seconds: 86400
     deployment_settings:
       wait_timeout: 300
       retry_interval: 5

@@ -25,6 +25,12 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
               help='Tokens Core contract address (required when deploying registry separately)')
 @click.option('--verifier-address',
               help='Verifier contract address (optional for Registry, uses 0x0 if not provided)')
+@click.option('--registry-address',
+              help='Registry contract address (required for session_marketplace, sessions_marketplace if deploying separately)')
+@click.option('--payment-token-address',
+              help='Payment ERC20 address (required for sessions_marketplace)')
+@click.option('--purchase-timeout', type=int,
+              help='Purchase timeout in seconds (required for sessions_marketplace)')
 @click.option('--verbose', '-v', is_flag=True, 
               help='Enable verbose output')
 @click.option('--no-compile', is_flag=True, 
@@ -33,6 +39,7 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
               help='Output deployment addresses in JSON format')
 def deploy(environment: str, contract: str, owner: Optional[str],
            nft_address: Optional[str], tokens_core_address: Optional[str], verifier_address: Optional[str],
+           registry_address: Optional[str], payment_token_address: Optional[str], purchase_timeout: Optional[int],
            verbose: bool, no_compile: bool, output_json: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration.
@@ -93,13 +100,15 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         
         if contract == 'all':
             success = deploy_all_contracts(
-                config_manager, environment, owner, verifier_address, deployments, no_compile
+                config_manager, environment, owner, verifier_address, deployments, no_compile,
+                payment_token_address=payment_token_address, purchase_timeout=purchase_timeout
             )
         else:
             success = deploy_single_contract(
                 config_manager, environment, contract, owner,
-                nft_address, tokens_core_address, None, verifier_address,
-                deployments, no_compile
+                nft_address, tokens_core_address, registry_address, verifier_address,
+                deployments=deployments, no_compile=no_compile,
+                payment_token_address=payment_token_address, purchase_timeout=purchase_timeout,
             )
         
         # Show final summary
@@ -193,10 +202,11 @@ def print_comprehensive_summary(deployments: List[Dict[str, Any]], network: str)
 
 def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                          owner: Optional[str], verifier_address: Optional[str],
-                         deployments: List[Dict[str, Any]], no_compile: bool = False) -> bool:
+                         deployments: List[Dict[str, Any]], no_compile: bool = False,
+                         payment_token_address: Optional[str] = None, purchase_timeout: Optional[int] = None) -> bool:
     """Deploy all contracts in the correct order."""
     click.echo(f"\n{Colors.BOLD}🚀 COMPLETE DEPLOYMENT MODE{Colors.RESET}")
-    click.echo(f"{Colors.INFO}This will deploy: NFT → Token1155 → Registry{Colors.RESET}\n")
+    click.echo(f"{Colors.INFO}This will deploy: NFT → Token1155 → Registry (+ optional Marketplaces){Colors.RESET}\n")
 
     deployed_addresses = {}
 
@@ -277,6 +287,49 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
 
         click.echo(f"\n{Colors.SUCCESS}✓ Token1155 configured with Registry address{Colors.RESET}\n")
 
+        # Optionally deploy marketplaces if configured
+        # SessionMarketplace (simple)
+        try:
+            env_contracts = config_manager.load_config()["environments"][environment]["contracts"]
+        except Exception:
+            env_contracts = {}
+
+        if 'session_marketplace' in env_contracts:
+            click.echo(f"\n{Colors.BOLD}Step 5: Deploying SessionMarketplace (simple){Colors.RESET}")
+            sm_deployer = ContractDeployer(environment, 'session_marketplace', config_manager)
+            sm_result = sm_deployer.deploy_full_flow(owner, no_compile=no_compile,
+                                                     registry_address=deployed_addresses['registry'])
+            if sm_result:
+                deployments.append(sm_result)
+                deployed_addresses['session_marketplace'] = sm_result['contract_address']
+                click.echo(f"{Colors.SUCCESS}✓ SessionMarketplace deployed at: {sm_result['contract_address']}{Colors.RESET}")
+            else:
+                click.echo(f"{Colors.ERROR}✗ SessionMarketplace deployment failed (skipping).{Colors.RESET}")
+
+        if 'sessions_marketplace' in env_contracts:
+            click.echo(f"\n{Colors.BOLD}Step 6: Deploying SessionsMarketplace (advanced){Colors.RESET}")
+            adv_conf = config_manager.get_contract_config(environment, 'sessions_marketplace')
+            adv_deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
+            # Resolve verifier
+            adv_verifier = verifier_address or adv_conf.verifier_address or "0x0"
+            # Resolve payment token and timeout
+            pay_token = payment_token_address or adv_conf.payment_token_address
+            timeout_s = purchase_timeout or adv_conf.purchase_timeout_seconds
+            if not pay_token or not timeout_s:
+                click.echo(f"{Colors.WARNING}⚠️  Missing payment token or timeout for SessionsMarketplace. Skipping.{Colors.RESET}")
+            else:
+                adv_result = adv_deployer.deploy_full_flow(owner, no_compile=no_compile,
+                                                           registry_address=deployed_addresses['registry'],
+                                                           verifier_address=adv_verifier,
+                                                           payment_token_address=pay_token,
+                                                           purchase_timeout_seconds=timeout_s)
+                if adv_result:
+                    deployments.append(adv_result)
+                    deployed_addresses['sessions_marketplace'] = adv_result['contract_address']
+                    click.echo(f"{Colors.SUCCESS}✓ SessionsMarketplace deployed at: {adv_result['contract_address']}{Colors.RESET}")
+                else:
+                    click.echo(f"{Colors.ERROR}✗ SessionsMarketplace deployment failed (skipping).{Colors.RESET}")
+
         return True
     else:
         click.echo(f"\n{Colors.ERROR}✗ Failed to configure Token1155 with Registry address{Colors.RESET}")
@@ -287,7 +340,8 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
                           contract: str, owner: Optional[str],
                           nft_address: Optional[str], tokens_core_address: Optional[str],
                           registry_address: Optional[str], verifier_address: Optional[str],
-                          deployments: List[Dict[str, Any]], no_compile: bool = False) -> bool:
+                          deployments: List[Dict[str, Any]], no_compile: bool = False,
+                          payment_token_address: Optional[str] = None, purchase_timeout: Optional[int] = None) -> bool:
     """Deploy a single contract."""
     
     deployer = ContractDeployer(environment, contract, config_manager)
@@ -326,6 +380,36 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.BOLD}🎯 TOKEN1155-ONLY DEPLOYMENT{Colors.RESET}\n")
         contract_config = config_manager.get_contract_config(environment, contract)
         deploy_kwargs['base_uri'] = contract_config.base_uri
+    elif contract == 'session_marketplace':
+        click.echo(f"\n{Colors.BOLD}🎯 SESSION MARKETPLACE DEPLOYMENT{Colors.RESET}\n")
+        if not registry_address:
+            click.echo(f"{Colors.ERROR}❌ Registry address is required --registry-address 0x...{Colors.RESET}")
+            return False
+        deploy_kwargs['registry_address'] = registry_address
+    elif contract == 'sessions_marketplace':
+        click.echo(f"\n{Colors.BOLD}🎯 SESSIONS MARKETPLACE DEPLOYMENT{Colors.RESET}\n")
+        # Resolve verifier from config if not provided
+        if not verifier_address:
+            contract_config = config_manager.get_contract_config(environment, contract)
+            verifier_address = contract_config.verifier_address or "0x0"
+        if not registry_address:
+            click.echo(f"{Colors.ERROR}❌ Registry address is required --registry-address 0x...{Colors.RESET}")
+            return False
+        if not payment_token_address:
+            contract_config = config_manager.get_contract_config(environment, contract)
+            payment_token_address = contract_config.payment_token_address
+        if not purchase_timeout:
+            contract_config = config_manager.get_contract_config(environment, contract)
+            purchase_timeout = contract_config.purchase_timeout_seconds
+        if not payment_token_address or not purchase_timeout:
+            click.echo(f"{Colors.ERROR}❌ Require --payment-token-address and --purchase-timeout (or config).{Colors.RESET}")
+            return False
+        deploy_kwargs.update({
+            'registry_address': registry_address,
+            'verifier_address': verifier_address,
+            'payment_token_address': payment_token_address,
+            'purchase_timeout_seconds': purchase_timeout,
+        })
     
     # Deploy the contract
     result = deployer.deploy_full_flow(owner, no_compile=no_compile, **deploy_kwargs)

@@ -324,6 +324,8 @@ class ContractDeployer:
                 params[key] = value
             elif key == 'verifier_address':
                 params['verifier_address'] = value
+            elif key == 'purchase_timeout_seconds':
+                params['purchase_timeout_seconds'] = value
 
         return params
 

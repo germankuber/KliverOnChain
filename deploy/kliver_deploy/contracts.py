@@ -126,3 +126,73 @@ def get_contract(contract_type: str) -> BaseContract:
         raise ValueError(f"Unknown contract type '{contract_type}'. Available: {available}")
     
     return CONTRACTS[contract_type]()
+
+
+# Additional marketplace contracts
+class SessionMarketplace(BaseContract):
+    def __init__(self):
+        super().__init__("SessionMarketplace", "SessionMarketplace")
+
+    def get_constructor_calldata(self, owner_address: str = "0x0", registry_address: str = None, **kwargs) -> List[str]:
+        if not registry_address:
+            raise ValueError("registry_address is required for SessionMarketplace")
+        print(f"{Colors.INFO}📋 Using Registry address: {registry_address}{Colors.RESET}")
+        return [registry_address]
+
+    def validate_dependencies(self, registry_address: str = None, **kwargs) -> bool:
+        if not registry_address:
+            print(f"{Colors.ERROR}✗ Registry address is required for SessionMarketplace deployment{Colors.RESET}")
+            return False
+        return True
+
+
+class SessionsMarketplace(BaseContract):
+    def __init__(self):
+        super().__init__("SessionsMarketplace", "SessionsMarketplace")
+
+    def get_constructor_calldata(
+        self,
+        owner_address: str = "0x0",
+        registry_address: str = None,
+        verifier_address: str = None,
+        payment_token_address: str = None,
+        purchase_timeout_seconds: int = 0,
+        **kwargs,
+    ) -> List[str]:
+        if not registry_address or not verifier_address or not payment_token_address or not purchase_timeout_seconds:
+            raise ValueError("registry_address, verifier_address, payment_token_address, and purchase_timeout_seconds are required for SessionsMarketplace")
+        print(f"{Colors.INFO}📋 Using Registry: {registry_address}{Colors.RESET}")
+        print(f"{Colors.INFO}📋 Using Verifier: {verifier_address}{Colors.RESET}")
+        print(f"{Colors.INFO}📋 Using Payment Token: {payment_token_address}{Colors.RESET}")
+        print(f"{Colors.INFO}📋 Using Timeout (s): {purchase_timeout_seconds}{Colors.RESET}")
+        return [registry_address, verifier_address, payment_token_address, str(purchase_timeout_seconds)]
+
+    def validate_dependencies(
+        self,
+        registry_address: str = None,
+        verifier_address: str = None,
+        payment_token_address: str = None,
+        purchase_timeout_seconds: int = 0,
+        **kwargs,
+    ) -> bool:
+        ok = True
+        if not registry_address:
+            print(f"{Colors.ERROR}✗ Registry address is required for SessionsMarketplace deployment{Colors.RESET}")
+            ok = False
+        if not verifier_address:
+            print(f"{Colors.ERROR}✗ Verifier address is required for SessionsMarketplace deployment{Colors.RESET}")
+            ok = False
+        if not payment_token_address:
+            print(f"{Colors.ERROR}✗ Payment token address is required for SessionsMarketplace deployment{Colors.RESET}")
+            ok = False
+        if not purchase_timeout_seconds:
+            print(f"{Colors.ERROR}✗ purchase_timeout_seconds is required for SessionsMarketplace deployment{Colors.RESET}")
+            ok = False
+        return ok
+
+
+# Register new contracts in factory
+CONTRACTS.update({
+    "session_marketplace": SessionMarketplace,
+    "sessions_marketplace": SessionsMarketplace,
+})

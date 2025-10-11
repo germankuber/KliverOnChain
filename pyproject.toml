@@ -8,10 +8,14 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pyyaml (>=6.0.3,<7.0.0)"
+    "pyyaml (>=6.0.3,<7.0.0)",
+    "click (>=8.1,<9.0)"
 ]
 
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[project.scripts]
+kliver-deploy = "deploy.kliver_deploy.deploy:deploy"
