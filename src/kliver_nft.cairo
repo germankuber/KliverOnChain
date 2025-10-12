@@ -1,27 +1,5 @@
 use starknet::ContractAddress;
 
-/// Interface for Kliver User NFT (Soulbound)
-#[starknet::interface]
-pub trait IKliverNFT<TContractState> {
-    /// Mint NFT to a user when they login to Kliver platform (only owner)
-    fn mint_to_user(ref self: TContractState, to: ContractAddress);
-
-    /// Check if a user already has a Kliver NFT
-    fn user_has_nft(self: @TContractState, user: ContractAddress) -> bool;
-
-    /// Get total number of minted tokens
-    fn total_supply(self: @TContractState) -> u256;
-
-    /// Get the token ID owned by a user (returns 0 if no NFT)
-    fn get_user_token_id(self: @TContractState, user: ContractAddress) -> u256;
-
-    /// Get when a token was minted
-    fn get_minted_at(self: @TContractState, token_id: u256) -> u64;
-
-    /// Burn a user's NFT (only owner, for account deletion)
-    fn burn_user_nft(ref self: TContractState, user: ContractAddress);
-}
-
 /// Events for Kliver NFT
 #[derive(Drop, starknet::Event)]
 pub struct KliverUserMinted {
@@ -160,7 +138,7 @@ pub mod KliverNFT {
     }
 
     #[abi(embed_v0)]
-    impl KliverNFTImpl of super::IKliverNFT<ContractState> {
+    impl KliverNFTImpl of kliver_on_chain::interfaces::kliver_nft::IKliverNFT<ContractState> {
         fn mint_to_user(ref self: ContractState, to: ContractAddress) {
             self.ownable.assert_only_owner();
 

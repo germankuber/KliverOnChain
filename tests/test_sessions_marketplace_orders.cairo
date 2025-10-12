@@ -1,4 +1,4 @@
-use kliver_on_chain::sessions_marketplace::SessionsMarketplace::{
+use kliver_on_chain::interfaces::sessions_marketplace::{
     IMarketplaceDispatcher, IMarketplaceDispatcherTrait, ListingStatus, OrderStatus,
 };
 use kliver_on_chain::mocks::mock_erc20::MockERC20::{IERC20Dispatcher, IERC20DispatcherTrait};

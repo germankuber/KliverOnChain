@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 use starknet::ContractAddress;
+use crate::interfaces::session_escrow::ISessionEscrow;
 
 // Session structure
 #[derive(Drop, Serde, Copy, starknet::Store)]
@@ -13,30 +14,6 @@ pub struct Session {
     pub publisher: ContractAddress,
 }
 
-#[starknet::interface]
-pub trait ISessionEscrow<TContractState> {
-    /// Publish a new session
-    fn publish_session(
-        ref self: TContractState,
-        simulation_id: felt252,
-        session_id: felt252,
-        root_hash: felt252,
-        score: u128,
-        price: u128,
-    );
-
-    /// Get all sessions for a given simulation_id
-    fn get_sessions_by_simulation(self: @TContractState, simulation_id: felt252) -> Array<Session>;
-
-    /// Remove a session (only by the original publisher)
-    fn remove_session(ref self: TContractState, session_id: felt252);
-
-    /// Get a specific session by session_id
-    fn get_session(self: @TContractState, session_id: felt252) -> Session;
-
-    /// Check if a session exists
-    fn session_exists(self: @TContractState, session_id: felt252) -> bool;
-}
 
 #[starknet::contract]
 mod SessionEscrow {
@@ -92,7 +69,7 @@ mod SessionEscrow {
     }
 
     #[abi(embed_v0)]
-    impl SessionEscrowImpl of super::ISessionEscrow<ContractState> {
+    impl SessionEscrowImpl of crate::interfaces::session_escrow::ISessionEscrow<ContractState> {
         /// Publish a new session
         fn publish_session(
             ref self: ContractState,

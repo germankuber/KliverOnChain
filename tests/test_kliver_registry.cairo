@@ -5,7 +5,7 @@ use kliver_on_chain::interfaces::character_registry::{
     ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait,
 };
 use kliver_on_chain::components::character_registry_component::CharacterMetadata;
-use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+use kliver_on_chain::interfaces::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
 use kliver_on_chain::interfaces::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
 use kliver_on_chain::interfaces::scenario_registry::{
     IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait, ScenarioMetadata,

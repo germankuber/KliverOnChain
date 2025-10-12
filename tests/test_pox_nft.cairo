@@ -1,5 +1,5 @@
 use kliver_on_chain::interfaces::pox_nft::{IPoxNFTDispatcher, IPoxNFTDispatcherTrait, PoxInfo};
-use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+use kliver_on_chain::interfaces::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
 use openzeppelin::token::erc721::interface::{IERC721Dispatcher, IERC721DispatcherTrait};
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
@@ -139,8 +139,7 @@ fn test_mint_zero_author_reverts() {
 }
 
 #[test]
-#[should_panic(expected: ('User already has POX NFT',))]
-fn test_mint_twice_same_author_reverts() {
+fn test_mint_twice_same_author_ok() {
     let (dispatcher, _owner, registry, kliver, kliver_owner) = deploy_pox_nft();
     let author: ContractAddress = 'author'.try_into().unwrap();
 
@@ -153,6 +152,9 @@ fn test_mint_twice_same_author_reverts() {
     dispatcher.mint(1, 2, 3, 4, author);
     dispatcher.mint(5, 6, 7, 8, author);
     stop_cheat_caller_address(dispatcher.contract_address);
+
+    // Two tokens minted for same author; total supply 2
+    assert(dispatcher.total_supply() == 2, 'Should have two POX NFTs');
 }
 
 #[test]

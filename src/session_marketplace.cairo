@@ -2,58 +2,9 @@
 
 use starknet::ContractAddress;
 use crate::interfaces::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
+use crate::interfaces::session_marketplace::ISessionMarketplace;
 
-// Session listing status
-#[allow(starknet::store_no_default_variant)]
-#[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
-pub enum ListingStatus {
-    Available,
-    Sold,
-    Cancelled,
-}
-
-// Session listing structure
-#[derive(Drop, Serde, Copy, starknet::Store)]
-pub struct SessionListing {
-    pub session_id: felt252,
-    pub simulation_id: felt252,
-    pub root_hash: felt252,
-    pub price: u128,
-    pub seller: ContractAddress,
-    pub buyer: ContractAddress,
-    pub status: ListingStatus,
-}
-
-#[starknet::interface]
-pub trait ISessionMarketplace<TContractState> {
-    /// Publish a new session for sale
-    fn publish_session(
-        ref self: TContractState,
-        simulation_id: felt252,
-        session_id: felt252,
-        price: u128,
-    );
-
-    /// Purchase a session
-    fn purchase_session(ref self: TContractState, session_id: felt252);
-
-    /// Get all sessions for a given simulation_id
-    fn get_sessions_by_simulation(
-        self: @TContractState, simulation_id: felt252,
-    ) -> Array<SessionListing>;
-
-    /// Remove/cancel a session listing (only by the original seller before it's sold)
-    fn remove_session(ref self: TContractState, session_id: felt252);
-
-    /// Get a specific session by session_id
-    fn get_session(self: @TContractState, session_id: felt252) -> SessionListing;
-
-    /// Check if a session exists and is available
-    fn session_exists(self: @TContractState, session_id: felt252) -> bool;
-
-    /// Check if a session is available for purchase
-    fn is_available(self: @TContractState, session_id: felt252) -> bool;
-}
+use crate::interfaces::session_marketplace::{ListingStatus, SessionListing};
 
 #[starknet::contract]
 mod SessionMarketplace {
@@ -123,7 +74,7 @@ mod SessionMarketplace {
     }
 
     #[abi(embed_v0)]
-    impl SessionMarketplaceImpl of super::ISessionMarketplace<ContractState> {
+    impl SessionMarketplaceImpl of crate::interfaces::session_marketplace::ISessionMarketplace<ContractState> {
         /// Publish a new session for sale
         fn publish_session(
             ref self: ContractState,

@@ -6,21 +6,7 @@ use crate::interfaces::session_registry::ISessionRegistry;
 use crate::interfaces::simulation_registry::ISimulationRegistry;
 use crate::types::VerificationResult;
 
-/// Verifier Interface for proof verification
-#[starknet::interface]
-pub trait IVerifier<TContractState> {
-    fn verify_ultra_starknet_honk_proof(
-        self: @TContractState, full_proof_with_hints: Span<felt252>,
-    ) -> Option<Span<u256>>;
-}
-
-/// Token Core Interface for simulation registration
-#[starknet::interface]
-pub trait ITokenCore<TContractState> {
-    fn register_simulation(
-        ref self: TContractState, simulation_id: felt252, token_id: u256, expiration_timestamp: u64,
-    ) -> felt252;
-}
+// Interfaces moved to src/interfaces/
 
 /// Kliver Registry Contract
 //
@@ -42,13 +28,15 @@ pub mod kliver_registry {
     };
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_caller_address};
-    use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+    use crate::interfaces::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
     use crate::interfaces::pox_nft::IPoxNFTDispatcherTrait;
     use super::{
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
-        ISimulationRegistry, ITokenCoreDispatcher, ITokenCoreDispatcherTrait, IVerifierDispatcher,
-        IVerifierDispatcherTrait, VerificationResult,
+        ISimulationRegistry, VerificationResult,
     };
+    use kliver_on_chain::interfaces::kliver_tokens_core_interface::{IKliverTokensCoreDispatcher, IKliverTokensCoreDispatcherTrait};
+    use kliver_on_chain::interfaces::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
+    use openzeppelin::token::erc721::interface::{IERC721Dispatcher, IERC721DispatcherTrait};
 
     component!(
         path: CharacterRegistryComponent,
@@ -336,10 +324,8 @@ pub mod kliver_registry {
 
             // Call token core to register the simulation
             let token_core_address = self.tokens_core_address.read();
-            let token_core_dispatcher = ITokenCoreDispatcher {
-                contract_address: token_core_address,
-            };
-            token_core_dispatcher
+            let token_core = kliver_on_chain::interfaces::kliver_tokens_core_interface::IKliverTokensCoreDispatcher { contract_address: token_core_address };
+            token_core
                 .register_simulation(
                     metadata.simulation_id, metadata.token_id, metadata.expiration_timestamp,
                 );
@@ -422,23 +408,19 @@ pub mod kliver_registry {
                 metadata.author,
             );
 
-            // Keep component storage for compatibility
-            self
-                .session_registry
-                .register_session(
-                    metadata.session_id,
-                    metadata.root_hash,
-                    metadata.simulation_id,
-                    metadata.author,
-                    metadata.score,
-                );
+            // No longer store session data in registry storage
         }
 
         fn verify_session(
             self: @ContractState, session_id: felt252, root_hash: felt252,
         ) -> VerificationResult {
-            // Delegate to component
-            self.session_registry.verify_session(session_id, root_hash)
+            // Get session root from PoxNFT by session_id
+            let pox_addr = self.pox_nft_address.read();
+            let pox = kliver_on_chain::interfaces::pox_nft::IPoxNFTDispatcher { contract_address: pox_addr };
+            let token_id = pox.get_token_id_by_session(session_id);
+            if token_id == 0 { return VerificationResult::NotFound; }
+            let info = pox.get_pox_info(token_id);
+            if info.root_hash == root_hash { VerificationResult::Match } else { VerificationResult::Mismatch }
         }
 
         fn verify_complete_session(
@@ -460,8 +442,15 @@ pub mod kliver_registry {
         }
 
         fn get_session_info(self: @ContractState, session_id: felt252) -> SessionMetadata {
-            // Delegate to component
-            self.session_registry.get_session_info(session_id)
+            // Build session metadata from PoxNFT data
+            let pox_addr = self.pox_nft_address.read();
+            let pox = kliver_on_chain::interfaces::pox_nft::IPoxNFTDispatcher { contract_address: pox_addr };
+            let token_id = pox.get_token_id_by_session(session_id);
+            assert(token_id != 0, Errors::SESSION_NOT_FOUND);
+            let info = pox.get_pox_info(token_id);
+            let erc721 = IERC721Dispatcher { contract_address: pox_addr };
+            let owner = erc721.owner_of(token_id);
+            SessionMetadata { session_id, root_hash: info.root_hash, simulation_id: info.simulation_id, author: owner, score: info.score }
         }
 
         // ---- Opcional: access list (trazabilidad de ventas) ----
@@ -473,8 +462,11 @@ pub mod kliver_registry {
             assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
             assert(!addr.is_zero(), Errors::GRANTEE_CANNOT_BE_ZERO);
 
-            // Verify session exists using component
-            assert(self.session_registry.session_exists(session_id), Errors::SESSION_NOT_FOUND);
+            // Verify session exists using PoxNFT mapping
+            let pox_addr = self.pox_nft_address.read();
+            let pox = kliver_on_chain::interfaces::pox_nft::IPoxNFTDispatcher { contract_address: pox_addr };
+            let token_id = pox.get_token_id_by_session(session_id);
+            assert(token_id != 0, Errors::SESSION_NOT_FOUND);
 
             // Delegate to component
             let caller = get_caller_address();

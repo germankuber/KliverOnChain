@@ -35,5 +35,7 @@ pub trait IPoxNFT<TContractState> {
 
     // Read info stored for a token
     fn get_pox_info(self: @TContractState, token_id: u256) -> PoxInfo;
-}
 
+    // Mapping helpers
+    fn get_token_id_by_session(self: @TContractState, session_id: felt252) -> u256;
+}

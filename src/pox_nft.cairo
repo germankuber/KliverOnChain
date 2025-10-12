@@ -26,7 +26,7 @@ pub mod PoxNFT {
         StoragePointerWriteAccess,
     };
     use starknet::{ClassHash, ContractAddress, get_caller_address};
-    use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+    use kliver_on_chain::interfaces::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
     use kliver_on_chain::interfaces::pox_nft::PoxInfo;
 
     component!(path: ERC721Component, storage: erc721, event: ERC721Event);
@@ -63,6 +63,7 @@ pub mod PoxNFT {
         total_supply: u256,
         user_to_token: Map<ContractAddress, u256>,
         pox_info: Map<u256, PoxInfo>,
+        session_to_token: Map<felt252, u256>,
     }
 
     #[event]
@@ -86,6 +87,7 @@ pub mod PoxNFT {
         pub const NON_TRANSFERABLE: felt252 = 'POX NFT is non-transferable';
         pub const TOKEN_NOT_FOUND: felt252 = 'Token not found';
         pub const NO_KLIVER_NFT: felt252 = 'Author has no Kliver NFT';
+        pub const SESSION_ALREADY_REGISTERED: felt252 = 'Session already registered';
     }
 
     #[constructor]
@@ -186,9 +188,11 @@ pub mod PoxNFT {
             // Validate author
             assert(author.is_non_zero(), Errors::INVALID_ADDRESS);
 
-            // Ensure single NFT per author
-            let existing = self.user_to_token.read(author);
-            assert(existing.is_zero(), Errors::ALREADY_HAS_NFT);
+            // Ensure session is not already registered
+            let existing = self.session_to_token.read(session_id);
+            assert(existing == 0, Errors::SESSION_ALREADY_REGISTERED);
+
+            // Allow multiple per author; keep last token mapping
 
             // Validate the author owns a Kliver NFT
             assert_author_has_kliver(@self, author);
@@ -205,6 +209,7 @@ pub mod PoxNFT {
             self
                 .pox_info
                 .write(token_id, PoxInfo { session_id, root_hash, simulation_id, score });
+            self.session_to_token.write(session_id, token_id);
 
             // Update supply
             self.total_supply.write(token_id);
@@ -229,6 +234,10 @@ pub mod PoxNFT {
             let owner = self.erc721.ERC721_owners.read(token_id);
             assert(owner.is_non_zero(), Errors::TOKEN_NOT_FOUND);
             self.pox_info.read(token_id)
+        }
+
+        fn get_token_id_by_session(self: @ContractState, session_id: felt252) -> u256 {
+            self.session_to_token.read(session_id)
         }
     }
 }

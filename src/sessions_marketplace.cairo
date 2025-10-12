@@ -18,27 +18,7 @@ pub mod SessionsMarketplace {
 
     // use dispatcher imported at module level
 
-    // Estados posibles de un listing
-    #[allow(starknet::store_no_default_variant)]
-    #[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
-    pub enum ListingStatus {
-        Open,
-        Purchased,
-        Sold,
-        Cancelled,
-    }
-
-    // Estructura de un listing
-    #[derive(Drop, Serde, Copy, starknet::Store)]
-    pub struct Listing {
-        session_id: felt252,
-        root: felt252,
-        seller: ContractAddress,
-        buyer: ContractAddress,
-        status: ListingStatus,
-        challenge: felt252,
-        price: u256,
-    }
+    use kliver_on_chain::interfaces::sessions_marketplace::{Listing, ListingStatus, Order, OrderStatus};
 
     #[storage]
     struct Storage {
@@ -138,24 +118,7 @@ pub mod SessionsMarketplace {
         settled_at: u64,
     }
 
-    // Estados de una orden
-    #[allow(starknet::store_no_default_variant)]
-    #[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
-    pub enum OrderStatus {
-        Open,
-        Sold,
-        Refunded,
-    }
-
-    // Estructura de una orden de compra (por buyer)
-    #[derive(Drop, Serde, Copy, starknet::Store)]
-    pub struct Order {
-        session_id: felt252,
-        buyer: ContractAddress,
-        challenge: felt252,
-        amount: u256,
-        status: OrderStatus,
-    }
+    // Order types moved to interfaces
 
     #[constructor]
     fn constructor(
@@ -175,7 +138,7 @@ pub mod SessionsMarketplace {
     }
 
     #[abi(embed_v0)]
-    impl MarketplaceImpl of IMarketplace<ContractState> {
+    impl MarketplaceImpl of kliver_on_chain::interfaces::sessions_marketplace::IMarketplace<ContractState> {
         fn get_payment_token(self: @ContractState) -> ContractAddress { self.payment_token.read() }
         fn get_purchase_timeout(self: @ContractState) -> u64 { self.purchase_timeout.read() }
         // ============ SELLER FUNCTIONS ============
@@ -420,40 +383,5 @@ pub mod SessionsMarketplace {
         }
     }
 
-    #[starknet::interface]
-    pub trait IMarketplace<TContractState> {
-        // Seller functions
-        fn create_listing(ref self: TContractState, session_id: felt252, price: u256) -> u256;
-        fn cancel_listing(ref self: TContractState, listing_id: u256);
-
-        // Buyer functions
-        fn open_purchase(
-            ref self: TContractState, listing_id: u256, challenge: felt252, amount: u256
-        );
-        fn refund_purchase(ref self: TContractState, listing_id: u256);
-
-        // Proof submission
-        fn settle_purchase(
-            ref self: TContractState,
-            listing_id: u256,
-            buyer: ContractAddress,
-            challenge_key: u64,
-            proof: Span<felt252>,
-        );
-
-        // View functions
-        fn get_listing(self: @TContractState, listing_id: u256) -> Listing;
-        fn get_listing_status(self: @TContractState, listing_id: u256) -> ListingStatus;
-        fn get_listing_count(self: @TContractState) -> u256;
-        fn get_registry_address(self: @TContractState) -> ContractAddress;
-        fn get_listing_by_session(self: @TContractState, session_id: felt252) -> u256;
-        // Config getters
-        fn get_payment_token(self: @TContractState) -> ContractAddress;
-        fn get_purchase_timeout(self: @TContractState) -> u64;
-        // Consultas de orden
-        fn is_order_closed(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> bool;
-        fn get_order(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> Order;
-        fn get_order_status(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> OrderStatus;
-        fn get_order_info(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> (felt252, u256);
-    }
+    use kliver_on_chain::interfaces::sessions_marketplace::IMarketplace;
 }

@@ -1,5 +1,5 @@
 // Import NFT interface
-use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+use kliver_on_chain::interfaces::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
 use openzeppelin::token::erc721::interface::{IERC721Dispatcher, IERC721DispatcherTrait};
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_block_timestamp_global,

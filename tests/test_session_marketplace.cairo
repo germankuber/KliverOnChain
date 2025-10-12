@@ -1,4 +1,4 @@
-use kliver_on_chain::session_marketplace::{
+use kliver_on_chain::interfaces::session_marketplace::{
     ISessionMarketplaceDispatcher, ISessionMarketplaceDispatcherTrait, ListingStatus,
 };
 use kliver_on_chain::interfaces::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};

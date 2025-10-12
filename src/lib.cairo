@@ -33,6 +33,11 @@ pub mod interfaces {
     pub mod simulation_registry;
     pub mod owner_registry;
     pub mod kliver_tokens_core_interface;
+    pub mod kliver_nft;
+    pub mod session_marketplace;
+    pub mod sessions_marketplace;
+    pub mod session_escrow;
+    pub mod verifier;
 }
 pub mod mocks {
     pub mod mock_erc20;
