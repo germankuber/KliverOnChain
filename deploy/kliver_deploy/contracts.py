@@ -190,3 +190,54 @@ CONTRACTS.update({
     "session_marketplace": SessionMarketplace,
     "sessions_marketplace": SessionsMarketplace,
 })
+
+
+class PoxNFT(BaseContract):
+    """POX NFT contract (non-transferable ERC721)."""
+
+    def __init__(self):
+        super().__init__("PoxNFT", "PoxNFT")
+
+    def get_constructor_calldata(
+        self,
+        owner_address: str,
+        base_uri: str = "",
+        registry_address: str = None,
+        kliver_nft_address: str = None,
+        **kwargs,
+    ) -> List[str]:
+        if base_uri:
+            print(f"{Colors.INFO}📋 Using base URI: {base_uri}{Colors.RESET}")
+            base_uri_calldata = StarknetUtils.string_to_bytearray_calldata(base_uri)
+        else:
+            print(f"{Colors.WARNING}⚠️  No base_uri provided, using empty ByteArray{Colors.RESET}")
+            base_uri_calldata = ["0", "0", "0"]
+
+        print(f"{Colors.INFO}📋 Using Registry: {registry_address}{Colors.RESET}")
+        print(f"{Colors.INFO}📋 Using KliverNFT: {kliver_nft_address}{Colors.RESET}")
+
+        return [owner_address] + base_uri_calldata + [registry_address, kliver_nft_address]
+
+    def validate_dependencies(self, registry_address: str = None, kliver_nft_address: str = None, **kwargs) -> bool:
+        ok = True
+        if not registry_address:
+            print(f"{Colors.ERROR}✗ Registry address is required for PoxNFT deployment{Colors.RESET}")
+            ok = False
+        if not kliver_nft_address:
+            print(f"{Colors.ERROR}✗ KliverNFT address is required for PoxNFT deployment{Colors.RESET}")
+            ok = False
+        return ok
+
+    def get_dependency_info(self, registry_address: str = None, kliver_nft_address: str = None, **kwargs) -> List[str]:
+        deps = []
+        if registry_address:
+            deps.append(f"Registry: {registry_address}")
+        if kliver_nft_address:
+            deps.append(f"KliverNFT: {kliver_nft_address}")
+        return deps
+
+
+# Register POX NFT in factory
+CONTRACTS.update({
+    "pox_nft": PoxNFT,
+})

@@ -132,8 +132,8 @@ pub mod PoxNFT {
         registry: ContractAddress,
         kliver_nft: ContractAddress,
     ) {
-        let name = "POX NFT";
-        let symbol = "POX";
+        let name = "Kliver Pox NFT";
+        let symbol = "Pox";
         self.erc721.initializer(name, symbol, base_uri);
         self.ownable.initializer(owner);
         assert(registry.is_non_zero(), Errors::INVALID_ADDRESS);
@@ -179,6 +179,13 @@ pub mod PoxNFT {
         assert(caller == registry, Errors::ONLY_REGISTRY);
     }
 
+    fn assert_author_has_kliver(self: @ContractState, author: ContractAddress) {
+        let kliver_addr = self.kliver_nft.read();
+        let kliver = IKliverNFTDispatcher { contract_address: kliver_addr };
+        let has = kliver.user_has_nft(author);
+        assert(has, Errors::NO_KLIVER_NFT);
+    }
+
     #[abi(embed_v0)]
     impl PoxNFTImpl of super::IPoxNFT<ContractState> {
         fn get_registry(self: @ContractState) -> ContractAddress {
@@ -220,10 +227,7 @@ pub mod PoxNFT {
             assert(existing.is_zero(), Errors::ALREADY_HAS_NFT);
 
             // Validate the author owns a Kliver NFT
-            let kliver_addr = self.kliver_nft.read();
-            let kliver = IKliverNFTDispatcher { contract_address: kliver_addr };
-            let has = kliver.user_has_nft(author);
-            assert(has, Errors::NO_KLIVER_NFT);
+            assert_author_has_kliver(@self, author);
 
             // Next token id (start at 1)
             let current_supply = self.total_supply.read();

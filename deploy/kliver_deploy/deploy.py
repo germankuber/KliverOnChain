@@ -16,7 +16,7 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.option('--environment', '-e', required=True, 
               help='Environment to deploy to: dev, qa, or prod')
 @click.option('--contract', '-c', default='registry',
-              help='Contract to deploy: registry, nft, kliver_tokens_core, or all')
+              help='Contract to deploy: registry, nft, kliver_tokens_core, pox_nft, or all')
 @click.option('--owner', '-o', 
               help='Owner address for the contract (uses account address if not specified)')
 @click.option('--nft-address', '-n',
@@ -26,7 +26,9 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.option('--verifier-address',
               help='Verifier contract address (optional for Registry, uses 0x0 if not provided)')
 @click.option('--registry-address',
-              help='Registry contract address (required for session_marketplace, sessions_marketplace if deploying separately)')
+              help='Registry contract address (required for pox_nft, session_marketplace, sessions_marketplace if deploying separately)')
+@click.option('--kliver-nft-address',
+              help='KliverNFT contract address (required for pox_nft if deploying separately)')
 @click.option('--payment-token-address',
               help='Payment ERC20 address (required for sessions_marketplace)')
 @click.option('--purchase-timeout', type=int,
@@ -39,7 +41,7 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
               help='Output deployment addresses in JSON format')
 def deploy(environment: str, contract: str, owner: Optional[str],
            nft_address: Optional[str], tokens_core_address: Optional[str], verifier_address: Optional[str],
-           registry_address: Optional[str], payment_token_address: Optional[str], purchase_timeout: Optional[int],
+           registry_address: Optional[str], kliver_nft_address: Optional[str], payment_token_address: Optional[str], purchase_timeout: Optional[int],
            verbose: bool, no_compile: bool, output_json: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration.
@@ -52,7 +54,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
     
     DEPLOYMENT MODES:
 
-    1. Deploy Everything (NFT → Token1155 → Registry → Configure Token1155):
+    1. Deploy Everything (NFT → Token1155 → Registry → Configure Token1155 → PoxNFT):
         python deploy.py --environment dev --contract all
 
     2. Deploy Individual Contracts:
@@ -64,6 +66,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         - NFT: No dependencies
         - Token1155: No dependencies (configured with Registry address after deployment)
         - Registry: Requires NFT address and Tokens Core address
+        - PoxNFT: Requires Registry address and KliverNFT address
     
     Example usage:
         python deploy.py --environment dev --contract all
@@ -109,6 +112,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
                 nft_address, tokens_core_address, registry_address, verifier_address,
                 deployments=deployments, no_compile=no_compile,
                 payment_token_address=payment_token_address, purchase_timeout=purchase_timeout,
+                kliver_nft_address=kliver_nft_address,
             )
         
         # Show final summary
@@ -206,12 +210,27 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                          payment_token_address: Optional[str] = None, purchase_timeout: Optional[int] = None) -> bool:
     """Deploy all contracts in the correct order."""
     click.echo(f"\n{Colors.BOLD}🚀 COMPLETE DEPLOYMENT MODE{Colors.RESET}")
-    click.echo(f"{Colors.INFO}This will deploy: NFT → Token1155 → Registry (+ optional Marketplaces){Colors.RESET}\n")
+    click.echo(f"{Colors.INFO}This will deploy: NFT → Token1155 → Registry → PoxNFT (+ optional Marketplaces){Colors.RESET}\n")
 
+    # Determine total steps dynamically
+    try:
+        env_contracts = config_manager.load_config()["environments"][environment]["contracts"]
+    except Exception:
+        env_contracts = {}
+
+    total_steps = 4  # NFT, Token1155, Registry, Configure Token1155
+    if 'pox_nft' in env_contracts:
+        total_steps += 1
+    if 'session_marketplace' in env_contracts:
+        total_steps += 1
+    if 'sessions_marketplace' in env_contracts:
+        total_steps += 1
+
+    step_idx = 1
     deployed_addresses = {}
 
-    # Step 1: Deploy NFT
-    click.echo(f"{Colors.BOLD}Step 1/3: Deploying NFT Contract{Colors.RESET}")
+    # Step: Deploy NFT
+    click.echo(f"{Colors.BOLD}Step {step_idx}/{total_steps}: Deploying NFT Contract{Colors.RESET}")
     nft_deployer = ContractDeployer(environment, 'nft', config_manager)
 
     # Get base_uri from config
@@ -226,8 +245,9 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.ERROR}✗ NFT deployment failed. Aborting.{Colors.RESET}")
         return False
 
-    # Step 2: Deploy Token1155
-    click.echo(f"{Colors.BOLD}Step 2/3: Deploying Token1155 Contract{Colors.RESET}")
+    step_idx += 1
+    # Step: Deploy Token1155
+    click.echo(f"{Colors.BOLD}Step {step_idx}/{total_steps}: Deploying Token1155 Contract{Colors.RESET}")
     token_deployer = ContractDeployer(environment, 'kliver_tokens_core', config_manager)
 
     # Get base_uri from config
@@ -242,8 +262,9 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.ERROR}✗ Token1155 deployment failed. Aborting.{Colors.RESET}")
         return False
 
-    # Step 3: Deploy Registry
-    click.echo(f"{Colors.BOLD}Step 3/4: Deploying Registry Contract{Colors.RESET}")
+    step_idx += 1
+    # Step: Deploy Registry
+    click.echo(f"{Colors.BOLD}Step {step_idx}/{total_steps}: Deploying Registry Contract{Colors.RESET}")
     registry_deployer = ContractDeployer(environment, 'registry', config_manager)
 
     # Get verifier_address from config if not provided
@@ -267,8 +288,9 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.ERROR}✗ Registry deployment failed. Aborting.{Colors.RESET}")
         return False
 
-    # Step 4: Configure Token1155 with Registry address
-    click.echo(f"{Colors.BOLD}Step 4/4: Configuring Token1155 with Registry address{Colors.RESET}")
+    step_idx += 1
+    # Step: Configure Token1155 with Registry address
+    click.echo(f"{Colors.BOLD}Step {step_idx}/{total_steps}: Configuring Token1155 with Registry address{Colors.RESET}")
     click.echo(f"{Colors.INFO}Setting registry address on Token1155 contract...{Colors.RESET}")
 
     # Call set_registry_address on the Token1155 contract
@@ -287,15 +309,29 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
 
         click.echo(f"\n{Colors.SUCCESS}✓ Token1155 configured with Registry address{Colors.RESET}\n")
 
-        # Optionally deploy marketplaces if configured
-        # SessionMarketplace (simple)
-        try:
-            env_contracts = config_manager.load_config()["environments"][environment]["contracts"]
-        except Exception:
-            env_contracts = {}
+        # Optionally deploy additional contracts if configured
+        # Deploy PoxNFT if present in config
+        if 'pox_nft' in env_contracts:
+            click.echo(f"\n{Colors.BOLD}Step {step_idx + 1}/{total_steps}: Deploying PoxNFT Contract{Colors.RESET}")
+            pox_conf = config_manager.get_contract_config(environment, 'pox_nft')
+            pox_deployer = ContractDeployer(environment, 'pox_nft', config_manager)
+            pox_result = pox_deployer.deploy_full_flow(
+                owner,
+                no_compile=no_compile,
+                base_uri=pox_conf.base_uri or "",
+                registry_address=deployed_addresses['registry'],
+                kliver_nft_address=deployed_addresses['nft'],
+            )
+            if pox_result:
+                deployments.append(pox_result)
+                deployed_addresses['pox_nft'] = pox_result['contract_address']
+                click.echo(f"{Colors.SUCCESS}✓ PoxNFT deployed at: {pox_result['contract_address']}{Colors.RESET}")
+            else:
+                click.echo(f"{Colors.ERROR}✗ PoxNFT deployment failed (skipping).{Colors.RESET}")
+            step_idx += 1
 
         if 'session_marketplace' in env_contracts:
-            click.echo(f"\n{Colors.BOLD}Step 5: Deploying SessionMarketplace (simple){Colors.RESET}")
+            click.echo(f"\n{Colors.BOLD}Step {step_idx}/{total_steps}: Deploying SessionMarketplace (simple){Colors.RESET}")
             sm_deployer = ContractDeployer(environment, 'session_marketplace', config_manager)
             sm_result = sm_deployer.deploy_full_flow(owner, no_compile=no_compile,
                                                      registry_address=deployed_addresses['registry'])
@@ -305,9 +341,10 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                 click.echo(f"{Colors.SUCCESS}✓ SessionMarketplace deployed at: {sm_result['contract_address']}{Colors.RESET}")
             else:
                 click.echo(f"{Colors.ERROR}✗ SessionMarketplace deployment failed (skipping).{Colors.RESET}")
+            step_idx += 1
 
         if 'sessions_marketplace' in env_contracts:
-            click.echo(f"\n{Colors.BOLD}Step 6: Deploying SessionsMarketplace (advanced){Colors.RESET}")
+            click.echo(f"\n{Colors.BOLD}Step {step_idx}/{total_steps}: Deploying SessionsMarketplace (advanced){Colors.RESET}")
             adv_conf = config_manager.get_contract_config(environment, 'sessions_marketplace')
             adv_deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
             # Resolve payment token and timeout
@@ -338,7 +375,8 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
                           nft_address: Optional[str], tokens_core_address: Optional[str],
                           registry_address: Optional[str], verifier_address: Optional[str],
                           deployments: List[Dict[str, Any]], no_compile: bool = False,
-                          payment_token_address: Optional[str] = None, purchase_timeout: Optional[int] = None) -> bool:
+                          payment_token_address: Optional[str] = None, purchase_timeout: Optional[int] = None,
+                          kliver_nft_address: Optional[str] = None) -> bool:
     """Deploy a single contract."""
     
     deployer = ContractDeployer(environment, contract, config_manager)
@@ -377,6 +415,23 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.BOLD}🎯 TOKEN1155-ONLY DEPLOYMENT{Colors.RESET}\n")
         contract_config = config_manager.get_contract_config(environment, contract)
         deploy_kwargs['base_uri'] = contract_config.base_uri
+    elif contract == 'pox_nft':
+        click.echo(f"\n{Colors.BOLD}🎯 POX NFT DEPLOYMENT{Colors.RESET}\n")
+        if not registry_address:
+            click.echo(f"{Colors.ERROR}❌ Registry address is required --registry-address 0x...{Colors.RESET}")
+            return False
+        if not kliver_nft_address:
+            if nft_address:
+                kliver_nft_address = nft_address
+            else:
+                click.echo(f"{Colors.ERROR}❌ KliverNFT address is required --kliver-nft-address 0x... (or --nft-address){Colors.RESET}")
+                return False
+        contract_config = config_manager.get_contract_config(environment, contract)
+        deploy_kwargs.update({
+            'base_uri': contract_config.base_uri,
+            'registry_address': registry_address,
+            'kliver_nft_address': kliver_nft_address,
+        })
     elif contract == 'session_marketplace':
         click.echo(f"\n{Colors.BOLD}🎯 SESSION MARKETPLACE DEPLOYMENT{Colors.RESET}\n")
         if not registry_address:

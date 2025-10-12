@@ -239,7 +239,8 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
         "Nft": "",
         "Registry": "",
         "TokensCore": "",
-        "MarketPlace": ""
+        "MarketPlace": "",
+        "Pox": "",
     }
     
     for deployment in deployments:
@@ -254,6 +255,8 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
             json_output['TokensCore'] = contract_address
         elif contract_name in ('sessionmarketplace', 'sessionsmarketplace'):
             json_output['MarketPlace'] = contract_address
+        elif contract_name in ('poxnft', 'pox_nft'):
+            json_output['Pox'] = contract_address
 
     
     # Print the JSON output

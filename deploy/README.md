@@ -52,6 +52,10 @@ poetry run python -m kliver_deploy.deploy --environment dev --contract kliver_to
 
 # Deploy Registry (requires NFT address)
 poetry run python -m kliver_deploy.deploy --environment dev --contract registry --nft-address 0x123...
+
+# Deploy PoxNFT (requires Registry + KliverNFT addresses)
+poetry run python -m kliver_deploy.deploy --environment dev --contract pox_nft \
+  --registry-address 0xREG... --kliver-nft-address 0xNFT...
 ```
 
 ### Alternative Script Usage
@@ -61,6 +65,9 @@ poetry run python kliver_deploy/deploy.py --environment dev --contract all
 
 # Using the convenience script
 poetry run kliver-deploy --environment dev --contract all
+
+# Output JSON with addresses
+poetry run python -m kliver_deploy.deploy --environment dev --contract all --output-json
 ```
 
 ## 🔧 Configuration
@@ -93,8 +100,11 @@ environments:
 ## 🔍 Deployment Order (--contract all)
 
 1. **KliverNFT** → Base ERC721 contract
-2. **KliverRegistry** → Uses NFT for validation
-3. **KliverNFT1155** → ERC1155 token contract
+2. **KliverTokensCore (ERC1155)** → Token engine
+3. **KliverRegistry** → Uses NFT + Tokens Core
+4. **Configure TokensCore** → Set Registry address
+5. **PoxNFT** (optional by config) → Non-transferable NFT linked to KliverNFT + Registry
+6. **SessionMarketplace / SessionsMarketplace** (optional by config)
 
 ## 🧪 Development
 
