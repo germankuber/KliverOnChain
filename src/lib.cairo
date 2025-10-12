@@ -16,6 +16,7 @@ pub mod components {
 pub mod character_registry;
 // NFT modules
 pub mod kliver_nft;
+pub mod pox_nft;
 
 // Main contract module
 pub mod kliver_registry;
