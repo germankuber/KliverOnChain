@@ -1,9 +1,9 @@
 // Import interfaces from separate modules
-use crate::character_registry::ICharacterRegistry;
-use crate::owner_registry::IOwnerRegistry;
-use crate::scenario_registry::IScenarioRegistry;
-use crate::session_registry::ISessionRegistry;
-use crate::simulation_registry::ISimulationRegistry;
+use crate::interfaces::character_registry::ICharacterRegistry;
+use crate::interfaces::owner_registry::IOwnerRegistry;
+use crate::interfaces::scenario_registry::IScenarioRegistry;
+use crate::interfaces::session_registry::ISessionRegistry;
+use crate::interfaces::simulation_registry::ISimulationRegistry;
 use crate::types::VerificationResult;
 
 /// Verifier Interface for proof verification
@@ -43,6 +43,7 @@ pub mod kliver_registry {
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_caller_address};
     use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+    use crate::interfaces::pox_nft::IPoxNFTDispatcherTrait;
     use super::{
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
         ISimulationRegistry, ITokenCoreDispatcher, ITokenCoreDispatcherTrait, IVerifierDispatcher,
@@ -99,6 +100,7 @@ pub mod kliver_registry {
         nft_address: ContractAddress,
         tokens_core_address: ContractAddress,
         verifier_address: ContractAddress,
+        pox_nft_address: ContractAddress,
     }
 
     pub mod Errors {
@@ -133,6 +135,8 @@ pub mod kliver_registry {
         self.nft_address.write(nft_address);
         self.tokens_core_address.write(tokens_core_address);
         self.verifier_address.write(verifier_address);
+        let zero_addr: ContractAddress = 0.try_into().unwrap();
+        self.pox_nft_address.write(zero_addr);
         self.paused.write(false);
     }
 
@@ -406,7 +410,19 @@ pub mod kliver_registry {
                 Errors::SESSION_ALREADY_REGISTERED,
             );
 
-            // Delegate to component
+            // Mint POX NFT to the author with session data
+            let pox_addr = self.pox_nft_address.read();
+            assert(!pox_addr.is_zero(), 'POX NFT address not set');
+            let pox = kliver_on_chain::interfaces::pox_nft::IPoxNFTDispatcher { contract_address: pox_addr };
+            pox.mint(
+                metadata.session_id,
+                metadata.root_hash,
+                metadata.simulation_id,
+                metadata.score,
+                metadata.author,
+            );
+
+            // Keep component storage for compatibility
             self
                 .session_registry
                 .register_session(
@@ -490,6 +506,10 @@ pub mod kliver_registry {
             self.tokens_core_address.read()
         }
 
+        fn get_pox_nft_address(self: @ContractState) -> ContractAddress {
+            self.pox_nft_address.read()
+        }
+
         fn transfer_ownership(ref self: ContractState, new_owner: ContractAddress) {
             self._assert_only_owner();
             assert(!new_owner.is_zero(), 'New owner cannot be zero');
@@ -508,6 +528,12 @@ pub mod kliver_registry {
 
         fn is_paused(self: @ContractState) -> bool {
             self.paused.read()
+        }
+
+        fn set_pox_nft_address(ref self: ContractState, pox_nft: ContractAddress) {
+            self._assert_only_owner();
+            assert(!pox_nft.is_zero(), 'POX NFT address cannot be zero');
+            self.pox_nft_address.write(pox_nft);
         }
     }
 

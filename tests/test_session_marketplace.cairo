@@ -1,7 +1,7 @@
 use kliver_on_chain::session_marketplace::{
     ISessionMarketplaceDispatcher, ISessionMarketplaceDispatcherTrait, ListingStatus,
 };
-use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
+use kliver_on_chain::interfaces::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,

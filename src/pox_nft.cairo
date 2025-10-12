@@ -1,42 +1,5 @@
 use starknet::ContractAddress;
-
-// Interface for POX NFT (non-transferable, non-burnable)
-#[starknet::interface]
-pub trait IPoxNFT<TContractState> {
-    // Registry admin
-    fn get_registry(self: @TContractState) -> ContractAddress;
-    fn set_registry(ref self: TContractState, new_registry: ContractAddress);
-
-    // Linked Kliver NFT contract admin
-    fn get_kliver_nft(self: @TContractState) -> ContractAddress;
-    fn set_kliver_nft(ref self: TContractState, new_kliver_nft: ContractAddress);
-
-    // Minting (only registry)
-    fn mint(
-        ref self: TContractState,
-        session_id: felt252,
-        root_hash: felt252,
-        simulation_id: felt252,
-        score: u32,
-        author: ContractAddress,
-    );
-
-    // Convenience getters
-    fn user_has_nft(self: @TContractState, user: ContractAddress) -> bool;
-    fn get_user_token_id(self: @TContractState, user: ContractAddress) -> u256;
-    fn total_supply(self: @TContractState) -> u256;
-
-    // Read info stored for a token
-    fn get_pox_info(self: @TContractState, token_id: u256) -> PoxInfo;
-}
-
-#[derive(Copy, Drop, Serde, starknet::Store)]
-pub struct PoxInfo {
-    pub session_id: felt252,
-    pub root_hash: felt252,
-    pub simulation_id: felt252,
-    pub score: u32,
-}
+use crate::interfaces::pox_nft::{IPoxNFT, PoxInfo};
 
 #[derive(Drop, starknet::Event)]
 pub struct PoxMinted {
@@ -64,6 +27,7 @@ pub mod PoxNFT {
     };
     use starknet::{ClassHash, ContractAddress, get_caller_address};
     use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+    use kliver_on_chain::interfaces::pox_nft::PoxInfo;
 
     component!(path: ERC721Component, storage: erc721, event: ERC721Event);
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
@@ -98,7 +62,7 @@ pub mod PoxNFT {
         kliver_nft: ContractAddress,
         total_supply: u256,
         user_to_token: Map<ContractAddress, u256>,
-        pox_info: Map<u256, super::PoxInfo>,
+        pox_info: Map<u256, PoxInfo>,
     }
 
     #[event]
@@ -187,7 +151,7 @@ pub mod PoxNFT {
     }
 
     #[abi(embed_v0)]
-    impl PoxNFTImpl of super::IPoxNFT<ContractState> {
+    impl PoxNFTImpl of kliver_on_chain::interfaces::pox_nft::IPoxNFT<ContractState> {
         fn get_registry(self: @ContractState) -> ContractAddress {
             self.registry.read()
         }
@@ -240,7 +204,7 @@ pub mod PoxNFT {
             self.user_to_token.write(author, token_id);
             self
                 .pox_info
-                .write(token_id, super::PoxInfo { session_id, root_hash, simulation_id, score });
+                .write(token_id, PoxInfo { session_id, root_hash, simulation_id, score });
 
             // Update supply
             self.total_supply.write(token_id);
@@ -260,7 +224,7 @@ pub mod PoxNFT {
 
         fn total_supply(self: @ContractState) -> u256 { self.total_supply.read() }
 
-        fn get_pox_info(self: @ContractState, token_id: u256) -> super::PoxInfo {
+        fn get_pox_info(self: @ContractState, token_id: u256) -> PoxInfo {
             // Check token existence by reading raw owners mapping to avoid OZ revert
             let owner = self.erc721.ERC721_owners.read(token_id);
             assert(owner.is_non_zero(), Errors::TOKEN_NOT_FOUND);

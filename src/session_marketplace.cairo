@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 use starknet::ContractAddress;
-use crate::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
+use crate::interfaces::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
 
 // Session listing status
 #[allow(starknet::store_no_default_variant)]
@@ -63,7 +63,7 @@ mod SessionMarketplace {
     };
     use core::num::traits::Zero;
     use starknet::{ContractAddress, get_caller_address};
-    use crate::session_registry::ISessionRegistryDispatcherTrait;
+    use crate::interfaces::session_registry::ISessionRegistryDispatcherTrait;
     use super::{ListingStatus, SessionListing};
 
     #[storage]
@@ -140,7 +140,7 @@ mod SessionMarketplace {
             assert(price > 0, 'Price must be greater than 0');
 
             // Validar en el registry que la sesión existe y pertenece al caller
-            let registry = crate::session_registry::ISessionRegistryDispatcher { contract_address: self.registry.read() };
+            let registry = crate::interfaces::session_registry::ISessionRegistryDispatcher { contract_address: self.registry.read() };
             let info = registry.get_session_info(session_id);
             assert(info.root_hash != 0, 'Session not found in registry');
             assert(info.author == caller, 'Not session owner');

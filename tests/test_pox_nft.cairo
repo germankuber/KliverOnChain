@@ -1,4 +1,4 @@
-use kliver_on_chain::pox_nft::{IPoxNFTDispatcher, IPoxNFTDispatcherTrait, PoxInfo};
+use kliver_on_chain::interfaces::pox_nft::{IPoxNFTDispatcher, IPoxNFTDispatcherTrait, PoxInfo};
 use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
 use openzeppelin::token::erc721::interface::{IERC721Dispatcher, IERC721DispatcherTrait};
 use snforge_std::{

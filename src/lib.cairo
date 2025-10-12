@@ -12,8 +12,6 @@ pub mod components {
     pub mod whitelist_component;
 }
 
-// Registry interface modules - separated by functionality
-pub mod character_registry;
 // NFT modules
 pub mod kliver_nft;
 pub mod pox_nft;
@@ -21,18 +19,20 @@ pub mod pox_nft;
 // Main contract module
 pub mod kliver_registry;
 pub mod kliver_tokens_core;
-pub mod kliver_tokens_core_interface;
 pub mod kliver_tokens_core_types;
-pub mod owner_registry;
-pub mod scenario_registry;
 pub mod session_escrow;
 pub mod session_marketplace;
-pub mod session_registry;
 pub mod sessions_marketplace;
-pub mod simulation_registry;
 pub mod types;
 pub mod interfaces {
     pub mod payment_token;
+    pub mod pox_nft;
+    pub mod character_registry;
+    pub mod scenario_registry;
+    pub mod session_registry;
+    pub mod simulation_registry;
+    pub mod owner_registry;
+    pub mod kliver_tokens_core_interface;
 }
 pub mod mocks {
     pub mod mock_erc20;

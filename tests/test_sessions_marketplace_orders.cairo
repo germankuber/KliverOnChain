@@ -2,7 +2,7 @@ use kliver_on_chain::sessions_marketplace::SessionsMarketplace::{
     IMarketplaceDispatcher, IMarketplaceDispatcherTrait, ListingStatus, OrderStatus,
 };
 use kliver_on_chain::mocks::mock_erc20::MockERC20::{IERC20Dispatcher, IERC20DispatcherTrait};
-use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
+use kliver_on_chain::interfaces::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,

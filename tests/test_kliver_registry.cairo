@@ -1,19 +1,19 @@
 use core::array::ArrayTrait;
 
 // Import contract interfaces from modular structure
-use kliver_on_chain::character_registry::{
+use kliver_on_chain::interfaces::character_registry::{
     ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait,
 };
 use kliver_on_chain::components::character_registry_component::CharacterMetadata;
 use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
-use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
-use kliver_on_chain::scenario_registry::{
+use kliver_on_chain::interfaces::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
+use kliver_on_chain::interfaces::scenario_registry::{
     IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait, ScenarioMetadata,
 };
-use kliver_on_chain::session_registry::{
+use kliver_on_chain::interfaces::session_registry::{
     ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait, SessionMetadata,
 };
-use kliver_on_chain::simulation_registry::{
+use kliver_on_chain::interfaces::simulation_registry::{
     ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata,
     SimulationWithTokenMetadata,
 };
@@ -177,6 +177,24 @@ fn deploy_for_sessions() -> (
         _tokens_core_address,
     ) =
         deploy_contract_with_nft();
+
+    // Deploy POX NFT and set its address in the registry so session registration can mint
+    let pox_class = declare("PoxNFT").unwrap().contract_class();
+    let mut pox_calldata = ArrayTrait::new();
+    pox_calldata.append(owner.into());
+    // empty ByteArray for base_uri
+    pox_calldata.append(0);
+    pox_calldata.append(0);
+    pox_calldata.append(0);
+    pox_calldata.append(session_dispatcher.contract_address.into()); // registry address
+    pox_calldata.append(nft_address.into());      // kliver nft address
+    let (pox_address, _) = pox_class.deploy(@pox_calldata).unwrap();
+
+    // Set POX NFT address on registry (owner only)
+    let owner_dispatcher = IOwnerRegistryDispatcher { contract_address: session_dispatcher.contract_address };
+    start_cheat_caller_address(session_dispatcher.contract_address, owner);
+    owner_dispatcher.set_pox_nft_address(pox_address);
+    stop_cheat_caller_address(session_dispatcher.contract_address);
     (
         session_dispatcher,
         sim_dispatcher,
@@ -2020,4 +2038,3 @@ fn test_simulation_exists_zero_id() {
     let exists = dispatcher.simulation_exists(0);
     assert(!exists, 'Zero ID should not exist');
 }
-

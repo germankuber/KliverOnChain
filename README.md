@@ -13,9 +13,19 @@
 
 ## 🌟 Overview
 
-The Kliver OnChain Platform is a sophisticated blockchain infrastructure that combines **token economics**, **simulation-based mechanics**, and **content validation** into a unified ecosystem.
+Kliver OnChain combines token economics, simulation-based mechanics, and content validation.
 
-### System Architecture
+What matters now:
+- Registry mints a non-transferable PoxNFT on every `register_session` with session data (session_id, root_hash, simulation_id, score) to the author's wallet.
+- Author must hold a KliverNFT to receive a PoxNFT.
+- Interfaces are centralized under `src/interfaces/` (e.g., `IPoxNFT`).
+
+Quick start:
+- Build: `scarb build`
+- Test: `scarb test`
+- Deploy all (from `deploy/`): `poetry run python -m kliver_deploy.deploy --environment dev --contract all`
+
+### System Architecture (high-level)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐

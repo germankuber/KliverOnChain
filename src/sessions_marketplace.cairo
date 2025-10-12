@@ -12,7 +12,7 @@ pub mod SessionsMarketplace {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
-    use super::super::session_registry::{
+    use kliver_on_chain::interfaces::session_registry::{
         ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait,
     };
 
