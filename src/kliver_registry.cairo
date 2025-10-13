@@ -384,36 +384,18 @@ pub mod kliver_registry {
             // Validate that the author has an NFT
             self._assert_author_has_nft(metadata.author);
 
-            // Validate that the simulation exists using component
+            // Validate that the simulation exists - this is the main validation
             assert(
                 self.simulation_registry.simulation_exists(metadata.simulation_id),
                 Errors::SIMULATION_NOT_FOUND,
             );
 
-            // Check if session already exists
-            assert(
-                !self.session_registry.session_exists(metadata.session_id),
-                Errors::SESSION_ALREADY_REGISTERED,
-            );
-
-            // If KliverPox address is set, mint there instead of storing internally; otherwise fallback
+            // Mint NFT in KliverPox - all session data is stored there
             let kliver_pox_addr = self.kliver_pox_address.read();
-            if kliver_pox_addr.is_zero() {
-                // Backward-compatible path: store internally
-                self
-                    .session_registry
-                    .register_session(
-                        metadata.session_id,
-                        metadata.root_hash,
-                        metadata.simulation_id,
-                        metadata.author,
-                        metadata.score,
-                    );
-            } else {
-                // Mint NFT in KliverPox
-                let klive = IKliverPoxDispatcher { contract_address: kliver_pox_addr };
-                klive.mint(metadata);
-            }
+            assert(!kliver_pox_addr.is_zero(), 'KliverPox address not set');
+
+            let klive = IKliverPoxDispatcher { contract_address: kliver_pox_addr };
+            klive.mint(metadata);
         }
 
 
