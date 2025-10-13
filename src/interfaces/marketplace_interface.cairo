@@ -14,7 +14,7 @@ pub struct Listing {
     pub seller: ContractAddress,
     pub buyer: ContractAddress,
     pub status: ListingStatus,
-    pub challenge: felt252,
+    pub challenge: u64,
     pub price: u256,
 }
 
@@ -30,7 +30,7 @@ pub enum OrderStatus {
 pub struct Order {
     pub session_id: felt252,
     pub buyer: ContractAddress,
-    pub challenge: felt252,
+    pub challenge: u64,
     pub amount: u256,
     pub status: OrderStatus,
 }
@@ -43,14 +43,14 @@ pub trait IMarketplace<TContractState> {
     
     // Buyer functions
     fn open_purchase(
-        ref self: TContractState, token_id: u256, challenge: felt252, amount: u256
+        ref self: TContractState, token_id: u256, challenge: u64, amount: u256
     );
     fn refund_purchase(ref self: TContractState, token_id: u256);
     fn settle_purchase(
         ref self: TContractState,
         token_id: u256,
         buyer: ContractAddress,
-        challenge_key: u64,
+        challenge: u64,
         proof: Span<felt252>,
     );
     
@@ -72,5 +72,5 @@ pub trait IMarketplace<TContractState> {
     fn is_order_closed(self: @TContractState, token_id: u256, buyer: ContractAddress) -> bool;
     fn get_order(self: @TContractState, token_id: u256, buyer: ContractAddress) -> Order;
     fn get_order_status(self: @TContractState, token_id: u256, buyer: ContractAddress) -> OrderStatus;
-    fn get_order_info(self: @TContractState, token_id: u256, buyer: ContractAddress) -> (felt252, u256);
+    fn get_order_info(self: @TContractState, token_id: u256, buyer: ContractAddress) -> (u64, u256);
 }

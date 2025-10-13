@@ -82,7 +82,7 @@ pub mod SessionsMarketplace {
         listing_id: u256,
         #[key]
         buyer: ContractAddress,
-        challenge: felt252,
+        challenge: u64,
         amount: u256,
         opened_at: u64,
     }
@@ -134,8 +134,7 @@ pub mod SessionsMarketplace {
         buyer: ContractAddress,
         price: u256,
         public_root: felt252,
-        public_challenge: felt252,
-        challenge_key: u64,
+        challenge: u64,
         opened_at: u64,
         settled_at: u64,
     }
@@ -243,18 +242,19 @@ pub mod SessionsMarketplace {
         // ============ BUYER FUNCTIONS ============
 
         // Abrir una compra y establecer el challenge (por buyer). Admite múltiples buyers por listing.
-        fn open_purchase(ref self: ContractState, token_id: u256, challenge: felt252, amount: u256) {
+        fn open_purchase(ref self: ContractState, token_id: u256, challenge: u64, amount: u256) {
             let caller = get_caller_address();
-            
+
             // Obtener el listing activo del token
             let listing_id = self.active_listing.read(token_id);
             assert(listing_id != 0, 'No active listing');
-            
+
             let mut listing = self.listings.read(listing_id);
 
             // Validaciones
             assert(listing.status == ListingStatus::Open, 'Listing not open');
-            assert(challenge != 0, 'Invalid challenge');
+            assert(challenge >= 1000000000_u64, 'Invalid challenge');
+            assert(challenge <= 9999999999_u64, 'Invalid challenge');
             assert(caller != listing.seller, 'Seller cannot buy own listing');
             assert(amount == listing.price, 'Invalid amount');
 
@@ -298,15 +298,15 @@ pub mod SessionsMarketplace {
             ref self: ContractState,
             token_id: u256,
             buyer: ContractAddress,
-            challenge_key: u64,
+            challenge: u64,
             proof: Span<felt252>,
         ) {
             let caller = get_caller_address();
-            
+
             // Obtener el listing activo del token
             let listing_id = self.active_listing.read(token_id);
             assert(listing_id != 0, 'No active listing');
-            
+
             let mut listing = self.listings.read(listing_id);
 
             // Validaciones
@@ -318,16 +318,8 @@ pub mod SessionsMarketplace {
             // Validar orden del buyer
             let order_key = (listing_id, buyer);
             let mut order = self.orders.read(order_key);
-            let challenge = order.challenge;
-            // Ensure numeric challenge matches order.challenge
-            match order.challenge.try_into() {
-                Option::Some(expected_key) => {
-                    assert(challenge_key == expected_key, 'Challenge key mismatch');
-                },
-                Option::None => {
-                    assert(0 == 1, 'Challenge cannot fit in u64');
-                }
-            }
+            // Verify challenge matches the one in the order
+            assert(challenge == order.challenge, 'Challenge mismatch');
             assert(order.status == OrderStatus::Open, 'Order not open');
 
             // Verificar proof directamente contra el Verifier
@@ -361,8 +353,7 @@ pub mod SessionsMarketplace {
                     buyer,
                     price: listing.price,
                     public_root: session_root,
-                    public_challenge: challenge,
-                    challenge_key,
+                    challenge,
                     opened_at,
                     settled_at,
                 });
@@ -492,7 +483,7 @@ pub mod SessionsMarketplace {
             order.status
         }
 
-        fn get_order_info(self: @ContractState, token_id: u256, buyer: ContractAddress) -> (felt252, u256) {
+        fn get_order_info(self: @ContractState, token_id: u256, buyer: ContractAddress) -> (u64, u256) {
             let listing_id = self.buyer_active_order.read((token_id, buyer));
             let order = self.orders.read((listing_id, buyer));
             (order.challenge, order.amount)

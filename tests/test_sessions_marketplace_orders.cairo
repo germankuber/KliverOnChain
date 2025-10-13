@@ -262,7 +262,7 @@ fn test_open_purchase_invalid_amount() {
     start_cheat_caller_address(marketplace.contract_address, BUYER());
     let one: u256 = u256 { low: 1, high: 0 };
     let wrong_amount: u256 = price - one;
-    marketplace.open_purchase(token_id4, 'challenge', wrong_amount);
+    marketplace.open_purchase(token_id4, 4444444444_u64, wrong_amount);
 }
 
 #[test]
@@ -289,7 +289,7 @@ fn test_refund_immediate_after_close() {
     let _ok = token.approve(marketplace.contract_address, price);
     stop_cheat_caller_address(token.contract_address);
     start_cheat_caller_address(marketplace.contract_address, BUYER());
-    marketplace.open_purchase(token_id, 'challenge_refund', price);
+    marketplace.open_purchase(token_id, 5555555555_u64, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Seller closes listing

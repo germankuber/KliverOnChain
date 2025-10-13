@@ -26,7 +26,9 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.option('--verifier-address',
               help='Verifier contract address (optional for Registry, uses 0x0 if not provided)')
 @click.option('--registry-address',
-              help='Registry contract address (required for session_marketplace, sessions_marketplace if deploying separately)')
+              help='Registry contract address (required for session_marketplace if deploying separately)')
+@click.option('--pox-address',
+              help='KliverPox contract address (required for sessions_marketplace if deploying separately)')
 @click.option('--payment-token-address',
               help='Payment ERC20 address (required for sessions_marketplace)')
 @click.option('--purchase-timeout', type=int,
@@ -39,7 +41,7 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
               help='Output deployment addresses in JSON format')
 def deploy(environment: str, contract: str, owner: Optional[str],
            nft_address: Optional[str], token_simulation_address: Optional[str], verifier_address: Optional[str],
-           registry_address: Optional[str], payment_token_address: Optional[str], purchase_timeout: Optional[int],
+           registry_address: Optional[str], pox_address: Optional[str], payment_token_address: Optional[str], purchase_timeout: Optional[int],
            verbose: bool, no_compile: bool, output_json: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration.
@@ -107,7 +109,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         else:
             success = deploy_single_contract(
                 config_manager, environment, contract, owner,
-                nft_address, token_simulation_address, registry_address, verifier_address,
+                nft_address, token_simulation_address, registry_address, pox_address, verifier_address,
                 deployments=deployments, no_compile=no_compile,
                 payment_token_address=payment_token_address, purchase_timeout=purchase_timeout,
             )
@@ -457,7 +459,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
 def deploy_single_contract(config_manager: ConfigManager, environment: str,
                           contract: str, owner: Optional[str],
                           nft_address: Optional[str], token_simulation_address: Optional[str],
-                          registry_address: Optional[str], verifier_address: Optional[str],
+                          registry_address: Optional[str], pox_address: Optional[str], verifier_address: Optional[str],
                           deployments: List[Dict[str, Any]], no_compile: bool = False,
                           payment_token_address: Optional[str] = None, purchase_timeout: Optional[int] = None) -> bool:
     """Deploy a single contract."""
@@ -508,24 +510,38 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.BOLD}🎯 SIMPLE ERC20 DEPLOYMENT{Colors.RESET}\n")
     elif contract == 'sessions_marketplace':
         click.echo(f"\n{Colors.BOLD}🎯 SESSIONS MARKETPLACE DEPLOYMENT{Colors.RESET}\n")
-        if not registry_address:
-            click.echo(f"{Colors.ERROR}❌ Registry address is required to validate environment (for verifier).{Colors.RESET}")
-        # Resolve defaults
+
+        # Resolve defaults from config if not provided
+        contract_config = config_manager.get_contract_config(environment, contract)
         if not payment_token_address:
-            contract_config = config_manager.get_contract_config(environment, contract)
             payment_token_address = contract_config.payment_token_address
         if not purchase_timeout:
-            contract_config = config_manager.get_contract_config(environment, contract)
             purchase_timeout = contract_config.purchase_timeout_seconds
         if not verifier_address:
-            reg_conf = config_manager.get_contract_config(environment, 'registry')
-            verifier_address = reg_conf.verifier_address
-        if not (payment_token_address and purchase_timeout and verifier_address and registry_address):
-            click.echo(f"{Colors.ERROR}❌ Require --payment-token-address, --purchase-timeout, --verifier-address and --registry-address (to derive PoX).{Colors.RESET}")
+            try:
+                reg_conf = config_manager.get_contract_config(environment, 'registry')
+                verifier_address = reg_conf.verifier_address
+            except:
+                pass
+
+        if not (pox_address and payment_token_address and purchase_timeout and verifier_address):
+            click.echo(f"{Colors.ERROR}❌ Missing required parameters for SessionsMarketplace deployment:{Colors.RESET}")
+            if not pox_address:
+                click.echo(f"{Colors.ERROR}  --pox-address <address> is required (KliverPox contract address){Colors.RESET}")
+            if not verifier_address:
+                click.echo(f"{Colors.ERROR}  --verifier-address <address> is required{Colors.RESET}")
+            if not payment_token_address:
+                click.echo(f"{Colors.ERROR}  --payment-token-address <address> is required{Colors.RESET}")
+            if not purchase_timeout:
+                click.echo(f"{Colors.ERROR}  --purchase-timeout <seconds> is required{Colors.RESET}")
             return False
-        # We still need PoX address; CLI should pass via --registry-address? Better ask explicitly
-        click.echo(f"{Colors.WARNING}⚠️ Provide PoX via --registry-address is deprecated. Use --pox-address (not available in this CLI mode).{Colors.RESET}")
-    
+
+        # Set the parameters for deployment
+        deploy_kwargs['pox_address'] = pox_address
+        deploy_kwargs['verifier_address'] = verifier_address
+        deploy_kwargs['payment_token_address'] = payment_token_address
+        deploy_kwargs['purchase_timeout_seconds'] = purchase_timeout
+
     # Deploy the contract
     result = deployer.deploy_full_flow(owner, no_compile=no_compile, **deploy_kwargs)
     
