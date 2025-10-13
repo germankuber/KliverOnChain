@@ -32,11 +32,14 @@ pub mod SessionsMarketplace {
         // Token de pago (ERC20) y timeout de compra (en segundos)
         payment_token: ContractAddress,
         purchase_timeout: u64,
-        // Gestión de listings
-        listings: Map<u256, Listing>,
+        // Gestión de listings - historial completo
+        listings: Map<u256, Listing>, // listing_id -> Listing
         listing_counter: u256,
-        // Mapeo de session_id a listing_id
-        session_to_listing: Map<felt252, u256>,
+        // Mapeo de token_id al listing_id activo actual (0 = no activo)
+        active_listing: Map<u256, u256>, // token_id -> listing_id
+        // Historial: lista de todos los listing_ids por token_id
+        token_listing_history: Map<(u256, u256), u256>, // (token_id, index) -> listing_id
+        token_listing_count: Map<u256, u256>, // token_id -> cantidad de listings históricos
         // Órdenes por (listing_id, buyer)
         orders: Map<(u256, ContractAddress), Order>,
         // Escrow y tiempos por orden (listing_id, buyer)
@@ -59,6 +62,8 @@ pub mod SessionsMarketplace {
     #[derive(Drop, starknet::Event)]
     struct ListingCreated {
         #[key]
+        token_id: u256,
+        #[key]
         listing_id: u256,
         #[key]
         seller: ContractAddress,
@@ -69,6 +74,8 @@ pub mod SessionsMarketplace {
 
     #[derive(Drop, starknet::Event)]
     struct PurchaseOpened {
+        #[key]
+        token_id: u256,
         #[key]
         listing_id: u256,
         #[key]
@@ -81,12 +88,16 @@ pub mod SessionsMarketplace {
     #[derive(Drop, starknet::Event)]
     struct ProofSubmitted {
         #[key]
+        token_id: u256,
+        #[key]
         listing_id: u256,
         verified: bool,
     }
 
     #[derive(Drop, starknet::Event)]
     struct Sold {
+        #[key]
+        token_id: u256,
         #[key]
         listing_id: u256,
         seller: ContractAddress,
@@ -96,11 +107,15 @@ pub mod SessionsMarketplace {
     #[derive(Drop, starknet::Event)]
     struct ListingCancelled {
         #[key]
+        token_id: u256,
+        #[key]
         listing_id: u256,
     }
 
     #[derive(Drop, starknet::Event)]
     struct PurchaseRefunded {
+        #[key]
+        token_id: u256,
         #[key]
         listing_id: u256,
         #[key]
@@ -153,7 +168,7 @@ pub mod SessionsMarketplace {
         // ============ SELLER FUNCTIONS ============
 
         // Crear un nuevo listing
-        fn create_listing(ref self: ContractState, token_id: u256, price: u256) -> u256 {
+        fn create_listing(ref self: ContractState, token_id: u256, price: u256) {
             let caller = get_caller_address();
 
             // Obtener metadata desde KliverPox
@@ -167,9 +182,9 @@ pub mod SessionsMarketplace {
             assert(root != 0, 'Session not found in KliverPox');
             assert(caller == session_owner, 'Not session owner');
 
-            // Verificar que no exista un listing para esta sesión
-            let existing = self.session_to_listing.read(session_id);
-            assert(existing == 0, 'Listing already exists');
+            // Verificar que no exista un listing activo para este token_id
+            let existing_listing_id = self.active_listing.read(token_id);
+            assert(existing_listing_id == 0, 'Active listing exists');
 
             // Validar precio positivo
             assert(price > 0, 'Price must be positive');
@@ -189,17 +204,26 @@ pub mod SessionsMarketplace {
             };
 
             self.listings.write(listing_id, listing);
-            self.session_to_listing.write(session_id, listing_id);
+            
+            // Establecer como listing activo
+            self.active_listing.write(token_id, listing_id);
+            
+            // Agregar al historial
+            let history_count = self.token_listing_count.read(token_id);
+            self.token_listing_history.write((token_id, history_count), listing_id);
+            self.token_listing_count.write(token_id, history_count + 1);
 
             // Emitir evento
-            self.emit(ListingCreated { listing_id, seller: caller, session_id, root, price });
-
-            listing_id
+            self.emit(ListingCreated { token_id, listing_id, seller: caller, session_id, root, price });
         }
 
-        // Cerrar un listing (solo seller). Permite re-listar la misma sesión más tarde.
-        fn close_listing(ref self: ContractState, listing_id: u256) {
+        // Cerrar un listing (solo seller). Permite re-listar el mismo token más tarde.
+        fn close_listing(ref self: ContractState, token_id: u256) {
             let caller = get_caller_address();
+            let listing_id = self.active_listing.read(token_id);
+            
+            assert(listing_id != 0, 'No active listing');
+            
             let mut listing = self.listings.read(listing_id);
 
             assert(listing.seller == caller, 'Not the seller');
@@ -207,17 +231,23 @@ pub mod SessionsMarketplace {
 
             listing.status = ListingStatus::Closed;
             self.listings.write(listing_id, listing);
-            // Liberar la sesión para permitir nuevo listing a futuro
-            self.session_to_listing.write(listing.session_id, 0);
+            
+            // Liberar el token_id para permitir nuevo listing a futuro
+            self.active_listing.write(token_id, 0);
 
-            self.emit(ListingCancelled { listing_id });
+            self.emit(ListingCancelled { token_id, listing_id });
         }
 
         // ============ BUYER FUNCTIONS ============
 
         // Abrir una compra y establecer el challenge (por buyer). Admite múltiples buyers por listing.
-        fn open_purchase(ref self: ContractState, listing_id: u256, challenge: felt252, amount: u256) {
+        fn open_purchase(ref self: ContractState, token_id: u256, challenge: felt252, amount: u256) {
             let caller = get_caller_address();
+            
+            // Obtener el listing activo del token
+            let listing_id = self.active_listing.read(token_id);
+            assert(listing_id != 0, 'No active listing');
+            
             let mut listing = self.listings.read(listing_id);
 
             // Validaciones
@@ -246,7 +276,7 @@ pub mod SessionsMarketplace {
             self.purchase_opened_at.write(order_key, now);
 
             // Emitir evento
-            self.emit(PurchaseOpened { listing_id, buyer: caller, challenge, amount, opened_at: now });
+            self.emit(PurchaseOpened { token_id, listing_id, buyer: caller, challenge, amount, opened_at: now });
         }
 
         // ============ PROOF SUBMISSION (On-chain) ============
@@ -254,12 +284,17 @@ pub mod SessionsMarketplace {
         // Verificación on-chain completa
         fn settle_purchase(
             ref self: ContractState,
-            listing_id: u256,
+            token_id: u256,
             buyer: ContractAddress,
             challenge_key: u64,
             proof: Span<felt252>,
         ) {
             let caller = get_caller_address();
+            
+            // Obtener el listing activo del token
+            let listing_id = self.active_listing.read(token_id);
+            assert(listing_id != 0, 'No active listing');
+            
             let mut listing = self.listings.read(listing_id);
 
             // Validaciones
@@ -289,14 +324,14 @@ pub mod SessionsMarketplace {
             let is_valid = result.is_some();
 
             // Emitir evento de proof
-            self.emit(ProofSubmitted { listing_id, verified: is_valid });
+            self.emit(ProofSubmitted { token_id, listing_id, verified: is_valid });
 
             // Si la prueba es válida, liquidar la orden (el listing permanece Open)
             if is_valid {
                 // Marcar orden y pagar
                 order.status = OrderStatus::Settled;
                 self.orders.write(order_key, order);
-                self.emit(Sold { listing_id, seller: listing.seller, buyer });
+                self.emit(Sold { token_id, listing_id, seller: listing.seller, buyer });
                 // Liberar pago del escrow al seller
                 let token = crate::interfaces::erc20::IERC20Dispatcher { contract_address: self.payment_token.read() };
                 let amount = self.escrow_amount.read(order_key);
@@ -328,8 +363,13 @@ pub mod SessionsMarketplace {
         // ============ REFUND FLOW (Buyer) ============
 
         /// Permite al comprador reclamar el saldo si el seller no responde dentro del timeout.
-        fn refund_purchase(ref self: ContractState, listing_id: u256) {
+        fn refund_purchase(ref self: ContractState, token_id: u256) {
             let caller = get_caller_address();
+            
+            // Obtener el listing activo del token
+            let listing_id = self.active_listing.read(token_id);
+            assert(listing_id != 0, 'No active listing');
+            
             let order_key = (listing_id, caller);
             let mut order = self.orders.read(order_key);
 
@@ -361,16 +401,19 @@ pub mod SessionsMarketplace {
             self.purchase_opened_at.write(order_key, 0);
 
             // Evento
-            self.emit(PurchaseRefunded { listing_id, buyer: caller, amount });
+            self.emit(PurchaseRefunded { token_id, listing_id, buyer: caller, amount });
         }
 
         // ============ VIEW FUNCTIONS ============
-
-        fn get_listing(self: @ContractState, listing_id: u256) -> Listing {
+        
+        // Listing functions - obtener listing activo por token_id
+        fn get_listing(self: @ContractState, token_id: u256) -> Listing {
+            let listing_id = self.active_listing.read(token_id);
             self.listings.read(listing_id)
         }
 
-        fn get_listing_status(self: @ContractState, listing_id: u256) -> ListingStatus {
+        fn get_listing_status(self: @ContractState, token_id: u256) -> ListingStatus {
+            let listing_id = self.active_listing.read(token_id);
             let listing = self.listings.read(listing_id);
             listing.status
         }
@@ -383,37 +426,46 @@ pub mod SessionsMarketplace {
             self.pox.read()
         }
 
-        fn get_listing_by_session(self: @ContractState, session_id: felt252) -> u256 {
-            self.session_to_listing.read(session_id)
+        // History functions - nuevas funciones para consultar historial
+        fn get_token_listing_count(self: @ContractState, token_id: u256) -> u256 {
+            self.token_listing_count.read(token_id)
         }
 
-        fn is_order_closed(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> bool {
-            let listing_id = self.session_to_listing.read(session_id);
+        fn get_listing_id_at_index(self: @ContractState, token_id: u256, index: u256) -> u256 {
+            self.token_listing_history.read((token_id, index))
+        }
+
+        fn get_active_listing_id(self: @ContractState, token_id: u256) -> u256 {
+            self.active_listing.read(token_id)
+        }
+
+        fn get_listing_by_id(self: @ContractState, listing_id: u256) -> Listing {
+            self.listings.read(listing_id)
+        }
+
+        // Order functions - actualizadas para usar token_id
+        fn is_order_closed(self: @ContractState, token_id: u256, buyer: ContractAddress) -> bool {
+            let listing_id = self.active_listing.read(token_id);
             if listing_id == 0 { return false; }
             let order = self.orders.read((listing_id, buyer));
             order.status == OrderStatus::Settled
         }
 
-        fn get_order(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> Order {
-            let listing_id = self.session_to_listing.read(session_id);
+        fn get_order(self: @ContractState, token_id: u256, buyer: ContractAddress) -> Order {
+            let listing_id = self.active_listing.read(token_id);
             self.orders.read((listing_id, buyer))
         }
 
-        fn get_order_status(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> OrderStatus {
-            let listing_id = self.session_to_listing.read(session_id);
+        fn get_order_status(self: @ContractState, token_id: u256, buyer: ContractAddress) -> OrderStatus {
+            let listing_id = self.active_listing.read(token_id);
             let order = self.orders.read((listing_id, buyer));
             order.status
         }
 
-        fn get_order_info(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> (felt252, u256) {
-            let listing_id = self.session_to_listing.read(session_id);
+        fn get_order_info(self: @ContractState, token_id: u256, buyer: ContractAddress) -> (felt252, u256) {
+            let listing_id = self.active_listing.read(token_id);
             let order = self.orders.read((listing_id, buyer));
             (order.challenge, order.amount)
-        }
-
-        fn get_order_status_by_listing(self: @ContractState, listing_id: u256, buyer: ContractAddress) -> OrderStatus {
-            let order = self.orders.read((listing_id, buyer));
-            order.status
         }
     }
 

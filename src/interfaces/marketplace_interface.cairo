@@ -37,29 +37,40 @@ pub struct Order {
 
 #[starknet::interface]
 pub trait IMarketplace<TContractState> {
-    fn create_listing(ref self: TContractState, token_id: u256, price: u256) -> u256;
-    fn close_listing(ref self: TContractState, listing_id: u256);
+    // Seller functions
+    fn create_listing(ref self: TContractState, token_id: u256, price: u256);
+    fn close_listing(ref self: TContractState, token_id: u256);
+    
+    // Buyer functions
     fn open_purchase(
-        ref self: TContractState, listing_id: u256, challenge: felt252, amount: u256
+        ref self: TContractState, token_id: u256, challenge: felt252, amount: u256
     );
-    fn refund_purchase(ref self: TContractState, listing_id: u256);
+    fn refund_purchase(ref self: TContractState, token_id: u256);
     fn settle_purchase(
         ref self: TContractState,
-        listing_id: u256,
+        token_id: u256,
         buyer: ContractAddress,
         challenge_key: u64,
         proof: Span<felt252>,
     );
-    fn get_listing(self: @TContractState, listing_id: u256) -> Listing;
-    fn get_listing_status(self: @TContractState, listing_id: u256) -> ListingStatus;
+    
+    // View functions - Listing
+    fn get_listing(self: @TContractState, token_id: u256) -> Listing;
+    fn get_listing_status(self: @TContractState, token_id: u256) -> ListingStatus;
     fn get_listing_count(self: @TContractState) -> u256;
     fn get_pox_address(self: @TContractState) -> ContractAddress;
-    fn get_listing_by_session(self: @TContractState, session_id: felt252) -> u256;
     fn get_payment_token(self: @TContractState) -> ContractAddress;
     fn get_purchase_timeout(self: @TContractState) -> u64;
-    fn is_order_closed(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> bool;
-    fn get_order(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> Order;
-    fn get_order_status(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> OrderStatus;
-    fn get_order_info(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> (felt252, u256);
-    fn get_order_status_by_listing(self: @TContractState, listing_id: u256, buyer: ContractAddress) -> OrderStatus;
+    
+    // View functions - History
+    fn get_token_listing_count(self: @TContractState, token_id: u256) -> u256;
+    fn get_listing_id_at_index(self: @TContractState, token_id: u256, index: u256) -> u256;
+    fn get_active_listing_id(self: @TContractState, token_id: u256) -> u256;
+    fn get_listing_by_id(self: @TContractState, listing_id: u256) -> Listing;
+    
+    // View functions - Orders
+    fn is_order_closed(self: @TContractState, token_id: u256, buyer: ContractAddress) -> bool;
+    fn get_order(self: @TContractState, token_id: u256, buyer: ContractAddress) -> Order;
+    fn get_order_status(self: @TContractState, token_id: u256, buyer: ContractAddress) -> OrderStatus;
+    fn get_order_info(self: @TContractState, token_id: u256, buyer: ContractAddress) -> (felt252, u256);
 }
