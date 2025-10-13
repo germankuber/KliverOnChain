@@ -24,4 +24,5 @@ pub trait IKlivePox<TContractState> {
     // Full metadata getters
     fn get_metadata_by_token(self: @TContractState, token_id: u256) -> KlivePoxMetadata;
     fn get_metadata_by_simulation(self: @TContractState, simulation_id: felt252) -> KlivePoxMetadata;
+    fn get_metadata_by_session(self: @TContractState, session_id: felt252) -> KlivePoxMetadata;
 }

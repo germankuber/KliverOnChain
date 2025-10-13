@@ -30,6 +30,8 @@ mod KlivePox {
         // Store session id and score per token
         session_id_by_token: Map<u256, felt252>,
         score_by_token: Map<u256, u32>,
+        // Lookup by session id
+        session_to_token: Map<felt252, u256>,
     }
 
     #[event]
@@ -98,6 +100,7 @@ mod KlivePox {
             // Store session id and score
             self.session_id_by_token.write(token_id, metadata.session_id);
             self.score_by_token.write(token_id, metadata.score);
+            self.session_to_token.write(metadata.session_id, token_id);
 
             // Emit event
             self.emit(Minted {
@@ -148,6 +151,12 @@ mod KlivePox {
         fn get_metadata_by_simulation(self: @ContractState, simulation_id: felt252) -> KlivePoxMetadata {
             let token_id = self.sim_to_token.read(simulation_id);
             assert(token_id != 0, 'Simulation not found');
+            self.get_metadata_by_token(token_id)
+        }
+
+        fn get_metadata_by_session(self: @ContractState, session_id: felt252) -> KlivePoxMetadata {
+            let token_id = self.session_to_token.read(session_id);
+            assert(token_id != 0, 'Session not found');
             self.get_metadata_by_token(token_id)
         }
     }

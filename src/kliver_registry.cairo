@@ -419,8 +419,12 @@ pub mod kliver_registry {
         fn verify_session(
             self: @ContractState, session_id: felt252, root_hash: felt252,
         ) -> VerificationResult {
-            // Delegate to component
-            self.session_registry.verify_session(session_id, root_hash)
+            let kp_addr = self.klive_pox_address.read();
+            assert(!kp_addr.is_zero(), 'KlivePox not set');
+            let kp = IKlivePoxDispatcher { contract_address: kp_addr };
+            let meta = kp.get_metadata_by_session(session_id);
+            if meta.root_hash == 0 { return VerificationResult::NotFound; }
+            if meta.root_hash == root_hash { VerificationResult::Match } else { VerificationResult::Mismatch }
         }
 
         fn verify_complete_session(
@@ -442,8 +446,17 @@ pub mod kliver_registry {
         }
 
         fn get_session_info(self: @ContractState, session_id: felt252) -> SessionMetadata {
-            // Delegate to component
-            self.session_registry.get_session_info(session_id)
+            let kp_addr = self.klive_pox_address.read();
+            assert(!kp_addr.is_zero(), 'KlivePox not set');
+            let kp = IKlivePoxDispatcher { contract_address: kp_addr };
+            let meta = kp.get_metadata_by_session(session_id);
+            SessionMetadata {
+                session_id: meta.session_id,
+                root_hash: meta.root_hash,
+                simulation_id: meta.simulation_id,
+                author: meta.author,
+                score: meta.score,
+            }
         }
 
         // ---- Opcional: access list (trazabilidad de ventas) ----
