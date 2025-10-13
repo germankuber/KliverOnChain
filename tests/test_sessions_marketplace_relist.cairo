@@ -78,15 +78,24 @@ fn test_relist_after_close_with_new_price() {
 
     // Create listing1
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    let listing1 = marketplace.create_listing(token_id, price1);
+    marketplace.create_listing(token_id, price1);
+    
+    // Verify first listing is active
+    let st1 = marketplace.get_listing_status(token_id);
+    assert!(st1 == ListingStatus::Open);
+    
     // Close listing1
-    marketplace.close_listing(listing1);
-    // Create listing2 with new price
-    let listing2 = marketplace.create_listing(token_id, price2);
+    marketplace.close_listing(token_id);
+    
+    // Verify listing is closed
+    let st_closed = marketplace.get_listing_status(token_id);
+    assert!(st_closed == ListingStatus::Closed);
+    
+    // Create listing2 with new price (after closing the first)
+    marketplace.create_listing(token_id, price2);
     stop_cheat_caller_address(marketplace.contract_address);
 
-    let st1 = marketplace.get_listing_status(listing1);
-    assert!(st1 == ListingStatus::Closed);
-    let st2 = marketplace.get_listing_status(listing2);
+    // Verify second listing is open
+    let st2 = marketplace.get_listing_status(token_id);
     assert!(st2 == ListingStatus::Open);
 }

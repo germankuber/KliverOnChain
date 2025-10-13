@@ -40,6 +40,8 @@ pub mod SessionsMarketplace {
         // Historial: lista de todos los listing_ids por token_id
         token_listing_history: Map<(u256, u256), u256>, // (token_id, index) -> listing_id
         token_listing_count: Map<u256, u256>, // token_id -> cantidad de listings históricos
+        // Mapeo auxiliar para rastrear órdenes abiertas por (token_id, buyer) -> listing_id
+        buyer_active_order: Map<(u256, ContractAddress), u256>, // (token_id, buyer) -> listing_id
         // Órdenes por (listing_id, buyer)
         orders: Map<(u256, ContractAddress), Order>,
         // Escrow y tiempos por orden (listing_id, buyer)
@@ -267,6 +269,13 @@ pub mod SessionsMarketplace {
             // evitar orden existente abierta
             assert(self.escrow_amount.read(order_key) == 0, 'Order already exists');
 
+            // Limpiar cualquier orden previa del buyer para este token (si existía)
+            let prev_listing_id = self.buyer_active_order.read((token_id, caller));
+            if prev_listing_id != 0 && prev_listing_id != listing_id {
+                // Buyer tenía una orden en un listing previo, la limpiamos
+                self.buyer_active_order.write((token_id, caller), 0);
+            }
+
             let order = Order { session_id: listing.session_id, buyer: caller, challenge, amount, status: OrderStatus::Open };
             self.orders.write(order_key, order);
 
@@ -274,6 +283,9 @@ pub mod SessionsMarketplace {
             let now = get_block_timestamp();
             self.escrow_amount.write(order_key, amount);
             self.purchase_opened_at.write(order_key, now);
+            
+            // Registrar orden activa del buyer para este token
+            self.buyer_active_order.write((token_id, caller), listing_id);
 
             // Emitir evento
             self.emit(PurchaseOpened { token_id, listing_id, buyer: caller, challenge, amount, opened_at: now });
@@ -354,7 +366,7 @@ pub mod SessionsMarketplace {
                     opened_at,
                     settled_at,
                 });
-                // Limpiar escrow y timestamp solo para esta orden
+                // Limpiar escrow y timestamp (mantenemos buyer_active_order para consultas históricas)
                 self.escrow_amount.write(order_key, 0);
                 self.purchase_opened_at.write(order_key, 0);
             }
@@ -366,9 +378,9 @@ pub mod SessionsMarketplace {
         fn refund_purchase(ref self: ContractState, token_id: u256) {
             let caller = get_caller_address();
             
-            // Obtener el listing activo del token
-            let listing_id = self.active_listing.read(token_id);
-            assert(listing_id != 0, 'No active listing');
+            // Buscar el listing_id de la orden activa del buyer
+            let listing_id = self.buyer_active_order.read((token_id, caller));
+            assert(listing_id != 0, 'No order for this buyer');
             
             let order_key = (listing_id, caller);
             let mut order = self.orders.read(order_key);
@@ -396,7 +408,7 @@ pub mod SessionsMarketplace {
             order.status = OrderStatus::Refunded;
             self.orders.write(order_key, order);
 
-            // Clear escrow and timestamp
+            // Clear escrow y timestamp (mantenemos buyer_active_order para consultas históricas)
             self.escrow_amount.write(order_key, 0);
             self.purchase_opened_at.write(order_key, 0);
 
@@ -409,11 +421,29 @@ pub mod SessionsMarketplace {
         // Listing functions - obtener listing activo por token_id
         fn get_listing(self: @ContractState, token_id: u256) -> Listing {
             let listing_id = self.active_listing.read(token_id);
+            if listing_id == 0 {
+                // No hay listing activo, buscar el último en el historial
+                let history_count = self.token_listing_count.read(token_id);
+                assert(history_count > 0, 'No listing exists');
+                let last_listing_id = self.token_listing_history.read((token_id, history_count - 1));
+                return self.listings.read(last_listing_id);
+            }
             self.listings.read(listing_id)
         }
 
         fn get_listing_status(self: @ContractState, token_id: u256) -> ListingStatus {
             let listing_id = self.active_listing.read(token_id);
+            if listing_id == 0 {
+                // No hay listing activo, buscar el último en el historial
+                let history_count = self.token_listing_count.read(token_id);
+                if history_count == 0 {
+                    // Nunca ha habido un listing, retornar Closed por defecto
+                    return ListingStatus::Closed;
+                }
+                let last_listing_id = self.token_listing_history.read((token_id, history_count - 1));
+                let listing = self.listings.read(last_listing_id);
+                return listing.status;
+            }
             let listing = self.listings.read(listing_id);
             listing.status
         }
@@ -445,25 +475,25 @@ pub mod SessionsMarketplace {
 
         // Order functions - actualizadas para usar token_id
         fn is_order_closed(self: @ContractState, token_id: u256, buyer: ContractAddress) -> bool {
-            let listing_id = self.active_listing.read(token_id);
+            let listing_id = self.buyer_active_order.read((token_id, buyer));
             if listing_id == 0 { return false; }
             let order = self.orders.read((listing_id, buyer));
             order.status == OrderStatus::Settled
         }
 
         fn get_order(self: @ContractState, token_id: u256, buyer: ContractAddress) -> Order {
-            let listing_id = self.active_listing.read(token_id);
+            let listing_id = self.buyer_active_order.read((token_id, buyer));
             self.orders.read((listing_id, buyer))
         }
 
         fn get_order_status(self: @ContractState, token_id: u256, buyer: ContractAddress) -> OrderStatus {
-            let listing_id = self.active_listing.read(token_id);
+            let listing_id = self.buyer_active_order.read((token_id, buyer));
             let order = self.orders.read((listing_id, buyer));
             order.status
         }
 
         fn get_order_info(self: @ContractState, token_id: u256, buyer: ContractAddress) -> (felt252, u256) {
-            let listing_id = self.active_listing.read(token_id);
+            let listing_id = self.buyer_active_order.read((token_id, buyer));
             let order = self.orders.read((listing_id, buyer));
             (order.challenge, order.amount)
         }
