@@ -171,15 +171,17 @@ class ContractDeployer:
                 "sncast", "--account", self.network_config.account,
                 "deploy", "--network", self.network_config.network,
                 "--class-hash", class_hash,
-                "--constructor-calldata"
-            ] + constructor_calldata
+            ]
+            if constructor_calldata:  # Only add --constructor-calldata if there are parameters
+                command.extend(["--constructor-calldata"] + constructor_calldata)
         else:
             command = [
                 "sncast", "--profile", self.network_config.network,
                 "deploy",
                 "--class-hash", class_hash,
-                "--constructor-calldata"
-            ] + constructor_calldata
+            ]
+            if constructor_calldata:  # Only add --constructor-calldata if there are parameters
+                command.extend(["--constructor-calldata"] + constructor_calldata)
 
         result = CommandRunner.run_command(command, f"Deploying {self.contract_config.name}")
 

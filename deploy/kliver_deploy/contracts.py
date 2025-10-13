@@ -230,9 +230,9 @@ class SimpleERC20(BaseContract):
         super().__init__("SimpleERC20", "SimpleERC20")
 
     def get_constructor_calldata(self, owner_address: str = "0x0", **kwargs) -> List[str]:
-        """SimpleERC20 requires: recipient (owner_address)"""
-        print(f"{Colors.INFO}📋 Using recipient address: {owner_address}{Colors.RESET}")
-        return [owner_address]
+        """SimpleERC20 requires no parameters - mints to contract itself"""
+        print(f"{Colors.INFO}📋 SimpleERC20 mints total supply to contract itself{Colors.RESET}")
+        return []
 
     def validate_dependencies(self, **kwargs) -> bool:
         """SimpleERC20 has no dependencies."""
