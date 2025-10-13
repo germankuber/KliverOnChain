@@ -4,9 +4,7 @@ use starknet::ContractAddress;
 #[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
 pub enum ListingStatus {
     Open,
-    Purchased,
-    Sold,
-    Cancelled,
+    Closed,
 }
 
 #[derive(Drop, Serde, Copy, starknet::Store)]
@@ -24,7 +22,7 @@ pub struct Listing {
 #[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
 pub enum OrderStatus {
     Open,
-    Sold,
+    Settled,
     Refunded,
 }
 
@@ -40,7 +38,7 @@ pub struct Order {
 #[starknet::interface]
 pub trait IMarketplace<TContractState> {
     fn create_listing(ref self: TContractState, token_id: u256, price: u256) -> u256;
-    fn cancel_listing(ref self: TContractState, listing_id: u256);
+    fn close_listing(ref self: TContractState, listing_id: u256);
     fn open_purchase(
         ref self: TContractState, listing_id: u256, challenge: felt252, amount: u256
     );
@@ -63,4 +61,5 @@ pub trait IMarketplace<TContractState> {
     fn get_order(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> Order;
     fn get_order_status(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> OrderStatus;
     fn get_order_info(self: @TContractState, session_id: felt252, buyer: ContractAddress) -> (felt252, u256);
+    fn get_order_status_by_listing(self: @TContractState, listing_id: u256, buyer: ContractAddress) -> OrderStatus;
 }

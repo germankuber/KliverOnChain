@@ -171,6 +171,9 @@ pub mod SessionsMarketplace {
             let existing = self.session_to_listing.read(session_id);
             assert(existing == 0, 'Listing already exists');
 
+            // Validar precio positivo
+            assert(price > 0, 'Price must be positive');
+
             // Crear el listing
             let listing_id = self.listing_counter.read() + 1;
             self.listing_counter.write(listing_id);
@@ -194,16 +197,18 @@ pub mod SessionsMarketplace {
             listing_id
         }
 
-        // Cancelar un listing (solo seller)
-        fn cancel_listing(ref self: ContractState, listing_id: u256) {
+        // Cerrar un listing (solo seller). Permite re-listar la misma sesión más tarde.
+        fn close_listing(ref self: ContractState, listing_id: u256) {
             let caller = get_caller_address();
             let mut listing = self.listings.read(listing_id);
 
             assert(listing.seller == caller, 'Not the seller');
-            assert(listing.status == ListingStatus::Open, 'Cannot cancel');
+            assert(listing.status == ListingStatus::Open, 'Cannot close');
 
-            listing.status = ListingStatus::Cancelled;
+            listing.status = ListingStatus::Closed;
             self.listings.write(listing_id, listing);
+            // Liberar la sesión para permitir nuevo listing a futuro
+            self.session_to_listing.write(listing.session_id, 0);
 
             self.emit(ListingCancelled { listing_id });
         }
@@ -225,6 +230,7 @@ pub mod SessionsMarketplace {
             let token = crate::interfaces::erc20::IERC20Dispatcher { contract_address: self.payment_token.read() };
             let this = get_contract_address();
             let _ok = crate::interfaces::erc20::IERC20DispatcherTrait::transfer_from(token, caller, this, amount);
+            assert(_ok, 'Transfer failed');
 
             // Crear orden por (listing_id, buyer)
             let order_key = (listing_id, caller);
@@ -267,8 +273,14 @@ pub mod SessionsMarketplace {
             let mut order = self.orders.read(order_key);
             let challenge = order.challenge;
             // Ensure numeric challenge matches order.challenge
-            let expected_key: u64 = order.challenge.try_into().unwrap();
-            assert(challenge_key == expected_key, 'Challenge key mismatch');
+            match order.challenge.try_into() {
+                Option::Some(expected_key) => {
+                    assert(challenge_key == expected_key, 'Challenge key mismatch');
+                },
+                Option::None => {
+                    assert(0 == 1, 'Challenge cannot fit in u64');
+                }
+            }
             assert(order.status == OrderStatus::Open, 'Order not open');
 
             // Verificar proof directamente contra el Verifier
@@ -279,13 +291,10 @@ pub mod SessionsMarketplace {
             // Emitir evento de proof
             self.emit(ProofSubmitted { listing_id, verified: is_valid });
 
-            // Si la prueba es válida, marcar como vendido
+            // Si la prueba es válida, liquidar la orden (el listing permanece Open)
             if is_valid {
-                listing.status = ListingStatus::Sold;
-                self.listings.write(listing_id, listing);
-
                 // Marcar orden y pagar
-                order.status = OrderStatus::Sold;
+                order.status = OrderStatus::Settled;
                 self.orders.write(order_key, order);
                 self.emit(Sold { listing_id, seller: listing.seller, buyer });
                 // Liberar pago del escrow al seller
@@ -293,6 +302,7 @@ pub mod SessionsMarketplace {
                 let amount = self.escrow_amount.read(order_key);
                 if amount > 0 {
                     let _ok2 = crate::interfaces::erc20::IERC20DispatcherTrait::transfer(token, listing.seller, amount);
+                    assert(_ok2, 'Transfer failed');
                 }
                 // Emitir evento detallado con datos públicos
                 let opened_at = self.purchase_opened_at.read(order_key);
@@ -309,7 +319,7 @@ pub mod SessionsMarketplace {
                     opened_at,
                     settled_at,
                 });
-                // Limpiar escrow y timestamp
+                // Limpiar escrow y timestamp solo para esta orden
                 self.escrow_amount.write(order_key, 0);
                 self.purchase_opened_at.write(order_key, 0);
             }
@@ -328,13 +338,18 @@ pub mod SessionsMarketplace {
             let opened_at = self.purchase_opened_at.read(order_key);
             let timeout = self.purchase_timeout.read();
             let now = get_block_timestamp();
-            assert(now >= opened_at + timeout, 'Not expired');
+            // Permitir refund si expiró o si el listing está Closed
+            let listing = self.listings.read(listing_id);
+            let is_closed = listing.status == ListingStatus::Closed;
+            let is_expired = now >= opened_at + timeout;
+            assert(is_closed || is_expired, 'Cannot refund yet');
 
             // Refund escrow
             let amount = self.escrow_amount.read(order_key);
             if amount > 0 {
                 let token = crate::interfaces::erc20::IERC20Dispatcher { contract_address: self.payment_token.read() };
                 let _ok = crate::interfaces::erc20::IERC20DispatcherTrait::transfer(token, caller, amount);
+                assert(_ok, 'Transfer failed');
             }
 
             // Marcar orden como refundeada
@@ -376,7 +391,7 @@ pub mod SessionsMarketplace {
             let listing_id = self.session_to_listing.read(session_id);
             if listing_id == 0 { return false; }
             let order = self.orders.read((listing_id, buyer));
-            order.status == OrderStatus::Sold
+            order.status == OrderStatus::Settled
         }
 
         fn get_order(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> Order {
@@ -394,6 +409,11 @@ pub mod SessionsMarketplace {
             let listing_id = self.session_to_listing.read(session_id);
             let order = self.orders.read((listing_id, buyer));
             (order.challenge, order.amount)
+        }
+
+        fn get_order_status_by_listing(self: @ContractState, listing_id: u256, buyer: ContractAddress) -> OrderStatus {
+            let order = self.orders.read((listing_id, buyer));
+            order.status
         }
     }
 

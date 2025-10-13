@@ -115,14 +115,14 @@ fn test_open_purchase_and_refund_flow() {
 
     // Listing remains Open; orders are tracked per (listing_id, buyer)
     let st = marketplace.get_listing_status(listing_id);
-    assert!(st == ListingStatus::Open, "Listing stays open with per-buyer order");
+    assert!(st == ListingStatus::Open);
 
     // Check order view
     let (challenge_r, amount_r) = marketplace.get_order_info('session_1', BUYER());
-    assert!(challenge_r == challenge_felt, "Challenge stored in order");
-    assert!(amount_r == price, "Amount stored in order");
+    assert!(challenge_r == challenge_felt);
+    assert!(amount_r == price);
     let status_r = marketplace.get_order_status('session_1', BUYER());
-    assert!(status_r == OrderStatus::Open, "Order should be open");
+    assert!(status_r == OrderStatus::Open);
 
     // Immediate refund should fail (Not expired)
     start_cheat_caller_address(marketplace.contract_address, BUYER());
@@ -140,7 +140,7 @@ fn test_open_purchase_and_refund_flow() {
 
     // Listing should be Open again
     let st2 = marketplace.get_listing_status(listing_id);
-    assert!(st2 == ListingStatus::Open, "Should be open after refund");
+    assert!(st2 == ListingStatus::Open);
 }
 
 #[test]
@@ -193,18 +193,18 @@ fn test_successful_sale_releases_escrow() {
     marketplace.settle_purchase(listing_id, BUYER(), challenge_key2, proof.span());
     stop_cheat_caller_address(marketplace.contract_address);
 
-    // Listing should be Sold
+    // Listing remains Open; order is Settled
     let st = marketplace.get_listing_status(listing_id);
-    assert!(st == ListingStatus::Sold, "Should be sold");
+    assert!(st == ListingStatus::Open);
     let status_buyer = marketplace.get_order_status('session_2', BUYER());
-    assert!(status_buyer == OrderStatus::Sold, "Order should be marked sold");
-    // Second buyer's order remains open or refundable
+    assert!(status_buyer == OrderStatus::Settled);
+    // Second buyer's order remains open
     let status_buyer2 = marketplace.get_order_status('session_2', BUYER2());
-    assert!(status_buyer2 == OrderStatus::Open, "Second buyer order remains open");
+    assert!(status_buyer2 == OrderStatus::Open);
 }
 
 #[test]
-#[should_panic(expected: ('Not expired',))]
+#[should_panic(expected: ('Cannot refund yet',))]
 fn test_refund_before_timeout_panics() {
     let price: u256 = 777;
     let token = deploy_mock_erc20(BUYER(), price);
@@ -263,4 +263,50 @@ fn test_open_purchase_invalid_amount() {
     let one: u256 = u256 { low: 1, high: 0 };
     let wrong_amount: u256 = price - one;
     marketplace.open_purchase(listing_id, 'challenge', wrong_amount);
+}
+
+#[test]
+fn test_refund_immediate_after_close() {
+    // Setup
+    let price: u256 = 999;
+    let token = deploy_mock_erc20(BUYER(), price);
+    let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
+    let pox = deploy_klive_pox(registry_addr);
+    let verifier = deploy_mock_verifier();
+    let timeout: u64 = 100;
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
+
+    // Mint session and list by SELLER
+    let meta = SessionMetadata { session_id: 'session_close_refund', root_hash: 'root_r', simulation_id: 'sim_r', author: SELLER(), score: 1_u32 };
+    mint_session(pox, registry_addr, meta);
+    start_cheat_caller_address(marketplace.contract_address, SELLER());
+    let token_id = pox.get_metadata_by_session('session_close_refund').token_id;
+    let listing_id = marketplace.create_listing(token_id, price);
+    stop_cheat_caller_address(marketplace.contract_address);
+
+    // Buyer approves and opens purchase
+    start_cheat_caller_address(token.contract_address, BUYER());
+    let _ok = token.approve(marketplace.contract_address, price);
+    stop_cheat_caller_address(token.contract_address);
+    start_cheat_caller_address(marketplace.contract_address, BUYER());
+    marketplace.open_purchase(listing_id, 'challenge_refund', price);
+    stop_cheat_caller_address(marketplace.contract_address);
+
+    // Seller closes listing
+    start_cheat_caller_address(marketplace.contract_address, SELLER());
+    marketplace.close_listing(listing_id);
+    stop_cheat_caller_address(marketplace.contract_address);
+
+    // Buyer can refund immediately (no timeout needed)
+    start_cheat_caller_address(marketplace.contract_address, BUYER());
+    marketplace.refund_purchase(listing_id);
+    stop_cheat_caller_address(marketplace.contract_address);
+
+    // Check statuses and balance
+    let st = marketplace.get_listing_status(listing_id);
+    assert!(st == ListingStatus::Closed);
+    let order_status = marketplace.get_order_status_by_listing(listing_id, BUYER());
+    assert!(order_status == OrderStatus::Refunded);
+    let bal = token.balance_of(BUYER());
+    assert!(bal == price);
 }
