@@ -15,6 +15,8 @@ pub mod SessionsMarketplace {
     };
     use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
     use super::super::interfaces::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
+    // Bring marketplace types into scope
+    use crate::interfaces::marketplace_interface::{Listing, Order, ListingStatus, OrderStatus};
     // Registry no longer used directly here
     // Types and dispatcher re-exported at file scope
 
@@ -143,9 +145,9 @@ pub mod SessionsMarketplace {
         self.listing_counter.write(0);
     }
 
+    // Embed the IMarketplace ABI so functions are exposed as entrypoints
     #[abi(embed_v0)]
-    use super::{IMarketplace, Listing, Order, ListingStatus, OrderStatus};
-    impl MarketplaceImpl of IMarketplace<ContractState> {
+    impl MarketplaceImpl of super::IMarketplace<ContractState> {
         fn get_payment_token(self: @ContractState) -> ContractAddress { self.payment_token.read() }
         fn get_purchase_timeout(self: @ContractState) -> u64 { self.purchase_timeout.read() }
         // ============ SELLER FUNCTIONS ============
@@ -220,9 +222,9 @@ pub mod SessionsMarketplace {
             assert(amount == listing.price, 'Invalid amount');
 
             // Transferir fondos al escrow del contrato
-            let token = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcher { contract_address: self.payment_token.read() };
+            let token = crate::interfaces::erc20::IERC20Dispatcher { contract_address: self.payment_token.read() };
             let this = get_contract_address();
-            let _ok = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcherTrait::transfer_from(token, caller, this, amount);
+            let _ok = crate::interfaces::erc20::IERC20DispatcherTrait::transfer_from(token, caller, this, amount);
 
             // Crear orden por (listing_id, buyer)
             let order_key = (listing_id, caller);
@@ -287,10 +289,10 @@ pub mod SessionsMarketplace {
                 self.orders.write(order_key, order);
                 self.emit(Sold { listing_id, seller: listing.seller, buyer });
                 // Liberar pago del escrow al seller
-                let token = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcher { contract_address: self.payment_token.read() };
+                let token = crate::interfaces::erc20::IERC20Dispatcher { contract_address: self.payment_token.read() };
                 let amount = self.escrow_amount.read(order_key);
                 if amount > 0 {
-                    let _ok2 = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcherTrait::transfer(token, listing.seller, amount);
+                    let _ok2 = crate::interfaces::erc20::IERC20DispatcherTrait::transfer(token, listing.seller, amount);
                 }
                 // Emitir evento detallado con datos públicos
                 let opened_at = self.purchase_opened_at.read(order_key);
@@ -331,8 +333,8 @@ pub mod SessionsMarketplace {
             // Refund escrow
             let amount = self.escrow_amount.read(order_key);
             if amount > 0 {
-                let token = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcher { contract_address: self.payment_token.read() };
-                let _ok = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcherTrait::transfer(token, caller, amount);
+                let token = crate::interfaces::erc20::IERC20Dispatcher { contract_address: self.payment_token.read() };
+                let _ok = crate::interfaces::erc20::IERC20DispatcherTrait::transfer(token, caller, amount);
             }
 
             // Marcar orden como refundeada

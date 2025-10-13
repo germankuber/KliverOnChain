@@ -146,7 +146,8 @@ fn test_open_purchase_and_refund_flow() {
 #[test]
 fn test_successful_sale_releases_escrow() {
     let price: u256 = 500;
-    let token = deploy_mock_erc20(BUYER(), price);
+    // Fund BUYER with enough tokens to open an order and also fund BUYER2
+    let token = deploy_mock_erc20(BUYER(), price * 2);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_klive_pox(registry_addr);
     let verifier = deploy_mock_verifier();
