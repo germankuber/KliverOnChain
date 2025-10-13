@@ -416,26 +416,6 @@ pub mod kliver_registry {
             }
         }
 
-        fn verify_session(
-            self: @ContractState, session_id: felt252, root_hash: felt252,
-        ) -> VerificationResult {
-            let kp_addr = self.klive_pox_address.read();
-            assert(!kp_addr.is_zero(), 'KlivePox not set');
-            let kp = IKlivePoxDispatcher { contract_address: kp_addr };
-            // Avoid panic: first check existence
-            if !IKlivePoxDispatcherTrait::has_session(kp, session_id) {
-                return VerificationResult::NotFound;
-            }
-            let meta = IKlivePoxDispatcherTrait::get_metadata_by_session(kp, session_id);
-            if meta.root_hash == root_hash { VerificationResult::Match } else { VerificationResult::Mismatch }
-        }
-
-        fn verify_complete_session(
-            self: @ContractState, full_proof_with_hints: Span<felt252>,
-        ) -> Option<Span<u256>> {
-            let verifier = IVerifierDispatcher { contract_address: self.verifier_address.read() };
-            verifier.verify_ultra_starknet_honk_proof(full_proof_with_hints)
-        }
 
         fn verify_proof(
             self: @ContractState, full_proof_with_hints: Span<felt252>, root_hash: felt252, challenge: u64
@@ -449,10 +429,6 @@ pub mod kliver_registry {
         }
 
         // Removed: get_session_info, grant_access, has_access
-
-        fn get_verifier_address(self: @ContractState) -> ContractAddress {
-            self.verifier_address.read()
-        }
     }
 
     // Owner Registry Implementation

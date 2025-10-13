@@ -20,7 +20,6 @@ pub struct SessionAccessGranted {
 
 #[starknet::component]
 pub mod SessionRegistryComponent {
-    use kliver_on_chain::types::VerificationResult;
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StoragePathEntry, StoragePointerReadAccess, StoragePointerWriteAccess,
@@ -82,20 +81,6 @@ pub mod SessionRegistryComponent {
             self.emit(SessionMetadata { session_id, root_hash, simulation_id, author, score });
         }
 
-        /// Verify if a session ID matches its expected root hash
-        fn verify_session(
-            self: @ComponentState<TContractState>, session_id: felt252, root_hash: felt252,
-        ) -> VerificationResult {
-            let stored_root = self.session_roots.entry(session_id).read();
-
-            if stored_root == 0 {
-                VerificationResult::NotFound
-            } else if stored_root == root_hash {
-                VerificationResult::Match
-            } else {
-                VerificationResult::Mismatch
-            }
-        }
 
         /// Get complete session information
         fn get_session_info(

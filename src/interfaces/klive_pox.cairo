@@ -1,5 +1,6 @@
 use starknet::ContractAddress;
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
+use crate::types::VerificationResult;
 
 #[derive(Drop, Serde, Copy, starknet::Store)]
 pub struct KlivePoxMetadata {
@@ -24,6 +25,10 @@ pub trait IKlivePox<TContractState> {
     fn get_metadata_by_token(self: @TContractState, token_id: u256) -> KlivePoxMetadata;
     fn get_metadata_by_session(self: @TContractState, session_id: felt252) -> KlivePoxMetadata;
     fn has_session(self: @TContractState, session_id: felt252) -> bool;
+
+    // Verification functions
+    fn verify_session_by_token(self: @TContractState, token_id: u256, root_hash: felt252) -> VerificationResult;
+    fn verify_session_by_session_id(self: @TContractState, session_id: felt252, root_hash: felt252) -> VerificationResult;
 
     // Get registry address
     fn get_registry_address(self: @TContractState) -> ContractAddress;

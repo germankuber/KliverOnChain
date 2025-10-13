@@ -10,6 +10,7 @@ mod KlivePox {
     use starknet::{ContractAddress, get_caller_address};
     use crate::interfaces::klive_pox::KlivePoxMetadata;
     use kliver_on_chain::components::session_registry_component::SessionMetadata;
+    use crate::types::VerificationResult;
 
     // Minimal NFT storage and indexing by simulation
     #[storage]
@@ -149,6 +150,31 @@ mod KlivePox {
         fn has_session(self: @ContractState, session_id: felt252) -> bool {
             let token_id = self.session_to_token.read(session_id);
             token_id != 0
+        }
+
+        fn verify_session_by_token(self: @ContractState, token_id: u256, root_hash: felt252) -> VerificationResult {
+            let stored_root = self.root_hash_by_token.read(token_id);
+            if stored_root == 0 {
+                VerificationResult::NotFound
+            } else if stored_root == root_hash {
+                VerificationResult::Match
+            } else {
+                VerificationResult::Mismatch
+            }
+        }
+
+        fn verify_session_by_session_id(self: @ContractState, session_id: felt252, root_hash: felt252) -> VerificationResult {
+            let token_id = self.session_to_token.read(session_id);
+            if token_id == 0 {
+                VerificationResult::NotFound
+            } else {
+                let stored_root = self.root_hash_by_token.read(token_id);
+                if stored_root == root_hash {
+                    VerificationResult::Match
+                } else {
+                    VerificationResult::Mismatch
+                }
+            }
         }
 
         fn get_registry_address(self: @ContractState) -> ContractAddress {

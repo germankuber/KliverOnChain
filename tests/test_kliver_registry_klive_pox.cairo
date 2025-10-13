@@ -108,18 +108,4 @@ fn test_register_session_mints_in_klive_pox_and_verifications() {
     assert!(meta.author == AUTHOR(), "author");
     assert!(meta.score == 77_u32, "score");
 
-    // verify_session should match
-    let result = reg_iface.verify_session('s1', 'root1');
-    match result {
-        kliver_on_chain::types::VerificationResult::Match => {},
-        _ => assert!(false, "expected match"),
-    }
-
-    // verify_complete_session proxies to verifier
-    let proof: Array<felt252> = array![1, 2, 3];
-    let res = reg_iface.verify_complete_session(proof.span());
-    match res {
-        Option::Some(_) => {},
-        Option::None(()) => assert!(false, "expected Some from verifier"),
-    }
 }
