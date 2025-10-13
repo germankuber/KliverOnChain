@@ -1,14 +1,14 @@
 // removed unused top-level import
 
 #[starknet::contract]
-mod KlivePox {
+mod KliverPox {
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
     };
     use core::num::traits::Zero;
     use starknet::{ContractAddress, get_caller_address};
-    use crate::interfaces::klive_pox::KlivePoxMetadata;
+    use crate::interfaces::kliver_pox::KliverPoxMetadata;
     use kliver_on_chain::components::session_registry_component::SessionMetadata;
     use crate::types::VerificationResult;
 
@@ -69,7 +69,7 @@ mod KlivePox {
     }
 
     #[abi(embed_v0)]
-    impl KlivePoxImpl of crate::interfaces::klive_pox::IKlivePox<ContractState> {
+    impl KliverPoxImpl of crate::interfaces::kliver_pox::IKliverPox<ContractState> {
         fn mint(ref self: ContractState, metadata: SessionMetadata) {
             // Access control: only configured registry can mint
             let caller = get_caller_address();
@@ -124,14 +124,14 @@ mod KlivePox {
 
         // owner_of_simulation removed (no sim_to_token mapping)
 
-        fn get_metadata_by_token(self: @ContractState, token_id: u256) -> KlivePoxMetadata {
+        fn get_metadata_by_token(self: @ContractState, token_id: u256) -> KliverPoxMetadata {
             let author = self.token_owner.read(token_id);
             assert(!author.is_zero(), Errors::TOKEN_NOT_FOUND);
             let simulation_id = self.token_to_sim.read(token_id);
             let session_id = self.session_id_by_token.read(token_id);
             let root_hash = self.root_hash_by_token.read(token_id);
             let score_u32 = self.score_by_token.read(token_id);
-            KlivePoxMetadata {
+            KliverPoxMetadata {
                 token_id,
                 session_id,
                 root_hash,
@@ -141,7 +141,7 @@ mod KlivePox {
             }
         }
 
-        fn get_metadata_by_session(self: @ContractState, session_id: felt252) -> KlivePoxMetadata {
+        fn get_metadata_by_session(self: @ContractState, session_id: felt252) -> KliverPoxMetadata {
             let token_id = self.session_to_token.read(session_id);
             assert(token_id != 0, 'Session not found');
             self.get_metadata_by_token(token_id)

@@ -42,7 +42,7 @@ The Kliver OnChain Platform consists of **5 interconnected smart contracts** tha
 │         │ validates              │ configures               │           │
 │         │                        ▼                          │           │
 │         │                 ┌──────────────┐                  │           │
-│         └────────────────►│   KlivePox   │◄─────────────────┘           │
+│         └────────────────►│   KliverPox   │◄─────────────────┘           │
 │                           │   (PoX NFT)  │                              │
 │                           └──────────────┘                              │
 │                                  │                                      │
@@ -63,12 +63,12 @@ The contracts must be deployed and configured in a specific order:
 1. KliverNFT (Independent)
    └─► 2. TokenSimulation (Independent)
         └─► 3. Registry (needs NFT + TokenSimulation + Verifier)
-             └─► 4. KlivePox (needs Registry)
+             └─► 4. KliverPox (needs Registry)
                   │
-                  ├─► Registry.set_klive_pox_address(KlivePox)
+                  ├─► Registry.set_kliver_pox_address(KliverPox)
                   ├─► TokenSimulation.set_registry_address(Registry)
                   │
-                  └─► 5. SessionsMarketplace (needs KlivePox + Verifier + PaymentToken)
+                  └─► 5. SessionsMarketplace (needs KliverPox + Verifier + PaymentToken)
 ```
 
 ---
@@ -150,7 +150,7 @@ constructor(
 
 **Post-Deployment Configuration**:
 ```cairo
-fn set_klive_pox_address(pox_address: ContractAddress)  // Required!
+fn set_kliver_pox_address(pox_address: ContractAddress)  // Required!
 ```
 
 **Main Functions**:
@@ -164,7 +164,7 @@ fn verify_simulation(simulation_id: felt252, simulation_hash: felt252) -> Verifi
 
 ---
 
-### 4. KlivePox (Proof of Experience NFT)
+### 4. KliverPox (Proof of Experience NFT)
 
 **Purpose**: Session-based NFTs that represent completed game sessions.
 
@@ -182,8 +182,8 @@ constructor(registry_address: ContractAddress)
 **Main Functions**:
 ```cairo
 fn mint(metadata: SessionMetadata)  // Only Registry can call
-fn get_metadata_by_token(token_id: u256) -> KlivePoxMetadata
-fn get_metadata_by_session(session_id: felt252) -> KlivePoxMetadata
+fn get_metadata_by_token(token_id: u256) -> KliverPoxMetadata
+fn get_metadata_by_session(session_id: felt252) -> KliverPoxMetadata
 fn has_session(session_id: felt252) -> bool
 fn get_registry_address() -> ContractAddress  // For validation
 ```
@@ -292,9 +292,9 @@ environments:
         sierra_file: "target/dev/kliver_on_chain_kliver_registry.contract_class.json"
         verifier_address: "0x04db2418fe71fd10e3127a3052e0781fe458b50490c7411ebc49bf60565df6d1"
 
-      klive_pox:
-        name: "KlivePox"
-        sierra_file: "target/dev/kliver_on_chain_KlivePox.contract_class.json"
+      kliver_pox:
+        name: "KliverPox"
+        sierra_file: "target/dev/kliver_on_chain_KliverPox.contract_class.json"
 
       sessions_marketplace:
         name: "SessionsMarketplace"
@@ -343,8 +343,8 @@ poetry run python -m kliver_deploy.deploy --environment <env> --contract all
 4. ✅ Validates NFT and TokenSimulation contracts
 5. ✅ Deploys **Registry** (with NFT + TokenSimulation + Verifier)
 6. ✅ Validates Registry contract
-7. ✅ Deploys **KlivePox** (with Registry)
-8. ✅ **Automatically calls** `Registry.set_klive_pox_address(KlivePox)`
+7. ✅ Deploys **KliverPox** (with Registry)
+8. ✅ **Automatically calls** `Registry.set_kliver_pox_address(KliverPox)`
 9. ✅ **Automatically calls** `TokenSimulation.set_registry_address(Registry)`
 10. ✅ Validates PoX contract
 11. ✅ Deploys **SessionsMarketplace** (with PoX + Verifier + PaymentToken)
@@ -369,7 +369,7 @@ poetry run python -m kliver_deploy.deploy --environment prod --contract all
   "Nft": "0x05bdcac9b28b3f774a46edf54a0ed89d896c41e7d6be3d341d20048b7e98e29f",
   "Registry": "0x00f78bfac9a9f9e9c8f763f5ca77397720fca3a04085ff0f5032c9bc8c8bae98",
   "TokenSimulation": "0x0170d5558b4306a7533258152d3563988f3d5a96329d16c161c36c4cc10a755d",
-  "KlivePox": "0x069eda4b9668e2c442ae412febf4eb792cd851370dd63f771573e41fd9cdb072",
+  "KliverPox": "0x069eda4b9668e2c442ae412febf4eb792cd851370dd63f771573e41fd9cdb072",
   "MarketPlace": "0x07e039aec176f2dfd935a52e86ebcc120ad122113a1dede8f7555f1f09b0737f"
 }
 ```
@@ -398,10 +398,10 @@ poetry run python -m kliver_deploy.deploy \
   --nft-address 0xNFT_ADDRESS \
   --token-simulation-address 0xTOKEN_ADDRESS
 
-# Deploy KlivePox (requires Registry)
+# Deploy KliverPox (requires Registry)
 poetry run python -m kliver_deploy.deploy \
   --environment dev \
-  --contract klive_pox \
+  --contract kliver_pox \
   --registry-address 0xREGISTRY_ADDRESS
 
 # Deploy SessionsMarketplace (requires PoX + Verifier + PaymentToken)
@@ -414,7 +414,7 @@ poetry run python -m kliver_deploy.deploy \
 ```
 
 **Note**: When deploying individually, you must manually call:
-- `Registry.set_klive_pox_address(pox_address)`
+- `Registry.set_kliver_pox_address(pox_address)`
 - `TokenSimulation.set_registry_address(registry_address)`
 
 ---
@@ -424,11 +424,11 @@ poetry run python -m kliver_deploy.deploy \
 | Flag | Description | Required |
 |------|-------------|----------|
 | `--environment` | Environment name from config (local/dev/qa/prod) | Yes |
-| `--contract` | Contract to deploy (nft/kliver_tokens_core/registry/klive_pox/sessions_marketplace/all) | Yes |
+| `--contract` | Contract to deploy (nft/kliver_tokens_core/registry/kliver_pox/sessions_marketplace/all) | Yes |
 | `--owner` | Owner address (defaults to deployer account) | No |
 | `--nft-address` | NFT contract address (for registry) | Conditional |
 | `--token-simulation-address` | TokenSimulation address (for registry) | Conditional |
-| `--registry-address` | Registry address (for klive_pox/sessions_marketplace) | Conditional |
+| `--registry-address` | Registry address (for kliver_pox/sessions_marketplace) | Conditional |
 | `--verifier-address` | Verifier contract address (overrides config) | No |
 | `--payment-token-address` | ERC20 token address (for marketplace) | Conditional |
 | `--purchase-timeout` | Purchase timeout in seconds (for marketplace) | Conditional |
@@ -479,8 +479,8 @@ Before deploying a contract, the system validates all dependencies:
 After deployment, the system verifies that configurations were set correctly:
 
 ```
-🔗 Setting KlivePox address in Registry...
-✓ Verified KlivePox in Registry: 0x069eda4b9668e2c442ae412febf4eb792cd851370dd63f771573e41fd9cdb072
+🔗 Setting KliverPox address in Registry...
+✓ Verified KliverPox in Registry: 0x069eda4b9668e2c442ae412febf4eb792cd851370dd63f771573e41fd9cdb072
 
 🔗 Setting registry address on TokenSimulation contract...
 ✓ Registry address set successfully on TokenSimulation!
@@ -491,7 +491,7 @@ After deployment, the system verifies that configurations were set correctly:
 ```
 
 **Verification checks**:
-- Registry has correct KlivePox address (`get_klive_pox_address()`)
+- Registry has correct KliverPox address (`get_kliver_pox_address()`)
 - TokenSimulation has correct Registry address (`get_registry_address()`)
 - SessionsMarketplace has correct PoX address (`get_pox_address()`)
 
@@ -504,7 +504,7 @@ Each deployment creates a JSON file with complete deployment information:
 ```bash
 deployment_katana_nft_1760363058.json
 deployment_katana_registry_1760363082.json
-deployment_katana_klive_pox_1760363093.json
+deployment_katana_kliver_pox_1760363093.json
 # etc...
 ```
 
@@ -515,8 +515,8 @@ deployment_katana_klive_pox_1760363093.json
   "network": "katana",
   "account": "katana-0",
   "rpc_url": "http://127.0.0.1:5050",
-  "contract_name": "KlivePox",
-  "contract_type": "klive_pox",
+  "contract_name": "KliverPox",
+  "contract_type": "kliver_pox",
   "class_hash": "0x715223182925c611d482479ba72e5f3f4f89b34d80c9b858a2a740721ab589d",
   "contract_address": "0x069eda4b9668e2c442ae412febf4eb792cd851370dd63f771573e41fd9cdb072",
   "owner_address": "0x2af9427c5a277474c079a1283c880ee8a6f0f8fbf73ce969c08d88befec1bba",
@@ -607,13 +607,13 @@ fn set_registry_address(registry_address: ContractAddress)
 fn register_simulation(simulation_id: felt252, scenario_id: felt252, character_id: felt252, simulation_hash: felt252, author: ContractAddress)
 fn register_session(session_id: felt252, simulation_id: felt252, session_hash: felt252, author: ContractAddress)
 fn verify_simulation(simulation_id: felt252, simulation_hash: felt252) -> VerificationResult
-fn set_klive_pox_address(pox_address: ContractAddress)
+fn set_kliver_pox_address(pox_address: ContractAddress)
 ```
 
-**KlivePox**:
+**KliverPox**:
 ```cairo
 fn mint(metadata: SessionMetadata)  // Only Registry
-fn get_metadata_by_session(session_id: felt252) -> KlivePoxMetadata
+fn get_metadata_by_session(session_id: felt252) -> KliverPoxMetadata
 fn get_registry_address() -> ContractAddress
 ```
 

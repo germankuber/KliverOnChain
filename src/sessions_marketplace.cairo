@@ -133,7 +133,7 @@ pub mod SessionsMarketplace {
         payment_token_address: ContractAddress,
         purchase_timeout_seconds: u64,
     ) {
-        assert(!pox_address.is_zero(), 'Invalid KlivePox address');
+        assert(!pox_address.is_zero(), 'Invalid KliverPox address');
         assert(!verifier_address.is_zero(), 'Invalid verifier address');
         assert(!payment_token_address.is_zero(), 'Invalid payment token');
         assert(purchase_timeout_seconds > 0, 'Invalid purchase timeout');
@@ -156,15 +156,15 @@ pub mod SessionsMarketplace {
         fn create_listing(ref self: ContractState, token_id: u256, price: u256) -> u256 {
             let caller = get_caller_address();
 
-            // Obtener metadata desde KlivePox
-            let pox = crate::interfaces::klive_pox::IKlivePoxDispatcher { contract_address: self.pox.read() };
-            let meta = crate::interfaces::klive_pox::IKlivePoxDispatcherTrait::get_metadata_by_token(pox, token_id);
+            // Obtener metadata desde KliverPox
+            let pox = crate::interfaces::kliver_pox::IKliverPoxDispatcher { contract_address: self.pox.read() };
+            let meta = crate::interfaces::kliver_pox::IKliverPoxDispatcherTrait::get_metadata_by_token(pox, token_id);
             let session_id = meta.session_id;
             let root = meta.root_hash;
             let session_owner = meta.author;
 
             // Validaciones
-            assert(root != 0, 'Session not found in KlivePox');
+            assert(root != 0, 'Session not found in KliverPox');
             assert(caller == session_owner, 'Not session owner');
 
             // Verificar que no exista un listing para esta sesión

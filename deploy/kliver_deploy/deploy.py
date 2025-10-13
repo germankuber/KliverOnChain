@@ -16,7 +16,7 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.option('--environment', '-e', required=True, 
               help='Environment to deploy to: dev, qa, or prod')
 @click.option('--contract', '-c', default='registry',
-              help='Contract to deploy: registry, nft, kliver_tokens_core, klive_pox, sessions_marketplace, simple_erc20, or all')
+              help='Contract to deploy: registry, nft, kliver_tokens_core, kliver_pox, sessions_marketplace, simple_erc20, or all')
 @click.option('--owner', '-o', 
               help='Owner address for the contract (uses account address if not specified)')
 @click.option('--nft-address', '-n',
@@ -52,7 +52,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
     
     DEPLOYMENT MODES:
 
-    1. Deploy Everything (NFT → TokenSimulation → Registry → KlivePox → SessionsMarketplace):
+    1. Deploy Everything (NFT → TokenSimulation → Registry → KliverPox → SessionsMarketplace):
         python deploy.py --environment dev --contract all
 
     2. Deploy Individual Contracts:
@@ -207,7 +207,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                          payment_token_address: Optional[str] = None, purchase_timeout: Optional[int] = None) -> bool:
     """Deploy all contracts in the correct order."""
     click.echo(f"\n{Colors.BOLD}🚀 COMPLETE DEPLOYMENT MODE{Colors.RESET}")
-    click.echo(f"{Colors.INFO}This will deploy: NFT → TokenSimulation → Registry → KlivePox → SessionsMarketplace{Colors.RESET}\n")
+    click.echo(f"{Colors.INFO}This will deploy: NFT → TokenSimulation → Registry → KliverPox → SessionsMarketplace{Colors.RESET}\n")
 
     deployed_addresses = {}
 
@@ -268,16 +268,16 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.ERROR}✗ Registry deployment failed. Aborting.{Colors.RESET}")
         return False
 
-    # Step 4: Deploy KlivePox and set in Registry
-    click.echo(f"{Colors.BOLD}Step 4/5: Deploying KlivePox Contract{Colors.RESET}")
-    pox_deployer = ContractDeployer(environment, 'klive_pox', config_manager)
+    # Step 4: Deploy KliverPox and set in Registry
+    click.echo(f"{Colors.BOLD}Step 4/5: Deploying KliverPox Contract{Colors.RESET}")
+    pox_deployer = ContractDeployer(environment, 'kliver_pox', config_manager)
     pox_result = pox_deployer.deploy_full_flow(owner, no_compile=no_compile, registry_address=deployed_addresses['registry'])
     if pox_result:
         deployments.append(pox_result)
         deployed_addresses['pox'] = pox_result['contract_address']
-        click.echo(f"\n{Colors.SUCCESS}✓ KlivePox deployed successfully at: {deployed_addresses['pox']}{Colors.RESET}\n")
-        # Set KlivePox in Registry
-        click.echo(f"{Colors.INFO}🔗 Setting KlivePox address in Registry...{Colors.RESET}")
+        click.echo(f"\n{Colors.SUCCESS}✓ KliverPox deployed successfully at: {deployed_addresses['pox']}{Colors.RESET}\n")
+        # Set KliverPox in Registry
+        click.echo(f"{Colors.INFO}🔗 Setting KliverPox address in Registry...{Colors.RESET}")
         from kliver_deploy.utils import CommandRunner
         env_cfg = config_manager.get_environment_config(environment)
 
@@ -286,7 +286,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                 "sncast", "--account", env_cfg.account,
                 "invoke", "--network", env_cfg.network,
                 "--contract-address", deployed_addresses['registry'],
-                "--function", "set_klive_pox_address",
+                "--function", "set_kliver_pox_address",
                 "--calldata", deployed_addresses['pox'],
             ]
         else:
@@ -294,46 +294,46 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                 "sncast", "--profile", env_cfg.network,
                 "invoke",
                 "--contract-address", deployed_addresses['registry'],
-                "--function", "set_klive_pox_address",
+                "--function", "set_kliver_pox_address",
                 "--calldata", deployed_addresses['pox'],
             ]
 
-        set_pox = CommandRunner.run_command(base_cmd, "Setting KlivePox in Registry")
+        set_pox = CommandRunner.run_command(base_cmd, "Setting KliverPox in Registry")
 
-        # CRITICAL: Wait for the set_klive_pox_address transaction to be confirmed before proceeding
+        # CRITICAL: Wait for the set_kliver_pox_address transaction to be confirmed before proceeding
         if set_pox["success"]:
             try:
                 from kliver_deploy.utils import StarknetUtils
                 tx_hash = StarknetUtils.parse_transaction_hash(set_pox["stdout"])
-                click.echo(f"{Colors.INFO}⏳ Waiting for set_klive_pox_address transaction to be confirmed...{Colors.RESET}")
+                click.echo(f"{Colors.INFO}⏳ Waiting for set_kliver_pox_address transaction to be confirmed...{Colors.RESET}")
                 from kliver_deploy.utils import TransactionWaiter
                 tx_waiter = TransactionWaiter(env_cfg.account, env_cfg.rpc_url, env_cfg.network)
                 if not tx_waiter.wait_for_confirmation(tx_hash):
-                    click.echo(f"{Colors.ERROR}✗ set_klive_pox_address transaction not confirmed. Aborting.{Colors.RESET}")
+                    click.echo(f"{Colors.ERROR}✗ set_kliver_pox_address transaction not confirmed. Aborting.{Colors.RESET}")
                     return False
-                click.echo(f"{Colors.SUCCESS}✓ set_klive_pox_address transaction confirmed{Colors.RESET}")
+                click.echo(f"{Colors.SUCCESS}✓ set_kliver_pox_address transaction confirmed{Colors.RESET}")
             except ValueError as e:
-                click.echo(f"{Colors.WARNING}⚠️ Could not parse transaction hash from set_klive_pox_address output: {str(e)}{Colors.RESET}")
+                click.echo(f"{Colors.WARNING}⚠️ Could not parse transaction hash from set_kliver_pox_address output: {str(e)}{Colors.RESET}")
                 # Continue anyway, might still work
 
-        # Verify get_klive_pox_address
+        # Verify get_kliver_pox_address
         if set_pox["success"]:
             if env_cfg.network in ("mainnet", "sepolia"):
                 base_verify = [
                     "sncast", "--account", env_cfg.account,
                     "call", "--network", env_cfg.network,
                     "--contract-address", deployed_addresses['registry'],
-                    "--function", "get_klive_pox_address",
+                    "--function", "get_kliver_pox_address",
                 ]
             else:
                 base_verify = [
                     "sncast", "--profile", env_cfg.network,
                     "call",
                     "--contract-address", deployed_addresses['registry'],
-                    "--function", "get_klive_pox_address",
+                    "--function", "get_kliver_pox_address",
                 ]
 
-            verify = CommandRunner.run_command(base_verify, "Verifying KlivePox in Registry")
+            verify = CommandRunner.run_command(base_verify, "Verifying KliverPox in Registry")
             if verify["success"]:
                 try:
                     from kliver_deploy.utils import StarknetUtils
@@ -342,15 +342,15 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                     expected = deployed_addresses['pox'].lower().replace('0x', '').lstrip('0')
                     returned = returned_address.lower().replace('0x', '').lstrip('0')
                     if expected == returned:
-                        click.echo(f"{Colors.SUCCESS}✓ Verified KlivePox in Registry: {deployed_addresses['pox']}{Colors.RESET}")
+                        click.echo(f"{Colors.SUCCESS}✓ Verified KliverPox in Registry: {deployed_addresses['pox']}{Colors.RESET}")
                     else:
-                        click.echo(f"{Colors.WARNING}⚠️ KlivePox address mismatch. Expected: {deployed_addresses['pox']}, Got: {returned_address}{Colors.RESET}")
+                        click.echo(f"{Colors.WARNING}⚠️ KliverPox address mismatch. Expected: {deployed_addresses['pox']}, Got: {returned_address}{Colors.RESET}")
                 except ValueError as e:
-                    click.echo(f"{Colors.WARNING}⚠️ Could not parse KlivePox address from output: {str(e)}{Colors.RESET}")
+                    click.echo(f"{Colors.WARNING}⚠️ Could not parse KliverPox address from output: {str(e)}{Colors.RESET}")
             else:
-                click.echo(f"{Colors.WARNING}⚠️ Could not verify KlivePox address via get_klive_pox_address{Colors.RESET}")
+                click.echo(f"{Colors.WARNING}⚠️ Could not verify KliverPox address via get_kliver_pox_address{Colors.RESET}")
     else:
-        click.echo(f"\n{Colors.ERROR}✗ KlivePox deployment failed. Aborting.{Colors.RESET}")
+        click.echo(f"\n{Colors.ERROR}✗ KliverPox deployment failed. Aborting.{Colors.RESET}")
         return False
 
     # Step 5: Configure TokenSimulation with Registry address

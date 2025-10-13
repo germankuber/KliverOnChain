@@ -3,23 +3,23 @@ use snforge_std::{
 };
 use starknet::ContractAddress;
 
-use kliver_on_chain::interfaces::klive_pox::{IKlivePoxDispatcher, IKlivePoxDispatcherTrait};
+use kliver_on_chain::interfaces::kliver_pox::{IKliverPoxDispatcher, IKliverPoxDispatcherTrait};
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
 
 fn REGISTRY() -> ContractAddress { 'registry'.try_into().unwrap() }
 fn AUTHOR() -> ContractAddress { 'author'.try_into().unwrap() }
 
-fn deploy_klive_pox(registry: ContractAddress) -> IKlivePoxDispatcher {
-    let contract = declare("KlivePox").unwrap().contract_class();
+fn deploy_kliver_pox(registry: ContractAddress) -> IKliverPoxDispatcher {
+    let contract = declare("KliverPox").unwrap().contract_class();
     let mut calldata = ArrayTrait::new();
     calldata.append(registry.into());
     let (addr, _) = contract.deploy(@calldata).unwrap();
-    IKlivePoxDispatcher { contract_address: addr }
+    IKliverPoxDispatcher { contract_address: addr }
 }
 
 #[test]
 fn test_mint_by_registry_success() {
-    let dispatcher = deploy_klive_pox(REGISTRY());
+    let dispatcher = deploy_kliver_pox(REGISTRY());
 
     // Only registry can mint
     start_cheat_caller_address(dispatcher.contract_address, REGISTRY());
@@ -64,7 +64,7 @@ fn test_mint_by_registry_success() {
 #[test]
 #[should_panic(expected: ('Only registry can call',))]
 fn test_mint_by_non_registry_panics() {
-    let dispatcher = deploy_klive_pox(REGISTRY());
+    let dispatcher = deploy_kliver_pox(REGISTRY());
 
     // Call mint from a different caller
     start_cheat_caller_address(dispatcher.contract_address, 'not_registry'.try_into().unwrap());
@@ -75,7 +75,7 @@ fn test_mint_by_non_registry_panics() {
 #[test]
 #[should_panic(expected: ('Simulation already minted',))]
 fn test_double_mint_same_session_panics() {
-    let dispatcher = deploy_klive_pox(REGISTRY());
+    let dispatcher = deploy_kliver_pox(REGISTRY());
     start_cheat_caller_address(dispatcher.contract_address, REGISTRY());
     let meta1 = SessionMetadata { session_id: 'dup_s', root_hash: 'hash_dup', simulation_id: 'sim_dup', author: AUTHOR(), score: 7_u32 };
     dispatcher.mint(meta1);
@@ -87,7 +87,7 @@ fn test_double_mint_same_session_panics() {
 #[test]
 #[should_panic(expected: ('Token not found',))]
 fn test_owner_of_token_not_found_panics() {
-    let dispatcher = deploy_klive_pox(REGISTRY());
+    let dispatcher = deploy_kliver_pox(REGISTRY());
     // Query non-existent token id
     let _ = dispatcher.owner_of_token(999);
 }

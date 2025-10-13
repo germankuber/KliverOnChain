@@ -437,7 +437,7 @@ class ContractDeployer:
             "registry": "get_owner",  # Registry specific
             "token": "balance_of",  # ERC1155
             "token_simulation": "balance_of",  # ERC1155 (TokenSimulation)
-            "pox": "get_registry_address",  # KlivePox - validates it has registry
+            "pox": "get_registry_address",  # KliverPox - validates it has registry
             "verifier": None,  # TODO: Add verifier validation once we know the interface
             "payment_token": "total_supply",  # ERC20 - validates it's a token contract
         }

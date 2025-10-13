@@ -2,7 +2,7 @@ use kliver_on_chain::interfaces::marketplace_interface::{
     IMarketplaceDispatcher, IMarketplaceDispatcherTrait, ListingStatus, OrderStatus,
 };
 use kliver_on_chain::mocks::mock_erc20::MockERC20::{IERC20Dispatcher, IERC20DispatcherTrait};
-use kliver_on_chain::interfaces::klive_pox::{IKlivePoxDispatcher, IKlivePoxDispatcherTrait};
+use kliver_on_chain::interfaces::kliver_pox::{IKliverPoxDispatcher, IKliverPoxDispatcherTrait};
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
@@ -27,12 +27,12 @@ fn deploy_mock_erc20(to: ContractAddress, amount: u256) -> IERC20Dispatcher {
     IERC20Dispatcher { contract_address: addr }
 }
 
-fn deploy_klive_pox(registry: ContractAddress) -> IKlivePoxDispatcher {
-    let contract = declare("KlivePox").unwrap().contract_class();
+fn deploy_kliver_pox(registry: ContractAddress) -> IKliverPoxDispatcher {
+    let contract = declare("KliverPox").unwrap().contract_class();
     let mut calldata = ArrayTrait::new();
     calldata.append(registry.into());
     let (addr, _) = contract.deploy(@calldata).unwrap();
-    IKlivePoxDispatcher { contract_address: addr }
+    IKliverPoxDispatcher { contract_address: addr }
 }
 
 fn deploy_mock_verifier() -> ContractAddress {
@@ -57,7 +57,7 @@ fn deploy_marketplace(
     IMarketplaceDispatcher { contract_address: addr }
 }
 
-fn mint_session(pox: IKlivePoxDispatcher, registry_addr: ContractAddress, meta: SessionMetadata) {
+fn mint_session(pox: IKliverPoxDispatcher, registry_addr: ContractAddress, meta: SessionMetadata) {
     start_cheat_caller_address(pox.contract_address, registry_addr);
     pox.mint(meta);
     stop_cheat_caller_address(pox.contract_address);
@@ -69,7 +69,7 @@ fn test_open_purchase_and_refund_flow() {
     let price: u256 = 1000;
     let token = deploy_mock_erc20(BUYER(), price * 2);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
-    let pox = deploy_klive_pox(registry_addr);
+    let pox = deploy_kliver_pox(registry_addr);
     let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
     let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
@@ -149,7 +149,7 @@ fn test_successful_sale_releases_escrow() {
     // Fund BUYER with enough tokens to open an order and also fund BUYER2
     let token = deploy_mock_erc20(BUYER(), price * 2);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
-    let pox = deploy_klive_pox(registry_addr);
+    let pox = deploy_kliver_pox(registry_addr);
     let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
     let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
@@ -209,7 +209,7 @@ fn test_refund_before_timeout_panics() {
     let price: u256 = 777;
     let token = deploy_mock_erc20(BUYER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
-    let pox = deploy_klive_pox(registry_addr);
+    let pox = deploy_kliver_pox(registry_addr);
     let verifier = deploy_mock_verifier();
     let timeout: u64 = 100;
     let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
@@ -241,7 +241,7 @@ fn test_open_purchase_invalid_amount() {
     let price: u256 = 1000;
     let token = deploy_mock_erc20(BUYER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
-    let pox = deploy_klive_pox(registry_addr);
+    let pox = deploy_kliver_pox(registry_addr);
     let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
     let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
@@ -271,7 +271,7 @@ fn test_refund_immediate_after_close() {
     let price: u256 = 999;
     let token = deploy_mock_erc20(BUYER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
-    let pox = deploy_klive_pox(registry_addr);
+    let pox = deploy_kliver_pox(registry_addr);
     let verifier = deploy_mock_verifier();
     let timeout: u64 = 100;
     let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);

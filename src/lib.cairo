@@ -27,7 +27,7 @@ pub mod interfaces {
     pub mod token_core;
     pub mod erc20;
     pub mod kliver_tokens_core;
-    pub mod klive_pox;
+    pub mod kliver_pox;
 }
 
 // Registry interface modules - separated by functionality
@@ -36,7 +36,7 @@ pub mod kliver_nft;
 
 // Main contract module
 pub mod kliver_registry;
-pub mod klive_pox;
+pub mod kliver_pox;
 pub mod kliver_tokens_core;
 pub mod kliver_tokens_core_types;
 // interfaces-only modules removed: now under interfaces/*

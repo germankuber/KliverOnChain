@@ -198,28 +198,28 @@ CONTRACTS.update({
 })
 
 
-class KlivePox(BaseContract):
-    """KlivePox contract (mints session NFTs from Registry)."""
+class KliverPox(BaseContract):
+    """KliverPox contract (mints session NFTs from Registry)."""
 
     def __init__(self):
-        super().__init__("KlivePox", "KlivePox")
+        super().__init__("KliverPox", "KliverPox")
 
     def get_constructor_calldata(self, owner_address: str = "0x0", registry_address: str = None, **kwargs) -> List[str]:
         if not registry_address:
-            raise ValueError("registry_address is required for KlivePox")
+            raise ValueError("registry_address is required for KliverPox")
         print(f"{Colors.INFO}📋 Using Registry address: {registry_address}{Colors.RESET}")
         return [registry_address]
 
     def validate_dependencies(self, registry_address: str = None, **kwargs) -> bool:
         if not registry_address:
-            print(f"{Colors.ERROR}✗ Registry address is required for KlivePox deployment{Colors.RESET}")
+            print(f"{Colors.ERROR}✗ Registry address is required for KliverPox deployment{Colors.RESET}")
             return False
         return True
 
 
-# Add KlivePox to factory
+# Add KliverPox to factory
 CONTRACTS.update({
-    "klive_pox": KlivePox,
+    "kliver_pox": KliverPox,
 })
 
 

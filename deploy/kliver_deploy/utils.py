@@ -271,7 +271,7 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
         "Nft": "",
         "Registry": "",
         "TokenSimulation": "",
-        "KlivePox": "",
+        "KliverPox": "",
         "MarketPlace": ""
     }
 
@@ -285,9 +285,9 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
             json_output['Registry'] = contract_address
         elif contract_name == 'klivertokenscore':
             json_output['TokenSimulation'] = contract_address
-        elif contract_name == 'klivepox':
+        elif contract_name == 'kliverpox':
             json_output['KliverPox'] = contract_address
-        elif contract_name == 'klive_pox':
+        elif contract_name == 'kliver_pox':
             json_output['KliverPox'] = contract_address
         elif contract_name in ('sessionmarketplace', 'sessionsmarketplace'):
             json_output['MarketPlace'] = contract_address
