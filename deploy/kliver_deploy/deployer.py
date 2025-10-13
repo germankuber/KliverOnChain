@@ -428,24 +428,36 @@ class ContractDeployer:
     def validate_contract(self, contract_address: str, contract_type: str) -> bool:
         """Validate that a contract exists and is of the expected type."""
         print(f"{Colors.INFO}🔍 Validating {contract_type} contract at {contract_address}...{Colors.RESET}")
-        
+
         # Define validation functions based on contract type
         validation_functions = {
             "nft": "name",  # ERC721
             "registry": "get_owner",  # Registry specific
-            "token": "balance_of",  # ERC1155 (TokenSimulation)
+            "token": "balance_of",  # ERC1155
+            "token_simulation": "balance_of",  # ERC1155 (TokenSimulation)
+            "pox": "get_registry_address",  # KlivePox - validates it has registry
+            "verifier": None,  # TODO: Add verifier validation once we know the interface
+            "payment_token": "total_supply",  # ERC20 - validates it's a token contract
         }
-        
+
         function_name = validation_functions.get(contract_type)
-        if not function_name:
-            print(f"{Colors.WARNING}⚠️  No validation function defined for {contract_type}{Colors.RESET}")
+
+        # Special case: verifier contract - we don't know the interface yet
+        if contract_type == "verifier":
+            print(f"{Colors.WARNING}⚠️  Verifier contract validation not implemented yet - skipping{Colors.RESET}")
+            print(f"{Colors.INFO}ℹ️  Assuming verifier address {contract_address} is valid{Colors.RESET}")
             return True
-        
+
+        if not function_name:
+            print(f"{Colors.ERROR}✗ No validation function defined for {contract_type}{Colors.RESET}")
+            print(f"{Colors.ERROR}✗ Cannot proceed with deployment without validation{Colors.RESET}")
+            return False
+
         # Prepare calldata based on function
         calldata = []
         if function_name == "balance_of":
-            calldata = ["0x0", "0x1"]  # dummy address and token id
-        
+            calldata = ["0x0", "0x1"]  # dummy address and token id for ERC1155
+
         if self.network_config.network in ("mainnet", "sepolia"):
             command = [
                 "sncast", "--account", self.network_config.account,
@@ -460,17 +472,25 @@ class ContractDeployer:
                 "--contract-address", contract_address,
                 "--function", function_name,
             ]
-        
+
         if calldata:
             command.extend(["--calldata"] + calldata)
-        
+
         result = CommandRunner.run_command(command, f"Validating {contract_type} contract")
-        
+
         if result["success"]:
             print(f"{Colors.SUCCESS}✓ {contract_type.title()} contract validated successfully{Colors.RESET}")
             return True
         else:
+            # Special case: payment_token might be Cairo 0 contract (can't validate with sncast)
+            all_output = result.get("stdout", "") + result.get("stderr", "")
+            if contract_type == "payment_token" and ("Cairo Zero" in all_output or "Transformation of arguments" in all_output):
+                print(f"{Colors.WARNING}⚠️  Payment token appears to be a Cairo 0 contract - cannot validate with sncast{Colors.RESET}")
+                print(f"{Colors.INFO}ℹ️  Assuming payment token address {contract_address} is valid{Colors.RESET}")
+                return True
+
             print(f"{Colors.ERROR}✗ Invalid {contract_type} contract address or contract not deployed{Colors.RESET}")
+            print(f"{Colors.ERROR}✗ Please verify the address and ensure the contract is deployed{Colors.RESET}")
             return False
 
     def save_deployment_info(self, class_hash: str, contract_address: str, owner_address: str, **kwargs):

@@ -150,5 +150,9 @@ mod KlivePox {
             let token_id = self.session_to_token.read(session_id);
             token_id != 0
         }
+
+        fn get_registry_address(self: @ContractState) -> ContractAddress {
+            self.registry.read()
+        }
     }
 }

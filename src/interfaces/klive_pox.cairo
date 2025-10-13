@@ -24,4 +24,7 @@ pub trait IKlivePox<TContractState> {
     fn get_metadata_by_token(self: @TContractState, token_id: u256) -> KlivePoxMetadata;
     fn get_metadata_by_session(self: @TContractState, session_id: felt252) -> KlivePoxMetadata;
     fn has_session(self: @TContractState, session_id: felt252) -> bool;
+
+    // Get registry address
+    fn get_registry_address(self: @TContractState) -> ContractAddress;
 }
