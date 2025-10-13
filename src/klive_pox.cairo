@@ -148,12 +148,6 @@ mod KlivePox {
             }
         }
 
-        fn get_metadata_by_simulation(self: @ContractState, simulation_id: felt252) -> KlivePoxMetadata {
-            let token_id = self.sim_to_token.read(simulation_id);
-            assert(token_id != 0, 'Simulation not found');
-            self.get_metadata_by_token(token_id)
-        }
-
         fn get_metadata_by_session(self: @ContractState, session_id: felt252) -> KlivePoxMetadata {
             let token_id = self.session_to_token.read(session_id);
             assert(token_id != 0, 'Session not found');

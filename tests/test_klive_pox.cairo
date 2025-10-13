@@ -54,8 +54,8 @@ fn test_mint_by_registry_success() {
     assert!(meta_t.author == AUTHOR(), 'author');
     assert!(meta_t.score == 111_u32, 'score');
 
-    // Metadata by simulation
-    let meta_s = dispatcher.get_metadata_by_simulation('sim_1');
+    // Metadata by session
+    let meta_s = dispatcher.get_metadata_by_session('session_1');
     assert!(meta_s.token_id == 1, 'token id');
     assert!(meta_s.session_id == 'session_1', 'session id');
     assert!(meta_s.root_hash == 'hash_1', 'root hash');
