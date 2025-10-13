@@ -44,21 +44,21 @@ fn test_mint_by_registry_success() {
 
     // Metadata by token
     let meta_t = dispatcher.get_metadata_by_token(1);
-    assert!(meta_t.token_id == 1, 'token id');
-    assert!(meta_t.session_id == 'session_1', 'session id');
-    assert!(meta_t.root_hash == 'hash_1', 'root hash');
-    assert!(meta_t.simulation_id == 'sim_1', 'sim id');
-    assert!(meta_t.author == AUTHOR(), 'author');
-    assert!(meta_t.score == 111_u32, 'score');
+    assert!(meta_t.token_id == 1, "token id");
+    assert!(meta_t.session_id == 'session_1', "session id");
+    assert!(meta_t.root_hash == 'hash_1', "root hash");
+    assert!(meta_t.simulation_id == 'sim_1', "sim id");
+    assert!(meta_t.author == AUTHOR(), "author");
+    assert!(meta_t.score == 111_u32, "score");
 
     // Metadata by session
     let meta_s = dispatcher.get_metadata_by_session('session_1');
-    assert!(meta_s.token_id == 1, 'token id');
-    assert!(meta_s.session_id == 'session_1', 'session id');
-    assert!(meta_s.root_hash == 'hash_1', 'root hash');
-    assert!(meta_s.simulation_id == 'sim_1', 'sim id');
-    assert!(meta_s.author == AUTHOR(), 'author');
-    assert!(meta_s.score == 111_u32, 'score');
+    assert!(meta_s.token_id == 1, "token id");
+    assert!(meta_s.session_id == 'session_1', "session id");
+    assert!(meta_s.root_hash == 'hash_1', "root hash");
+    assert!(meta_s.simulation_id == 'sim_1', "sim id");
+    assert!(meta_s.author == AUTHOR(), "author");
+    assert!(meta_s.score == 111_u32, "score");
 }
 
 #[test]

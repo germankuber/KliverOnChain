@@ -2,7 +2,7 @@ use kliver_on_chain::interfaces::marketplace_interface::{
     IMarketplaceDispatcher, IMarketplaceDispatcherTrait, ListingStatus, OrderStatus,
 };
 use kliver_on_chain::mocks::mock_erc20::MockERC20::{IERC20Dispatcher, IERC20DispatcherTrait};
-use kliver_on_chain::interfaces::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
+use kliver_on_chain::interfaces::klive_pox::{IKlivePoxDispatcher, IKlivePoxDispatcherTrait};
 use kliver_on_chain::mocks::mock_verifier::MockVerifier;
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
 use snforge_std::{
@@ -27,10 +27,12 @@ fn deploy_mock_erc20(to: ContractAddress, amount: u256) -> IERC20Dispatcher {
     IERC20Dispatcher { contract_address: addr }
 }
 
-fn deploy_mock_registry() -> ISessionRegistryDispatcher {
-    let contract = declare("MockSessionRegistry").unwrap().contract_class();
-    let (addr, _) = contract.deploy(@ArrayTrait::new()).unwrap();
-    ISessionRegistryDispatcher { contract_address: addr }
+fn deploy_klive_pox(registry: ContractAddress) -> IKlivePoxDispatcher {
+    let contract = declare("KlivePox").unwrap().contract_class();
+    let mut calldata = ArrayTrait::new();
+    calldata.append(registry.into());
+    let (addr, _) = contract.deploy(@calldata).unwrap();
+    IKlivePoxDispatcher { contract_address: addr }
 }
 
 fn deploy_mock_verifier() -> ContractAddress {
@@ -40,14 +42,14 @@ fn deploy_mock_verifier() -> ContractAddress {
 }
 
 fn deploy_marketplace(
-    registry: ContractAddress,
+    pox: ContractAddress,
     verifier: ContractAddress,
     token: ContractAddress,
     timeout: u64,
 ) -> IMarketplaceDispatcher {
     let contract = declare("SessionsMarketplace").unwrap().contract_class();
     let mut calldata = ArrayTrait::new();
-    calldata.append(registry.into());
+    calldata.append(pox.into());
     calldata.append(verifier.into());
     calldata.append(token.into());
     calldata.append(timeout.into());
@@ -55,16 +57,10 @@ fn deploy_marketplace(
     IMarketplaceDispatcher { contract_address: addr }
 }
 
-fn register_session(
-    registry: ISessionRegistryDispatcher,
-    session_id: felt252,
-    simulation_id: felt252,
-    root: felt252,
-    author: ContractAddress,
-    score: u32,
-) {
-    let m = SessionMetadata { session_id, root_hash: root, simulation_id, author, score };
-    registry.register_session(m);
+fn mint_session(pox: IKlivePoxDispatcher, registry_addr: ContractAddress, meta: SessionMetadata) {
+    start_cheat_caller_address(pox.contract_address, registry_addr);
+    pox.mint(meta);
+    stop_cheat_caller_address(pox.contract_address);
 }
 
 #[test]
@@ -72,20 +68,24 @@ fn test_open_purchase_and_refund_flow() {
     // Setup: buyer has funds
     let price: u256 = 1000;
     let token = deploy_mock_erc20(BUYER(), price * 2);
-    let registry = deploy_mock_registry();
+    let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
+    let pox = deploy_klive_pox(registry_addr);
     let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(registry.contract_address, verifier, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     // Register a session owned by SELLER
     let session_id = 'session_1';
     let sim_id = 'sim_1';
     let root = 'root_1';
-    register_session(registry, session_id, sim_id, root, SELLER(), 123);
+    let meta = SessionMetadata { session_id, root_hash: root, simulation_id: sim_id, author: SELLER(), score: 123_u32 };
+    mint_session(pox, registry_addr, meta);
+    let token_meta = pox.get_metadata_by_session(session_id);
+    let token_id = token_meta.token_id;
 
     // Create listing as SELLER
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    let listing_id = marketplace.create_listing(session_id, price);
+    let listing_id = marketplace.create_listing(token_id, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Approve marketplace to spend buyer's tokens
@@ -135,18 +135,21 @@ fn test_open_purchase_and_refund_flow() {
 fn test_successful_sale_releases_escrow() {
     let price: u256 = 500;
     let token = deploy_mock_erc20(BUYER(), price);
-    let registry = deploy_mock_registry();
+    let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
+    let pox = deploy_klive_pox(registry_addr);
     let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(registry.contract_address, verifier, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     // Register session owned by SELLER and list
     let session_id = 'session_2';
     let sim_id = 'sim_2';
     let root = 'root_2';
-    register_session(registry, session_id, sim_id, root, SELLER(), 100);
+    let meta2 = SessionMetadata { session_id, root_hash: root, simulation_id: sim_id, author: SELLER(), score: 100_u32 };
+    mint_session(pox, registry_addr, meta2);
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    let listing_id = marketplace.create_listing(session_id, price);
+    let token_id2 = pox.get_metadata_by_session(session_id).token_id;
+    let listing_id = marketplace.create_listing(token_id2, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Approve and open purchase as BUYER
@@ -177,15 +180,18 @@ fn test_successful_sale_releases_escrow() {
 fn test_refund_before_timeout_panics() {
     let price: u256 = 777;
     let token = deploy_mock_erc20(BUYER(), price);
-    let registry = deploy_mock_registry();
+    let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
+    let pox = deploy_klive_pox(registry_addr);
     let verifier = deploy_mock_verifier();
     let timeout: u64 = 100;
-    let marketplace = deploy_marketplace(registry.contract_address, verifier, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     // Register session and create listing
-    register_session(registry, 'session_refund', 'sim_r', 'root_r', SELLER(), 1);
+    let meta3 = SessionMetadata { session_id: 'session_refund', root_hash: 'root_r', simulation_id: 'sim_r', author: SELLER(), score: 1_u32 };
+    mint_session(pox, registry_addr, meta3);
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    let listing_id = marketplace.create_listing('session_refund', price);
+    let token_id3 = pox.get_metadata_by_session('session_refund').token_id;
+    let listing_id = marketplace.create_listing(token_id3, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Approve and open purchase as BUYER at time t=500
@@ -206,15 +212,18 @@ fn test_refund_before_timeout_panics() {
 fn test_open_purchase_invalid_amount() {
     let price: u256 = 1000;
     let token = deploy_mock_erc20(BUYER(), price);
-    let registry = deploy_mock_registry();
+    let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
+    let pox = deploy_klive_pox(registry_addr);
     let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(registry.contract_address, verifier, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     // Register session owned by SELLER and list
-    register_session(registry, 'session_3', 'sim_3', 'root_3', SELLER(), 1);
+    let meta4 = SessionMetadata { session_id: 'session_3', root_hash: 'root_3', simulation_id: 'sim_3', author: SELLER(), score: 1_u32 };
+    mint_session(pox, registry_addr, meta4);
     start_cheat_caller_address(marketplace.contract_address, SELLER());
-    let listing_id = marketplace.create_listing('session_3', price);
+    let token_id4 = pox.get_metadata_by_session('session_3').token_id;
+    let listing_id = marketplace.create_listing(token_id4, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
     // Approve correct price but send wrong amount

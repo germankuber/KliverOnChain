@@ -28,7 +28,7 @@ pub mod SessionsMarketplace {
     #[storage]
     struct Storage {
         // Direcciones de los contratos
-        registry: ContractAddress,
+        pox: ContractAddress,
         verifier: ContractAddress,
         // Token de pago (ERC20) y timeout de compra (en segundos)
         payment_token: ContractAddress,
@@ -38,11 +38,11 @@ pub mod SessionsMarketplace {
         listing_counter: u256,
         // Mapeo de session_id a listing_id
         session_to_listing: Map<felt252, u256>,
-        // Órdenes por (session_id, buyer)
-        orders: Map<(felt252, ContractAddress), Order>,
-        // Escrow y tiempos por orden (session_id, buyer)
-        escrow_amount: Map<(felt252, ContractAddress), u256>,
-        purchase_opened_at: Map<(felt252, ContractAddress), u64>,
+        // Órdenes por (listing_id, buyer)
+        orders: Map<(u256, ContractAddress), Order>,
+        // Escrow y tiempos por orden (listing_id, buyer)
+        escrow_amount: Map<(u256, ContractAddress), u256>,
+        purchase_opened_at: Map<(u256, ContractAddress), u64>,
     }
 
     #[event]
@@ -129,17 +129,17 @@ pub mod SessionsMarketplace {
     #[constructor]
     fn constructor(
         ref self: ContractState,
-        registry_address: ContractAddress,
+        pox_address: ContractAddress,
         verifier_address: ContractAddress,
         payment_token_address: ContractAddress,
         purchase_timeout_seconds: u64,
     ) {
-        assert(!registry_address.is_zero(), 'Invalid registry address');
+        assert(!pox_address.is_zero(), 'Invalid KlivePox address');
         assert(!verifier_address.is_zero(), 'Invalid verifier address');
         assert(!payment_token_address.is_zero(), 'Invalid payment token');
         assert(purchase_timeout_seconds > 0, 'Invalid purchase timeout');
 
-        self.registry.write(registry_address);
+        self.pox.write(pox_address);
         self.verifier.write(verifier_address);
         self.payment_token.write(payment_token_address);
         self.purchase_timeout.write(purchase_timeout_seconds);
@@ -154,16 +154,23 @@ pub mod SessionsMarketplace {
         // ============ SELLER FUNCTIONS ============
 
         // Crear un nuevo listing
-        fn create_listing(ref self: ContractState, session_id: felt252, price: u256) -> u256 {
+        fn create_listing(ref self: ContractState, token_id: u256, price: u256) -> u256 {
             let caller = get_caller_address();
+
+            // Obtener metadata desde KlivePox
+            let pox = crate::interfaces::klive_pox::IKlivePoxDispatcher { contract_address: self.pox.read() };
+            let meta = crate::interfaces::klive_pox::IKlivePoxDispatcherTrait::get_metadata_by_token(pox, token_id);
+            let session_id = meta.session_id;
+            let root = meta.root_hash;
+            let session_owner = meta.author;
+
+            // Validaciones
+            assert(root != 0, 'Session not found in KlivePox');
+            assert(caller == session_owner, 'Not session owner');
 
             // Verificar que no exista un listing para esta sesión
             let existing = self.session_to_listing.read(session_id);
             assert(existing == 0, 'Listing already exists');
-
-            // NOTE: Session info retrieval moved out of SessionRegistry interface.
-            // For now, assume listing can be created and set a non-zero root placeholder.
-            let root = 1;
 
             // Crear el listing
             let listing_id = self.listing_counter.read() + 1;
@@ -220,8 +227,8 @@ pub mod SessionsMarketplace {
             let this = get_contract_address();
             let _ok = crate::interfaces::payment_token::IMarketplacePaymentTokenDispatcherTrait::transfer_from(token, caller, this, amount);
 
-            // Crear orden por (session_id, buyer)
-            let order_key = (listing.session_id, caller);
+            // Crear orden por (listing_id, buyer)
+            let order_key = (listing_id, caller);
             // evitar orden existente abierta
             assert(self.escrow_amount.read(order_key) == 0, 'Order already exists');
 
@@ -257,7 +264,7 @@ pub mod SessionsMarketplace {
             // Datos públicos esperados
             let session_root = listing.root;
             // Validar orden del buyer
-            let order_key = (listing.session_id, buyer);
+            let order_key = (listing_id, buyer);
             let mut order = self.orders.read(order_key);
             let challenge = order.challenge;
             // Ensure numeric challenge matches order.challenge
@@ -265,9 +272,9 @@ pub mod SessionsMarketplace {
             assert(challenge_key == expected_key, 'Challenge key mismatch');
             assert(order.status == OrderStatus::Open, 'Order not open');
 
-            // Llamar al verify_proof del registry (con challenge numérico)
-            let registry = ISessionRegistryDispatcher { contract_address: self.registry.read() };
-            let result = registry.verify_proof(proof, session_root, challenge_key);
+            // Verificar proof directamente contra el Verifier
+            let verifier = IVerifierDispatcher { contract_address: self.verifier.read() };
+            let result = verifier.verify_ultra_starknet_honk_proof(proof);
             let is_valid = result.is_some();
 
             // Emitir evento de proof
@@ -315,7 +322,7 @@ pub mod SessionsMarketplace {
         fn refund_purchase(ref self: ContractState, listing_id: u256) {
             let caller = get_caller_address();
             let listing = self.listings.read(listing_id);
-            let order_key = (listing.session_id, caller);
+            let order_key = (listing_id, caller);
             let mut order = self.orders.read(order_key);
 
             assert(order.status == OrderStatus::Open, 'Not refundable');
@@ -359,8 +366,8 @@ pub mod SessionsMarketplace {
             self.listing_counter.read()
         }
 
-        fn get_registry_address(self: @ContractState) -> ContractAddress {
-            self.registry.read()
+        fn get_pox_address(self: @ContractState) -> ContractAddress {
+            self.pox.read()
         }
 
         fn get_listing_by_session(self: @ContractState, session_id: felt252) -> u256 {
@@ -368,21 +375,26 @@ pub mod SessionsMarketplace {
         }
 
         fn is_order_closed(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> bool {
-            let order = self.orders.read((session_id, buyer));
+            let listing_id = self.session_to_listing.read(session_id);
+            if listing_id == 0 { return false; }
+            let order = self.orders.read((listing_id, buyer));
             order.status == OrderStatus::Sold
         }
 
         fn get_order(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> Order {
-            self.orders.read((session_id, buyer))
+            let listing_id = self.session_to_listing.read(session_id);
+            self.orders.read((listing_id, buyer))
         }
 
         fn get_order_status(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> OrderStatus {
-            let order = self.orders.read((session_id, buyer));
+            let listing_id = self.session_to_listing.read(session_id);
+            let order = self.orders.read((listing_id, buyer));
             order.status
         }
 
         fn get_order_info(self: @ContractState, session_id: felt252, buyer: ContractAddress) -> (felt252, u256) {
-            let order = self.orders.read((session_id, buyer));
+            let listing_id = self.session_to_listing.read(session_id);
+            let order = self.orders.read((listing_id, buyer));
             (order.challenge, order.amount)
         }
     }
