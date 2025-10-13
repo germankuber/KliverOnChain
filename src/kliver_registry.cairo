@@ -445,41 +445,7 @@ pub mod kliver_registry {
             result
         }
 
-        fn get_session_info(self: @ContractState, session_id: felt252) -> SessionMetadata {
-            let kp_addr = self.klive_pox_address.read();
-            assert(!kp_addr.is_zero(), 'KlivePox not set');
-            let kp = IKlivePoxDispatcher { contract_address: kp_addr };
-            let meta = kp.get_metadata_by_session(session_id);
-            SessionMetadata {
-                session_id: meta.session_id,
-                root_hash: meta.root_hash,
-                simulation_id: meta.simulation_id,
-                author: meta.author,
-                score: meta.score,
-            }
-        }
-
-        // ---- Opcional: access list (trazabilidad de ventas) ----
-        fn grant_access(ref self: ContractState, session_id: felt252, addr: ContractAddress) {
-            self._assert_not_paused();
-            self
-                ._assert_only_owner(); // o permitir también al author si querés: assert(get_caller==owner || == author)
-
-            assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
-            assert(!addr.is_zero(), Errors::GRANTEE_CANNOT_BE_ZERO);
-
-            // Verify session exists using component
-            assert(self.session_registry.session_exists(session_id), Errors::SESSION_NOT_FOUND);
-
-            // Delegate to component
-            let caller = get_caller_address();
-            self.session_registry.grant_access(session_id, addr, caller);
-        }
-
-        fn has_access(self: @ContractState, session_id: felt252, addr: ContractAddress) -> bool {
-            // Delegate to component
-            self.session_registry.has_access(session_id, addr)
-        }
+        // Removed: get_session_info, grant_access, has_access
 
         fn get_verifier_address(self: @ContractState) -> ContractAddress {
             self.verifier_address.read()

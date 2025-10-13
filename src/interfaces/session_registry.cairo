@@ -8,9 +8,6 @@ pub trait ISessionRegistry<TContractState> {
     fn verify_session(
         self: @TContractState, session_id: felt252, root_hash: felt252,
     ) -> VerificationResult;
-    fn get_session_info(self: @TContractState, session_id: felt252) -> SessionMetadata;
-    fn grant_access(ref self: TContractState, session_id: felt252, addr: ContractAddress);
-    fn has_access(self: @TContractState, session_id: felt252, addr: ContractAddress) -> bool;
     fn get_verifier_address(self: @TContractState) -> ContractAddress;
     fn verify_complete_session(
         self: @TContractState, full_proof_with_hints: Span<felt252>,
@@ -19,4 +16,3 @@ pub trait ISessionRegistry<TContractState> {
         self: @TContractState, full_proof_with_hints: Span<felt252>, root_hash: felt252, challenge: u64
     ) -> Option<Span<u256>>;
 }
-

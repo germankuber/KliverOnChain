@@ -35,20 +35,7 @@ pub mod MockSessionRegistry {
             if stored_root == 0 { return VerificationResult::NotFound; }
             if stored_root == root_hash { VerificationResult::Match } else { VerificationResult::Mismatch }
         }
-        fn get_session_info(self: @ContractState, session_id: felt252) -> SessionMetadata {
-            let root = self.roots.read(session_id);
-            assert(root != 0, 'Session not found');
-            let sim = self.sims.read(session_id);
-            let author = self.authors.read(session_id);
-            let score = self.scores.read(session_id);
-            SessionMetadata { session_id, root_hash: root, simulation_id: sim, author, score }
-        }
-        fn grant_access(ref self: ContractState, session_id: felt252, addr: ContractAddress) {
-            // no-op for mock
-        }
-        fn has_access(self: @ContractState, session_id: felt252, addr: ContractAddress) -> bool {
-            true
-        }
+        // removed: get_session_info, grant_access, has_access
         fn get_verifier_address(self: @ContractState) -> ContractAddress {
             0.try_into().unwrap()
         }

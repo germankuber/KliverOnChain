@@ -41,9 +41,6 @@ fn test_mint_by_registry_success() {
     let owner_t1 = dispatcher.owner_of_token(1);
     assert!(owner_t1 == AUTHOR(), "Owner of token 1 must be author");
 
-    // Owner by simulation id
-    let owner_sim = dispatcher.owner_of_simulation('sim_1');
-    assert!(owner_sim == AUTHOR(), "Owner by simulation must be author");
 
     // Metadata by token
     let meta_t = dispatcher.get_metadata_by_token(1);
@@ -95,10 +92,4 @@ fn test_owner_of_token_not_found_panics() {
     let _ = dispatcher.owner_of_token(999);
 }
 
-#[test]
-fn test_owner_of_simulation_not_minted_returns_zero() {
-    let dispatcher = deploy_klive_pox(REGISTRY());
-    let zero: ContractAddress = 0.try_into().unwrap();
-    let owner = dispatcher.owner_of_simulation('no_sim');
-    assert!(owner == zero, "Unminted simulation should return zero address");
-}
+// removed: owner_of_simulation tests

@@ -19,7 +19,6 @@ pub trait IKlivePox<TContractState> {
     // Public getters
     fn balance_of(self: @TContractState, user: ContractAddress) -> u256;
     fn owner_of_token(self: @TContractState, token_id: u256) -> ContractAddress;
-    fn owner_of_simulation(self: @TContractState, simulation_id: felt252) -> ContractAddress;
 
     // Full metadata getters
     fn get_metadata_by_token(self: @TContractState, token_id: u256) -> KlivePoxMetadata;

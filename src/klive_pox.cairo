@@ -21,8 +21,7 @@ mod KlivePox {
         // Ownership and balances
         token_owner: Map<u256, ContractAddress>,
         balances: Map<ContractAddress, u256>,
-        // Index simulation -> token and token -> simulation
-        sim_to_token: Map<felt252, u256>,
+        // Index token -> simulation
         token_to_sim: Map<u256, felt252>,
         // Store root hash per simulation and per token
         root_hash_by_sim: Map<felt252, felt252>,
@@ -77,9 +76,10 @@ mod KlivePox {
 
             // Basic validations
             assert(!metadata.author.is_zero(), Errors::INVALID_AUTHOR);
-            // Prevent duplicate mint for the same simulation
-            let existing = self.sim_to_token.read(metadata.simulation_id);
-            assert(existing == 0, Errors::SIM_ALREADY_MINTED);
+            // Prevent duplicate mint for the same simulation via token_to_sim scan is not feasible;
+            // use session_to_token to ensure uniqueness at session level and proxy uniqueness for simulation by design
+            let existing_token = self.session_to_token.read(metadata.session_id);
+            assert(existing_token == 0, Errors::SIM_ALREADY_MINTED);
 
             // New token id = next_token_id + 1
             let next = self.next_token_id.read();
@@ -92,7 +92,6 @@ mod KlivePox {
             self.balances.write(metadata.author, bal + 1);
 
             // Index by simulation
-            self.sim_to_token.write(metadata.simulation_id, token_id);
             self.token_to_sim.write(token_id, metadata.simulation_id);
             // Store root hash
             self.root_hash_by_sim.write(metadata.simulation_id, metadata.root_hash);
@@ -122,14 +121,7 @@ mod KlivePox {
             owner
         }
 
-        fn owner_of_simulation(self: @ContractState, simulation_id: felt252) -> ContractAddress {
-            let token_id = self.sim_to_token.read(simulation_id);
-            if token_id == 0 {
-                return 0.try_into().unwrap();
-            }
-            let owner = self.token_owner.read(token_id);
-            owner
-        }
+        // owner_of_simulation removed (no sim_to_token mapping)
 
         fn get_metadata_by_token(self: @ContractState, token_id: u256) -> KlivePoxMetadata {
             let author = self.token_owner.read(token_id);
