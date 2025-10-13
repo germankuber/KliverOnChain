@@ -298,6 +298,23 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
             ]
 
         set_pox = CommandRunner.run_command(base_cmd, "Setting KlivePox in Registry")
+
+        # CRITICAL: Wait for the set_klive_pox_address transaction to be confirmed before proceeding
+        if set_pox["success"]:
+            try:
+                from kliver_deploy.utils import StarknetUtils
+                tx_hash = StarknetUtils.parse_transaction_hash(set_pox["stdout"])
+                click.echo(f"{Colors.INFO}⏳ Waiting for set_klive_pox_address transaction to be confirmed...{Colors.RESET}")
+                from kliver_deploy.utils import TransactionWaiter
+                tx_waiter = TransactionWaiter(env_cfg.account, env_cfg.rpc_url, env_cfg.network)
+                if not tx_waiter.wait_for_confirmation(tx_hash):
+                    click.echo(f"{Colors.ERROR}✗ set_klive_pox_address transaction not confirmed. Aborting.{Colors.RESET}")
+                    return False
+                click.echo(f"{Colors.SUCCESS}✓ set_klive_pox_address transaction confirmed{Colors.RESET}")
+            except ValueError as e:
+                click.echo(f"{Colors.WARNING}⚠️ Could not parse transaction hash from set_klive_pox_address output: {str(e)}{Colors.RESET}")
+                # Continue anyway, might still work
+
         # Verify get_klive_pox_address
         if set_pox["success"]:
             if env_cfg.network in ("mainnet", "sepolia"):

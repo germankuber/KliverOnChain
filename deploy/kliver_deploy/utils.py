@@ -149,6 +149,9 @@ class StarknetUtils:
             r"Tx hash:\s*(0x[a-fA-F0-9]+)",
             # Case-insensitive pattern to catch all variations
             r"transaction\s*hash:\s*(0x[a-fA-F0-9]+)",
+            # Additional patterns for invoke output
+            r"Invoke transaction:\s*(0x[a-fA-F0-9]+)",
+            r"invoke_tx_hash:\s*(0x[a-fA-F0-9]+)",
         ]
 
         for pattern in patterns:
