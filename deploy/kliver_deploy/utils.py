@@ -286,9 +286,9 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
         elif contract_name == 'klivertokenscore':
             json_output['TokenSimulation'] = contract_address
         elif contract_name == 'klivepox':
-            json_output['KlivePox'] = contract_address
+            json_output['KliverPox'] = contract_address
         elif contract_name == 'klive_pox':
-            json_output['KlivePox'] = contract_address
+            json_output['KliverPox'] = contract_address
         elif contract_name in ('sessionmarketplace', 'sessionsmarketplace'):
             json_output['MarketPlace'] = contract_address
 
