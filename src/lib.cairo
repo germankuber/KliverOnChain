@@ -49,6 +49,9 @@ pub mod mocks {
     pub mod mock_verifier;
 }
 
+// Demo module - Examples and simple implementations
+pub mod demo;
+
 
 // Re-export key types for easier access
 pub use types::VerificationResult;
