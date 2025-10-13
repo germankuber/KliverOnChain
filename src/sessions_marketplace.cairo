@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 // Minimal ERC20 interface for escrow transfers (module-level)
-use starknet::ContractAddress;
 // Re-export marketplace interface types and dispatcher at file scope for compatibility
 pub use crate::interfaces::marketplace_interface::{
     IMarketplace, IMarketplaceDispatcher, IMarketplaceDispatcherTrait, ListingStatus, OrderStatus,
@@ -16,9 +15,7 @@ pub mod SessionsMarketplace {
     };
     use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
     use super::super::interfaces::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
-    use super::super::interfaces::session_registry::{
-        ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait,
-    };
+    // Registry no longer used directly here
     // Types and dispatcher re-exported at file scope
 
     // use dispatcher imported at module level
@@ -321,7 +318,6 @@ pub mod SessionsMarketplace {
         /// Permite al comprador reclamar el saldo si el seller no responde dentro del timeout.
         fn refund_purchase(ref self: ContractState, listing_id: u256) {
             let caller = get_caller_address();
-            let listing = self.listings.read(listing_id);
             let order_key = (listing_id, caller);
             let mut order = self.orders.read(order_key);
 

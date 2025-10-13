@@ -4,9 +4,15 @@ use snforge_std::{
 use starknet::ContractAddress;
 
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
+use kliver_on_chain::components::character_registry_component::CharacterMetadata;
+use kliver_on_chain::components::scenario_registry_component::ScenarioMetadata;
+use kliver_on_chain::components::simulation_registry_component::SimulationMetadata;
 use kliver_on_chain::interfaces::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
 use kliver_on_chain::interfaces::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
 use kliver_on_chain::interfaces::klive_pox::{IKlivePoxDispatcher, IKlivePoxDispatcherTrait};
+use kliver_on_chain::interfaces::character_registry::{ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait};
+use kliver_on_chain::interfaces::scenario_registry::{IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait};
+use kliver_on_chain::interfaces::simulation_registry::{ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait};
 use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
 
 fn OWNER() -> ContractAddress { 'owner'.try_into().unwrap() }
@@ -71,7 +77,17 @@ fn test_register_session_mints_in_klive_pox_and_verifications() {
     nft.mint_to_user(AUTHOR());
     stop_cheat_caller_address(nft.contract_address);
 
-    // Register a session via registry (only owner)
+    // Register character, scenario, simulation (owner)
+    let char_disp = ICharacterRegistryDispatcher { contract_address: registry_addr };
+    let scen_disp = IScenarioRegistryDispatcher { contract_address: registry_addr };
+    let sim_disp = ISimulationRegistryDispatcher { contract_address: registry_addr };
+    start_cheat_caller_address(registry_addr, OWNER());
+    char_disp.register_character(CharacterMetadata { character_id: 'char1', character_hash: 'char_hash', author: AUTHOR() });
+    scen_disp.register_scenario(ScenarioMetadata { scenario_id: 'scen1', scenario_hash: 'scen_hash', author: AUTHOR() });
+    sim_disp.register_simulation(SimulationMetadata { simulation_id: 'sim1', simulation_hash: 'sim_hash', author: AUTHOR(), character_id: 'char1', scenario_id: 'scen1' });
+    stop_cheat_caller_address(registry_addr);
+
+    // Register a session via registry (only owner), this mints in KlivePox
     let session = SessionMetadata {
         session_id: 's1',
         root_hash: 'root1',

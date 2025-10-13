@@ -3,7 +3,6 @@ use kliver_on_chain::interfaces::marketplace_interface::{
 };
 use kliver_on_chain::mocks::mock_erc20::MockERC20::{IERC20Dispatcher, IERC20DispatcherTrait};
 use kliver_on_chain::interfaces::klive_pox::{IKlivePoxDispatcher, IKlivePoxDispatcherTrait};
-use kliver_on_chain::mocks::mock_verifier::MockVerifier;
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
@@ -13,6 +12,7 @@ use starknet::ContractAddress;
 
 fn SELLER() -> ContractAddress { 'seller'.try_into().unwrap() }
 fn BUYER() -> ContractAddress { 'buyer'.try_into().unwrap() }
+fn BUYER2() -> ContractAddress { 'buyer2'.try_into().unwrap() }
 
 fn deploy_mock_erc20(to: ContractAddress, amount: u256) -> IERC20Dispatcher {
     let contract = declare("MockERC20").unwrap().contract_class();
@@ -95,13 +95,25 @@ fn test_open_purchase_and_refund_flow() {
 
     // Open purchase as BUYER (set timestamp first)
     let challenge_felt = 1234567890; // felt
-    let challenge_key: u64 = 1234567890_u64;
+    let _challenge_key: u64 = 1234567890_u64;
     start_cheat_block_timestamp(marketplace.contract_address, 1000);
     start_cheat_caller_address(marketplace.contract_address, BUYER());
     marketplace.open_purchase(listing_id, challenge_felt, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
-    // Listing remains Open; order is tracked per (session_id, buyer)
+    // Another buyer can open a parallel order against the same listing
+    // Fund BUYER2 by transferring from BUYER
+    start_cheat_caller_address(token.contract_address, BUYER());
+    let _oktf = token.transfer(BUYER2(), price);
+    stop_cheat_caller_address(token.contract_address);
+    start_cheat_caller_address(token.contract_address, BUYER2());
+    let _ok2 = token.approve(marketplace.contract_address, price);
+    stop_cheat_caller_address(token.contract_address);
+    start_cheat_caller_address(marketplace.contract_address, BUYER2());
+    marketplace.open_purchase(listing_id, 9999999999, price);
+    stop_cheat_caller_address(marketplace.contract_address);
+
+    // Listing remains Open; orders are tracked per (listing_id, buyer)
     let st = marketplace.get_listing_status(listing_id);
     assert!(st == ListingStatus::Open, "Listing stays open with per-buyer order");
 
@@ -162,7 +174,19 @@ fn test_successful_sale_releases_escrow() {
     marketplace.open_purchase(listing_id, challenge_felt2, price);
     stop_cheat_caller_address(marketplace.contract_address);
 
-    // Seller submits proof and completes sale
+    // A second buyer opens a competing order
+    // Fund BUYER2 before approval
+    start_cheat_caller_address(token.contract_address, BUYER());
+    let _oktf2 = token.transfer(BUYER2(), price);
+    stop_cheat_caller_address(token.contract_address);
+    start_cheat_caller_address(token.contract_address, BUYER2());
+    let _ok2 = token.approve(marketplace.contract_address, price);
+    stop_cheat_caller_address(token.contract_address);
+    start_cheat_caller_address(marketplace.contract_address, BUYER2());
+    marketplace.open_purchase(listing_id, 9999999999, price);
+    stop_cheat_caller_address(marketplace.contract_address);
+
+    // Seller submits proof and completes sale for BUYER
     start_cheat_caller_address(marketplace.contract_address, SELLER());
     let proof: Array<felt252> = array![1, 2, 3];
     marketplace.settle_purchase(listing_id, BUYER(), challenge_key2, proof.span());
@@ -171,8 +195,11 @@ fn test_successful_sale_releases_escrow() {
     // Listing should be Sold
     let st = marketplace.get_listing_status(listing_id);
     assert!(st == ListingStatus::Sold, "Should be sold");
-    let status2 = marketplace.get_order_status('session_2', BUYER());
-    assert!(status2 == OrderStatus::Sold, "Order should be marked sold");
+    let status_buyer = marketplace.get_order_status('session_2', BUYER());
+    assert!(status_buyer == OrderStatus::Sold, "Order should be marked sold");
+    // Second buyer's order remains open or refundable
+    let status_buyer2 = marketplace.get_order_status('session_2', BUYER2());
+    assert!(status_buyer2 == OrderStatus::Open, "Second buyer order remains open");
 }
 
 #[test]
@@ -232,5 +259,7 @@ fn test_open_purchase_invalid_amount() {
     stop_cheat_caller_address(token.contract_address);
 
     start_cheat_caller_address(marketplace.contract_address, BUYER());
-    marketplace.open_purchase(listing_id, 'challenge', price - 1);
+    let one: u256 = u256 { low: 1, high: 0 };
+    let wrong_amount: u256 = price - one;
+    marketplace.open_purchase(listing_id, 'challenge', wrong_amount);
 }

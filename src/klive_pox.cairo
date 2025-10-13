@@ -1,4 +1,4 @@
-use starknet::ContractAddress;
+// removed unused top-level import
 
 #[starknet::contract]
 mod KlivePox {
@@ -144,6 +144,11 @@ mod KlivePox {
             let token_id = self.session_to_token.read(session_id);
             assert(token_id != 0, 'Session not found');
             self.get_metadata_by_token(token_id)
+        }
+
+        fn has_session(self: @ContractState, session_id: felt252) -> bool {
+            let token_id = self.session_to_token.read(session_id);
+            token_id != 0
         }
     }
 }

@@ -422,8 +422,11 @@ pub mod kliver_registry {
             let kp_addr = self.klive_pox_address.read();
             assert(!kp_addr.is_zero(), 'KlivePox not set');
             let kp = IKlivePoxDispatcher { contract_address: kp_addr };
-            let meta = kp.get_metadata_by_session(session_id);
-            if meta.root_hash == 0 { return VerificationResult::NotFound; }
+            // Avoid panic: first check existence
+            if !IKlivePoxDispatcherTrait::has_session(kp, session_id) {
+                return VerificationResult::NotFound;
+            }
+            let meta = IKlivePoxDispatcherTrait::get_metadata_by_session(kp, session_id);
             if meta.root_hash == root_hash { VerificationResult::Match } else { VerificationResult::Mismatch }
         }
 
