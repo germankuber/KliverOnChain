@@ -372,7 +372,12 @@ mod KliverTokensCore {
         assert(total_amount > 0, 'Nothing to claim');
 
         // 8. Mint tokens to claimer
-        self.erc1155.mint_with_acceptance_check(caller, token_id, total_amount, array![].span());
+        // self.erc1155.mint_with_acceptance_check(caller, token_id, total_amount, array![].span());
+
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+        self
+            .erc1155
+            .update(zero_address, caller, array![token_id].span(), array![total_amount].span());
 
         // 9. Update last claim timestamp
         self.last_claim_timestamp.entry((token_id, simulation_id, caller)).write(current_time);
