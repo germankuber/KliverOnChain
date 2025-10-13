@@ -1,7 +1,7 @@
 #[starknet::contract]
 pub mod MockSessionRegistry {
     use kliver_on_chain::components::session_registry_component::SessionMetadata;
-    use kliver_on_chain::session_registry::ISessionRegistry;
+    use kliver_on_chain::interfaces::session_registry::ISessionRegistry;
     use kliver_on_chain::types::VerificationResult;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,

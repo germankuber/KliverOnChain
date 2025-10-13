@@ -1,8 +1,8 @@
-use kliver_on_chain::sessions_marketplace::SessionsMarketplace::{
+use kliver_on_chain::interfaces::marketplace_interface::{
     IMarketplaceDispatcher, IMarketplaceDispatcherTrait, ListingStatus, OrderStatus,
 };
 use kliver_on_chain::mocks::mock_erc20::MockERC20::{IERC20Dispatcher, IERC20DispatcherTrait};
-use kliver_on_chain::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
+use kliver_on_chain::interfaces::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
 use kliver_on_chain::mocks::mock_verifier::MockVerifier;
 use kliver_on_chain::components::session_registry_component::SessionMetadata;
 use snforge_std::{

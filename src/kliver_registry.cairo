@@ -1,26 +1,12 @@
-// Import interfaces from separate modules
-use crate::character_registry::ICharacterRegistry;
-use crate::owner_registry::IOwnerRegistry;
-use crate::scenario_registry::IScenarioRegistry;
-use crate::session_registry::ISessionRegistry;
-use crate::simulation_registry::ISimulationRegistry;
+// Import interfaces from interfaces/ modules
+use crate::interfaces::character_registry::ICharacterRegistry;
+use crate::interfaces::owner_registry::IOwnerRegistry;
+use crate::interfaces::scenario_registry::IScenarioRegistry;
+use crate::interfaces::session_registry::ISessionRegistry;
+use crate::interfaces::simulation_registry::ISimulationRegistry;
 use crate::types::VerificationResult;
 
-/// Verifier Interface for proof verification
-#[starknet::interface]
-pub trait IVerifier<TContractState> {
-    fn verify_ultra_starknet_honk_proof(
-        self: @TContractState, full_proof_with_hints: Span<felt252>,
-    ) -> Option<Span<u256>>;
-}
-
-/// Token Core Interface for simulation registration
-#[starknet::interface]
-pub trait ITokenCore<TContractState> {
-    fn register_simulation(
-        ref self: TContractState, simulation_id: felt252, token_id: u256, expiration_timestamp: u64,
-    ) -> felt252;
-}
+// Interfaces moved to crate::interfaces::{verifier, token_core}
 
 /// Kliver Registry Contract
 //
@@ -44,10 +30,11 @@ pub mod kliver_registry {
     use starknet::{ContractAddress, get_caller_address};
     use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
     use super::{
-        ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
-        ISimulationRegistry, ITokenCoreDispatcher, ITokenCoreDispatcherTrait, IVerifierDispatcher,
-        IVerifierDispatcherTrait, VerificationResult,
+        ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry, ISimulationRegistry,
+        VerificationResult,
     };
+    use crate::interfaces::token_core::{ITokenCoreDispatcher, ITokenCoreDispatcherTrait};
+    use crate::interfaces::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
 
     component!(
         path: CharacterRegistryComponent,

@@ -1,42 +1,10 @@
 // SPDX-License-Identifier: MIT
 
 use starknet::ContractAddress;
-
-// Session structure
-#[derive(Drop, Serde, Copy, starknet::Store)]
-pub struct Session {
-    pub session_id: felt252,
-    pub simulation_id: felt252,
-    pub root_hash: felt252,
-    pub score: u128,
-    pub price: u128,
-    pub publisher: ContractAddress,
-}
-
-#[starknet::interface]
-pub trait ISessionEscrow<TContractState> {
-    /// Publish a new session
-    fn publish_session(
-        ref self: TContractState,
-        simulation_id: felt252,
-        session_id: felt252,
-        root_hash: felt252,
-        score: u128,
-        price: u128,
-    );
-
-    /// Get all sessions for a given simulation_id
-    fn get_sessions_by_simulation(self: @TContractState, simulation_id: felt252) -> Array<Session>;
-
-    /// Remove a session (only by the original publisher)
-    fn remove_session(ref self: TContractState, session_id: felt252);
-
-    /// Get a specific session by session_id
-    fn get_session(self: @TContractState, session_id: felt252) -> Session;
-
-    /// Check if a session exists
-    fn session_exists(self: @TContractState, session_id: felt252) -> bool;
-}
+// Re-export interface dispatcher and types
+pub use crate::interfaces::session_escrow::{
+    ISessionEscrow, ISessionEscrowDispatcher, ISessionEscrowDispatcherTrait, Session,
+};
 
 #[starknet::contract]
 mod SessionEscrow {
@@ -92,7 +60,8 @@ mod SessionEscrow {
     }
 
     #[abi(embed_v0)]
-    impl SessionEscrowImpl of super::ISessionEscrow<ContractState> {
+    use crate::interfaces::session_escrow::ISessionEscrow;
+    impl SessionEscrowImpl of ISessionEscrow<ContractState> {
         /// Publish a new session
         fn publish_session(
             ref self: ContractState,
@@ -138,11 +107,7 @@ mod SessionEscrow {
             let len = sim_sessions.len();
 
             let mut i: u64 = 0;
-            loop {
-                if i >= len {
-                    break;
-                }
-
+            while i < len {
                 let session_id = sim_sessions.at(i).read();
                 let session = self.sessions.entry(session_id).read();
 

@@ -1,6 +1,6 @@
 #[starknet::contract]
 pub mod MockVerifier {
-    use kliver_on_chain::kliver_registry::IVerifier;
+use kliver_on_chain::interfaces::verifier::IVerifier;
     #[storage]
     struct Storage {}
 

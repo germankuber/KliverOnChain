@@ -1,19 +1,19 @@
 use core::array::ArrayTrait;
 
 // Import contract interfaces from modular structure
-use kliver_on_chain::character_registry::{
+use kliver_on_chain::interfaces::character_registry::{
     ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait,
 };
 use kliver_on_chain::components::character_registry_component::CharacterMetadata;
 use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
-use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
-use kliver_on_chain::scenario_registry::{
+use kliver_on_chain::interfaces::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
+use kliver_on_chain::interfaces::scenario_registry::{
     IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait, ScenarioMetadata,
 };
-use kliver_on_chain::session_registry::{
+use kliver_on_chain::interfaces::session_registry::{
     ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait, SessionMetadata,
 };
-use kliver_on_chain::simulation_registry::{
+use kliver_on_chain::interfaces::simulation_registry::{
     ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata,
     SimulationWithTokenMetadata,
 };
@@ -2020,4 +2020,3 @@ fn test_simulation_exists_zero_id() {
     let exists = dispatcher.simulation_exists(0);
     assert(!exists, 'Zero ID should not exist');
 }
-

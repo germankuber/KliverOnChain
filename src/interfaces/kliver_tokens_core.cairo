@@ -1,11 +1,11 @@
 use starknet::ContractAddress;
-use super::kliver_tokens_core_types::{
+use crate::kliver_tokens_core_types::{
     ClaimableAmountResult, HintPayment, SessionPayment, Simulation, TokenInfo,
     WalletMultiTokenSummary, WalletTokenSummary,
 };
 
 #[starknet::interface]
-trait IKliverTokensCore<TContractState> {
+pub trait IKliverTokensCore<TContractState> {
     // Registry management
     fn set_registry_address(ref self: TContractState, new_registry_address: ContractAddress);
     fn get_registry_address(self: @TContractState) -> ContractAddress;
@@ -77,3 +77,4 @@ trait IKliverTokensCore<TContractState> {
     // Owner functions
     fn get_owner(self: @TContractState) -> ContractAddress;
 }
+
