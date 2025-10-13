@@ -158,6 +158,24 @@ class StarknetUtils:
 
         raise ValueError("Could not parse transaction hash from output")
 
+    @staticmethod
+    def parse_contract_address_from_call(output: str) -> str:
+        """Parse contract address from sncast call output (ContractAddress format)."""
+        # Match patterns like: ContractAddress(0x123...)
+        # or Response: ContractAddress(0x123...)
+        patterns = [
+            r"ContractAddress\((0x[a-fA-F0-9]+)\)",
+            r"Response:\s*ContractAddress\((0x[a-fA-F0-9]+)\)",
+            r"(0x[a-fA-F0-9]{63,66})",  # Raw address (63-66 chars for StarkNet)
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, output, re.IGNORECASE)
+            if match:
+                return match.group(1)
+
+        raise ValueError("Could not parse contract address from call output")
+
 
 class TransactionWaiter:
     """Handles waiting for transaction confirmation."""
@@ -244,28 +262,31 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
     """Print deployment addresses in JSON format."""
     if not deployments:
         return
-    
+
     # Create a mapping of contract types to addresses with the specified keys
     json_output = {
         "Nft": "",
         "Registry": "",
-        "TokensCore": "",
+        "TokenSimulation": "",
+        "KlivePox": "",
         "MarketPlace": ""
     }
-    
+
     for deployment in deployments:
         contract_name = deployment['contract_name'].lower()
         contract_address = deployment['contract_address']
-        
+
         if contract_name == 'klivernft':
             json_output['Nft'] = contract_address
         elif contract_name == 'kliver_registry':
             json_output['Registry'] = contract_address
         elif contract_name == 'klivertokenscore':
-            json_output['TokensCore'] = contract_address
+            json_output['TokenSimulation'] = contract_address
+        elif contract_name == 'klivepox':
+            json_output['KlivePox'] = contract_address
         elif contract_name in ('sessionmarketplace', 'sessionsmarketplace'):
             json_output['MarketPlace'] = contract_address
 
-    
+
     # Print the JSON output
     print(json.dumps(json_output, indent=2))

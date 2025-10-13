@@ -1,0 +1,2 @@
+[core]
+block_time = 100   # en milisegundos (100ms = 0.1s entre bloques)

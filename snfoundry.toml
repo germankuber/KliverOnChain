@@ -1,6 +1,6 @@
-[sncast.local]
+[sncast.katana]
 url = "http://127.0.0.1:5050"
-account = "qa-katana"
+account = "katana-0"
 accounts-file = "/Users/GermanKuber/.starknet_accounts/starknet_open_zeppelin_accounts.json"
 
 [sncast.sepolia]

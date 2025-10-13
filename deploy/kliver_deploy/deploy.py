@@ -316,8 +316,19 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                 ]
 
             verify = CommandRunner.run_command(base_verify, "Verifying KlivePox in Registry")
-            if verify["success"] and deployed_addresses['pox'].lower() in verify["stdout"].lower():
-                click.echo(f"{Colors.SUCCESS}✓ Verified KlivePox in Registry: {deployed_addresses['pox']}{Colors.RESET}")
+            if verify["success"]:
+                try:
+                    from kliver_deploy.utils import StarknetUtils
+                    returned_address = StarknetUtils.parse_contract_address_from_call(verify["stdout"])
+                    # Normalize addresses for comparison (remove leading zeros)
+                    expected = deployed_addresses['pox'].lower().replace('0x', '').lstrip('0')
+                    returned = returned_address.lower().replace('0x', '').lstrip('0')
+                    if expected == returned:
+                        click.echo(f"{Colors.SUCCESS}✓ Verified KlivePox in Registry: {deployed_addresses['pox']}{Colors.RESET}")
+                    else:
+                        click.echo(f"{Colors.WARNING}⚠️ KlivePox address mismatch. Expected: {deployed_addresses['pox']}, Got: {returned_address}{Colors.RESET}")
+                except ValueError as e:
+                    click.echo(f"{Colors.WARNING}⚠️ Could not parse KlivePox address from output: {str(e)}{Colors.RESET}")
             else:
                 click.echo(f"{Colors.WARNING}⚠️ Could not verify KlivePox address via get_klive_pox_address{Colors.RESET}")
     else:
@@ -401,8 +412,19 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                         ]
 
                     verify_sm = CommandRunner.run_command(base_sm, "Verifying SessionsMarketplace PoX wiring")
-                    if verify_sm["success"] and deployed_addresses['pox'].lower() in verify_sm["stdout"].lower():
-                        click.echo(f"{Colors.SUCCESS}✓ Verified SessionsMarketplace uses PoX: {deployed_addresses['pox']}{Colors.RESET}")
+                    if verify_sm["success"]:
+                        try:
+                            from kliver_deploy.utils import StarknetUtils
+                            returned_address = StarknetUtils.parse_contract_address_from_call(verify_sm["stdout"])
+                            # Normalize addresses for comparison (remove leading zeros)
+                            expected = deployed_addresses['pox'].lower().replace('0x', '').lstrip('0')
+                            returned = returned_address.lower().replace('0x', '').lstrip('0')
+                            if expected == returned:
+                                click.echo(f"{Colors.SUCCESS}✓ Verified SessionsMarketplace uses PoX: {deployed_addresses['pox']}{Colors.RESET}")
+                            else:
+                                click.echo(f"{Colors.WARNING}⚠️ SessionsMarketplace PoX address mismatch. Expected: {deployed_addresses['pox']}, Got: {returned_address}{Colors.RESET}")
+                        except ValueError as e:
+                            click.echo(f"{Colors.WARNING}⚠️ Could not parse PoX address from output: {str(e)}{Colors.RESET}")
                     else:
                         click.echo(f"{Colors.WARNING}⚠️ Could not verify SessionsMarketplace PoX wiring via get_pox_address{Colors.RESET}")
                 else:
