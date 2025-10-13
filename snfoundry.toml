@@ -1,3 +1,8 @@
+[sncast.local]
+url = "http://127.0.0.1:5050"
+account = "qa-katana"
+accounts-file = "/Users/GermanKuber/.starknet_accounts/starknet_open_zeppelin_accounts.json"
+
 [sncast.sepolia]
 url = "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
 account = "kliver"

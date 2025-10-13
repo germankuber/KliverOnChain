@@ -37,7 +37,7 @@ class ContractDeployer:
         self.contract = get_contract(contract_type)
         
         # Initialize transaction waiter
-        self.tx_waiter = TransactionWaiter(self.network_config.account, self.network_config.rpc_url)
+        self.tx_waiter = TransactionWaiter(self.network_config.account, self.network_config.rpc_url, self.network_config.network)
 
     def check_prerequisites(self) -> bool:
         """Check if all required tools and configurations are available."""
@@ -97,12 +97,23 @@ class ContractDeployer:
     def declare_contract(self) -> Optional[str]:
         """Declare the contract and return the class hash."""
         print(f"\n{Colors.BOLD}📤 Declaring contract...{Colors.RESET}")
-        
-        command = [
-            "sncast", "--account", self.network_config.account, "declare",
-            "--contract-name", self.contract_config.name,
-            "--url", self.network_config.rpc_url
-        ]
+
+        def _net_flags() -> list[str]:
+            return ["--network", self.network_config.network] if self.network_config.network in ("mainnet", "sepolia") else []
+
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "declare", "--network", self.network_config.network,
+                "--contract-name", self.contract_config.name,
+            ]
+        else:
+            # For local/katana networks, use profile instead of --url to get proper account resolution
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "declare",
+                "--contract-name", self.contract_config.name,
+            ]
         
         result = CommandRunner.run_command(command, f"Declaring {self.contract_config.name} to {self.network_config.network}")
 
@@ -155,11 +166,20 @@ class ContractDeployer:
         # Get constructor calldata
         constructor_calldata = self.contract.get_constructor_calldata(owner_address, **kwargs)
 
-        command = [
-            "sncast", "--account", self.network_config.account, "deploy",
-            "--class-hash", class_hash,
-            "--constructor-calldata"
-        ] + constructor_calldata + ["--url", self.network_config.rpc_url]
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "deploy", "--network", self.network_config.network,
+                "--class-hash", class_hash,
+                "--constructor-calldata"
+            ] + constructor_calldata
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "deploy",
+                "--class-hash", class_hash,
+                "--constructor-calldata"
+            ] + constructor_calldata
 
         result = CommandRunner.run_command(command, f"Deploying {self.contract_config.name}")
 
@@ -205,26 +225,40 @@ class ContractDeployer:
             return None
 
     def set_registry_on_tokencore(self, tokencore_address: str, registry_address: str, owner_address: str) -> Optional[Dict[str, Any]]:
-        """Set the registry address on the TokenCore contract."""
-        print(f"{Colors.INFO}🔗 Setting registry address on TokenCore contract...{Colors.RESET}")
+        """Set the registry address on the TokenSimulation contract."""
+        print(f"{Colors.INFO}🔗 Setting registry address on TokenSimulation contract...{Colors.RESET}")
 
-        command = [
-            "sncast", "--account", self.network_config.account, "invoke",
-            "--contract-address", tokencore_address,
-            "--function", "set_registry_address",
-            "--calldata", registry_address,
-            "--url", self.network_config.rpc_url
-        ]
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "invoke", "--network", self.network_config.network,
+                "--contract-address", tokencore_address,
+                "--function", "set_registry_address",
+                "--calldata", registry_address,
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "invoke",
+                "--contract-address", tokencore_address,
+                "--function", "set_registry_address",
+                "--calldata", registry_address,
+            ]
 
-        result = CommandRunner.run_command(command, f"Setting registry address on TokenCore")
+        result = CommandRunner.run_command(command, f"Setting registry address on TokenSimulation")
 
         if not result["success"]:
-            print(f"{Colors.ERROR}Failed to set registry address on TokenCore:{Colors.RESET}")
+            print(f"{Colors.ERROR}Failed to set registry address on TokenSimulation:{Colors.RESET}")
             print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
             print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
             return None
 
         try:
+            # Debug: print the output to see what we're parsing
+            print(f"{Colors.INFO}DEBUG - Command output:{Colors.RESET}")
+            print(f"STDOUT: {result['stdout']}")
+            print(f"STDERR: {result['stderr']}")
+
             tx_hash = StarknetUtils.parse_transaction_hash(result["stdout"])
             print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
 
@@ -233,7 +267,7 @@ class ContractDeployer:
                 print(f"{Colors.ERROR}✗ Transaction not confirmed.{Colors.RESET}")
                 return None
 
-            print(f"{Colors.SUCCESS}✓ Registry address set successfully on TokenCore!{Colors.RESET}")
+            print(f"{Colors.SUCCESS}✓ Registry address set successfully on TokenSimulation!{Colors.RESET}")
 
             # Validate that the registry address was set correctly
             if not self.validate_registry_address_set(tokencore_address, registry_address):
@@ -254,20 +288,28 @@ class ContractDeployer:
             return None
 
     def validate_registry_address_set(self, tokencore_address: str, expected_registry_address: str) -> bool:
-        """Validate that the registry address was set correctly on the TokenCore contract."""
-        print(f"{Colors.INFO}🔍 Validating registry address on TokenCore contract...{Colors.RESET}")
+        """Validate that the registry address was set correctly on the TokenSimulation contract."""
+        print(f"{Colors.INFO}🔍 Validating registry address on TokenSimulation contract...{Colors.RESET}")
 
-        command = [
-            "sncast", "--account", self.network_config.account, "call",
-            "--contract-address", tokencore_address,
-            "--function", "get_registry_address",
-            "--url", self.network_config.rpc_url
-        ]
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "call", "--network", self.network_config.network,
+                "--contract-address", tokencore_address,
+                "--function", "get_registry_address",
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "call",
+                "--contract-address", tokencore_address,
+                "--function", "get_registry_address",
+            ]
 
-        result = CommandRunner.run_command(command, f"Validating registry address on TokenCore")
+        result = CommandRunner.run_command(command, f"Validating registry address on TokenSimulation")
 
         if not result["success"]:
-            print(f"{Colors.ERROR}Failed to call get_registry_address on TokenCore:{Colors.RESET}")
+            print(f"{Colors.ERROR}Failed to call get_registry_address on TokenSimulation:{Colors.RESET}")
             print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
             print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
             return False
@@ -391,7 +433,7 @@ class ContractDeployer:
         validation_functions = {
             "nft": "name",  # ERC721
             "registry": "get_owner",  # Registry specific
-            "token": "balance_of",  # ERC1155 (KliverNFT1155)
+            "token": "balance_of",  # ERC1155 (TokenSimulation)
         }
         
         function_name = validation_functions.get(contract_type)
@@ -404,12 +446,20 @@ class ContractDeployer:
         if function_name == "balance_of":
             calldata = ["0x0", "0x1"]  # dummy address and token id
         
-        command = [
-            "sncast", "--account", self.network_config.account, "call",
-            "--contract-address", contract_address,
-            "--function", function_name,
-            "--url", self.network_config.rpc_url
-        ]
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "call", "--network", self.network_config.network,
+                "--contract-address", contract_address,
+                "--function", function_name,
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "call",
+                "--contract-address", contract_address,
+                "--function", function_name,
+            ]
         
         if calldata:
             command.extend(["--calldata"] + calldata)

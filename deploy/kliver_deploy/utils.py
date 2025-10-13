@@ -146,33 +146,44 @@ class StarknetUtils:
         patterns = [
             r"(?:transaction_hash:|Transaction Hash:)\s*(0x[a-fA-F0-9]+)",
             r"Transaction hash:\s*(0x[a-fA-F0-9]+)",
-            r"Tx hash:\s*(0x[a-fA-F0-9]+)"
+            r"Tx hash:\s*(0x[a-fA-F0-9]+)",
+            # Case-insensitive pattern to catch all variations
+            r"transaction\s*hash:\s*(0x[a-fA-F0-9]+)",
         ]
-        
+
         for pattern in patterns:
-            match = re.search(pattern, output)
+            match = re.search(pattern, output, re.IGNORECASE)
             if match:
                 return match.group(1)
-        
+
         raise ValueError("Could not parse transaction hash from output")
 
 
 class TransactionWaiter:
     """Handles waiting for transaction confirmation."""
     
-    def __init__(self, account: str, rpc_url: str):
+    def __init__(self, account: str, rpc_url: str, network: str = ""):
         self.account = account
         self.rpc_url = rpc_url
+        self.network = network
     
     def wait_for_confirmation(self, tx_hash: str, max_attempts: int = 60) -> bool:
         """Wait for transaction confirmation."""
         print(f"{Colors.INFO}⏳ Waiting for transaction confirmation: {tx_hash}{Colors.RESET}")
-        
+
         for attempt in range(max_attempts):
-            command = [
-                "sncast", "--account", self.account, "tx-status",
-                tx_hash, "--url", self.rpc_url
-            ]
+            if self.network in ("mainnet", "sepolia"):
+                command = [
+                    "sncast", "--account", self.account,
+                    "tx-status", "--network", self.network,
+                    tx_hash
+                ]
+            else:
+                command = [
+                    "sncast", "--profile", self.network,
+                    "tx-status",
+                    tx_hash
+                ]
             
             result = CommandRunner.run_command(command, f"Checking transaction status (attempt {attempt + 1})")
             

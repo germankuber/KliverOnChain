@@ -59,31 +59,31 @@ class KliverRegistry(BaseContract):
         super().__init__("kliver_registry", "KliverRegistry")
 
     def get_constructor_calldata(self, owner_address: str, nft_address: str,
-                               tokens_core_address: str, verifier_address: str = "0x0", **kwargs) -> List[str]:
-        """Registry requires: owner + nft_address + tokens_core_address + verifier_address"""
+                               token_simulation_address: str, verifier_address: str = "0x0", **kwargs) -> List[str]:
+        """Registry requires: owner + nft_address + token_simulation_address + verifier_address"""
         print(f"{Colors.INFO}📋 Using NFT address: {nft_address}{Colors.RESET}")
-        print(f"{Colors.INFO}📋 Using Tokens Core address: {tokens_core_address}{Colors.RESET}")
+        print(f"{Colors.INFO}📋 Using TokenSimulation address: {token_simulation_address}{Colors.RESET}")
         print(f"{Colors.INFO}📋 Using Verifier address: {verifier_address}{Colors.RESET}")
 
-        return [owner_address, nft_address, tokens_core_address, verifier_address]
-    
-    def validate_dependencies(self, nft_address: str = None, tokens_core_address: str = None, **kwargs) -> bool:
-        """Registry requires NFT address and Tokens Core address."""
+        return [owner_address, nft_address, token_simulation_address, verifier_address]
+
+    def validate_dependencies(self, nft_address: str = None, token_simulation_address: str = None, **kwargs) -> bool:
+        """Registry requires NFT address and TokenSimulation address."""
         if not nft_address:
             print(f"{Colors.ERROR}✗ NFT address is required for Registry deployment{Colors.RESET}")
             return False
-        if not tokens_core_address:
-            print(f"{Colors.ERROR}✗ Tokens Core address is required for Registry deployment{Colors.RESET}")
+        if not token_simulation_address:
+            print(f"{Colors.ERROR}✗ TokenSimulation address is required for Registry deployment{Colors.RESET}")
             return False
         return True
-    
-    def get_dependency_info(self, nft_address: str = None, tokens_core_address: str = None, verifier_address: str = None, **kwargs) -> List[str]:
+
+    def get_dependency_info(self, nft_address: str = None, token_simulation_address: str = None, verifier_address: str = None, **kwargs) -> List[str]:
         """Get dependency information."""
         deps = []
         if nft_address:
             deps.append(f"NFT Contract: {nft_address}")
-        if tokens_core_address:
-            deps.append(f"Tokens Core Contract: {tokens_core_address}")
+        if token_simulation_address:
+            deps.append(f"TokenSimulation Contract: {token_simulation_address}")
         if verifier_address and verifier_address != "0x0":
             deps.append(f"Verifier Contract: {verifier_address}")
         return deps
@@ -115,7 +115,7 @@ class KliverTokensCore(BaseContract):
 CONTRACTS = {
     "nft": KliverNFT,
     "registry": KliverRegistry,
-    "kliver_tokens_core": KliverTokensCore
+    "kliver_tokens_core": KliverTokensCore,
 }
 
 
@@ -153,28 +153,34 @@ class SessionsMarketplace(BaseContract):
     def get_constructor_calldata(
         self,
         owner_address: str = "0x0",
-        registry_address: str = None,
+        pox_address: str = None,
+        verifier_address: str = None,
         payment_token_address: str = None,
         purchase_timeout_seconds: int = 0,
         **kwargs,
     ) -> List[str]:
-        if not registry_address or not payment_token_address or not purchase_timeout_seconds:
-            raise ValueError("registry_address, payment_token_address, and purchase_timeout_seconds are required for SessionsMarketplace")
-        print(f"{Colors.INFO}📋 Using Registry: {registry_address}{Colors.RESET}")
+        if not pox_address or not verifier_address or not payment_token_address or not purchase_timeout_seconds:
+            raise ValueError("pox_address, verifier_address, payment_token_address and purchase_timeout_seconds are required for SessionsMarketplace")
+        print(f"{Colors.INFO}📋 Using PoX: {pox_address}{Colors.RESET}")
+        print(f"{Colors.INFO}📋 Using Verifier: {verifier_address}{Colors.RESET}")
         print(f"{Colors.INFO}📋 Using Payment Token: {payment_token_address}{Colors.RESET}")
         print(f"{Colors.INFO}📋 Using Timeout (s): {purchase_timeout_seconds}{Colors.RESET}")
-        return [registry_address, payment_token_address, str(purchase_timeout_seconds)]
+        return [pox_address, verifier_address, payment_token_address, str(purchase_timeout_seconds)]
 
     def validate_dependencies(
         self,
-        registry_address: str = None,
+        pox_address: str = None,
+        verifier_address: str = None,
         payment_token_address: str = None,
         purchase_timeout_seconds: int = 0,
         **kwargs,
     ) -> bool:
         ok = True
-        if not registry_address:
-            print(f"{Colors.ERROR}✗ Registry address is required for SessionsMarketplace deployment{Colors.RESET}")
+        if not pox_address:
+            print(f"{Colors.ERROR}✗ PoX address is required for SessionsMarketplace deployment{Colors.RESET}")
+            ok = False
+        if not verifier_address:
+            print(f"{Colors.ERROR}✗ Verifier address is required for SessionsMarketplace deployment{Colors.RESET}")
             ok = False
         if not payment_token_address:
             print(f"{Colors.ERROR}✗ Payment token address is required for SessionsMarketplace deployment{Colors.RESET}")
@@ -189,4 +195,29 @@ class SessionsMarketplace(BaseContract):
 CONTRACTS.update({
     "session_marketplace": SessionMarketplace,
     "sessions_marketplace": SessionsMarketplace,
+})
+
+
+class KlivePox(BaseContract):
+    """KlivePox contract (mints session NFTs from Registry)."""
+
+    def __init__(self):
+        super().__init__("KlivePox", "KlivePox")
+
+    def get_constructor_calldata(self, owner_address: str = "0x0", registry_address: str = None, **kwargs) -> List[str]:
+        if not registry_address:
+            raise ValueError("registry_address is required for KlivePox")
+        print(f"{Colors.INFO}📋 Using Registry address: {registry_address}{Colors.RESET}")
+        return [registry_address]
+
+    def validate_dependencies(self, registry_address: str = None, **kwargs) -> bool:
+        if not registry_address:
+            print(f"{Colors.ERROR}✗ Registry address is required for KlivePox deployment{Colors.RESET}")
+            return False
+        return True
+
+
+# Add KlivePox to factory
+CONTRACTS.update({
+    "klive_pox": KlivePox,
 })

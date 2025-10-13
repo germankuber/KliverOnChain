@@ -538,21 +538,14 @@ Code locations
 - Simple tests: `tests/test_session_marketplace.cairo`
 - Advanced tests (orders): `tests/test_sessions_marketplace_orders.cairo`
 
-Deployment checklist
-- Simple
-  - Deploy/get `Registry` and note its `address`.
-  - Deploy `SessionMarketplace` with `constructor(registry_address)`.
-  - Publish sessions with `publish_session(sim_id, session_id, price)`.
-  - Consume with `purchase_session(session_id)` and listen to events.
-
-- Advanced
-  - Deploy/get `Registry` and `Verifier`.
-  - Deploy/get the payment `ERC20` (or your protocol token).
-  - Deploy `SessionsMarketplace` with `(registry, verifier, payment_token, purchase_timeout_seconds)`.
-  - Seller: `create_listing(session_id, price)` (validates against Registry and stores root).
-  - Buyer: `approve(marketplace, amount)` then `open_purchase(listing_id, challenge, amount)`.
-  - Seller: `settle_purchase(listing_id, buyer, challenge_key, proof, [root, challenge])`.
-  - Buyer: if expired, `refund_purchase(listing_id)`.
+Deployment checklist (SessionsMarketplace + KlivePox)
+ - Deploy/get `KliverRegistry`, `Verifier`, and payment `ERC20`.
+ - Deploy `KlivePox` with `(registry_address)`, then set it in the Registry via `set_klive_pox_address`.
+ - Deploy `SessionsMarketplace` with `(pox_address, verifier_address, payment_token_address, purchase_timeout_seconds)`.
+ - Seller: `create_listing(token_id, price)` (token_id comes from KlivePox minted session).
+ - Buyer: `approve(marketplace, amount)` then `open_purchase(listing_id, challenge, amount)`.
+ - Seller: `settle_purchase(listing_id, buyer, challenge_key, proof)`.
+ - Buyer: `refund_purchase(listing_id)` if timeout expired or listing closed.
 
 ---
 
@@ -990,25 +983,43 @@ environments:
     network: "sepolia"
     account: "kliver-dev"
     rpc_url: "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
+    contracts:
+      registry:
+        verifier_address: "0xVERIFIER_DEV"
+      sessions_marketplace:
+        payment_token: "0xERC20_DEV"
+        purchase_timeout: 600
     
   qa:
     name: "QA"
     network: "sepolia"
     account: "kliver-qa"
     rpc_url: "https://starknet-sepolia.public.blastapi.io/rpc/v0_8"
+    contracts:
+      registry:
+        verifier_address: "0xVERIFIER_QA"
+      sessions_marketplace:
+        payment_token: "0xERC20_QA"
+        purchase_timeout: 600
     
   prod:
     name: "Production"
     network: "mainnet"
     account: "kliver-prod"
     rpc_url: "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
+    contracts:
+      registry:
+        verifier_address: "0xVERIFIER_MAINNET"
+      sessions_marketplace:
+        payment_token: "0xERC20_MAINNET"
+        purchase_timeout: 600
 ```
 
 ### Deployment Options
 
 #### Option 1: Complete Deployment (Recommended) ✅
 
-Deploy all three contracts together:
+Deploy all contracts together:
 
 ```bash
 python deploy_contract.py --environment dev --contract all
@@ -1016,9 +1027,11 @@ python deploy_contract.py --environment dev --contract all
 
 **What happens:**
 1. ✅ Deploys Kliver NFT
-2. ✅ Deploys Kliver Registry (linked to NFT)
-3. ✅ Deploys Kliver 1155
-4. ✅ Saves deployment info
+2. ✅ Deploys Kliver Tokens Core (1155)
+3. ✅ Deploys Kliver Registry (linked to NFT + Tokens Core + Verifier)
+4. ✅ Deploys KlivePox (PoX NFT bound to Registry) and sets it in Registry
+5. ✅ Deploys SessionsMarketplace (requires PoX, Verifier, Payment ERC20, Timeout)
+6. ✅ Saves deployment info
 
 #### Option 2: Individual Deployments
 
@@ -1028,8 +1041,8 @@ Deploy contracts separately:
 # Deploy NFT first
 python deploy_contract.py --environment dev --contract nft --owner 0x123...
 
-# Deploy Registry (requires NFT address)
-python deploy_contract.py --environment dev --contract registry --nft-address 0xNFT_ADDR
+# Deploy Registry (requires NFT and Tokens Core addresses)
+python deploy_contract.py --environment dev --contract registry --nft-address 0xNFT_ADDR --tokens-core-address 0xTOKENS_CORE
 
 # Deploy Kliver Tokens Core
 python deploy_contract.py --environment dev --contract kliver_tokens_core --owner 0x123...
@@ -1054,6 +1067,22 @@ python deploy_contract.py --environment dev --contract kliver_tokens_core
 ```bash
 # Always deploy everything together in production
 python deploy_contract.py --environment prod --contract all --owner 0xPROD_OWNER
+
+Additional individual deployments:
+
+```bash
+# Deploy KlivePox (requires Registry address)
+python deploy_contract.py --environment dev --contract klive_pox --registry-address 0xREGISTRY
+
+# Deploy SessionsMarketplace (requires PoX, Verifier, ERC20 and timeout)
+python deploy_contract.py \
+  --environment dev \
+  --contract sessions_marketplace \
+  --pox-address 0xPOX \
+  --verifier-address 0xVERIFIER \
+  --payment-token-address 0xERC20 \
+  --purchase-timeout 600
+```
 ```
 
 ### Post-Deployment
