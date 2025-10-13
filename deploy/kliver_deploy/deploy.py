@@ -16,7 +16,7 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.option('--environment', '-e', required=True, 
               help='Environment to deploy to: dev, qa, or prod')
 @click.option('--contract', '-c', default='registry',
-              help='Contract to deploy: registry, nft, kliver_tokens_core, klive_pox, sessions_marketplace, or all')
+              help='Contract to deploy: registry, nft, kliver_tokens_core, klive_pox, sessions_marketplace, simple_erc20, or all')
 @click.option('--owner', '-o', 
               help='Owner address for the contract (uses account address if not specified)')
 @click.option('--nft-address', '-n',
@@ -59,6 +59,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         python deploy.py --environment dev --contract nft
         python deploy.py --environment dev --contract kliver_tokens_core
         python deploy.py --environment dev --contract registry --nft-address 0x456... --token-simulation-address 0x789...
+        python deploy.py --environment dev --contract simple_erc20
 
     3. Contract Dependencies:
         - NFT: No dependencies
@@ -144,7 +145,7 @@ def print_comprehensive_summary(deployments: List[Dict[str, Any]], network: str)
     print(f"{Colors.BOLD}{'='*100}{Colors.RESET}")
 
     for i, deployment in enumerate(deployments, 1):
-        print(f"\n{Colors.BOLD}{Colors.BLUE}Contract {i}: {deployment['contract_name'].upper()}{Colors.RESET}")
+        print(f"\n{Colors.BOLD}{Colors.INFO}Contract {i}: {deployment['contract_name'].upper()}{Colors.RESET}")
         print(f"{Colors.BOLD}{'-'*50}{Colors.RESET}")
 
         # Basic contract info
@@ -503,6 +504,8 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
             click.echo(f"{Colors.ERROR}❌ Registry address is required --registry-address 0x...{Colors.RESET}")
             return False
         deploy_kwargs['registry_address'] = registry_address
+    elif contract == 'simple_erc20':
+        click.echo(f"\n{Colors.BOLD}🎯 SIMPLE ERC20 DEPLOYMENT{Colors.RESET}\n")
     elif contract == 'sessions_marketplace':
         click.echo(f"\n{Colors.BOLD}🎯 SESSIONS MARKETPLACE DEPLOYMENT{Colors.RESET}\n")
         if not registry_address:

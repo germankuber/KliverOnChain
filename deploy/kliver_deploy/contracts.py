@@ -221,3 +221,25 @@ class KlivePox(BaseContract):
 CONTRACTS.update({
     "klive_pox": KlivePox,
 })
+
+
+class SimpleERC20(BaseContract):
+    """Simple ERC20 token contract for demo purposes."""
+
+    def __init__(self):
+        super().__init__("SimpleERC20", "SimpleERC20")
+
+    def get_constructor_calldata(self, owner_address: str = "0x0", **kwargs) -> List[str]:
+        """SimpleERC20 requires: recipient (owner_address)"""
+        print(f"{Colors.INFO}📋 Using recipient address: {owner_address}{Colors.RESET}")
+        return [owner_address]
+
+    def validate_dependencies(self, **kwargs) -> bool:
+        """SimpleERC20 has no dependencies."""
+        return True
+
+
+# Add SimpleERC20 to factory
+CONTRACTS.update({
+    "simple_erc20": SimpleERC20,
+})
