@@ -29,6 +29,7 @@ pub mod kliver_registry {
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_caller_address};
     use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+    use crate::interfaces::klive_pox::{IKlivePoxDispatcher, IKlivePoxDispatcherTrait};
     use super::{
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry, ISimulationRegistry,
         VerificationResult,
@@ -86,6 +87,7 @@ pub mod kliver_registry {
         nft_address: ContractAddress,
         tokens_core_address: ContractAddress,
         verifier_address: ContractAddress,
+        klive_pox_address: ContractAddress,
     }
 
     pub mod Errors {
@@ -120,6 +122,7 @@ pub mod kliver_registry {
         self.nft_address.write(nft_address);
         self.tokens_core_address.write(tokens_core_address);
         self.verifier_address.write(verifier_address);
+        self.klive_pox_address.write(0.try_into().unwrap());
         self.paused.write(false);
     }
 
@@ -393,16 +396,24 @@ pub mod kliver_registry {
                 Errors::SESSION_ALREADY_REGISTERED,
             );
 
-            // Delegate to component
-            self
-                .session_registry
-                .register_session(
-                    metadata.session_id,
-                    metadata.root_hash,
-                    metadata.simulation_id,
-                    metadata.author,
-                    metadata.score,
-                );
+            // If KlivePox address is set, mint there instead of storing internally; otherwise fallback
+            let klive_pox_addr = self.klive_pox_address.read();
+            if klive_pox_addr.is_zero() {
+                // Backward-compatible path: store internally
+                self
+                    .session_registry
+                    .register_session(
+                        metadata.session_id,
+                        metadata.root_hash,
+                        metadata.simulation_id,
+                        metadata.author,
+                        metadata.score,
+                    );
+            } else {
+                // Mint NFT in KlivePox
+                let klive = IKlivePoxDispatcher { contract_address: klive_pox_addr };
+                klive.mint(metadata);
+            }
         }
 
         fn verify_session(
@@ -495,6 +506,17 @@ pub mod kliver_registry {
 
         fn is_paused(self: @ContractState) -> bool {
             self.paused.read()
+        }
+
+        // Set KlivePox contract address (only owner)
+        fn set_klive_pox_address(ref self: ContractState, addr: ContractAddress) {
+            self._assert_only_owner();
+            assert(!addr.is_zero(), 'KlivePox address cannot be zero');
+            self.klive_pox_address.write(addr);
+        }
+
+        fn get_klive_pox_address(self: @ContractState) -> ContractAddress {
+            self.klive_pox_address.read()
         }
     }
 

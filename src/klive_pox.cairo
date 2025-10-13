@@ -8,6 +8,8 @@ mod KlivePox {
     };
     use core::num::traits::Zero;
     use starknet::{ContractAddress, get_caller_address};
+    use crate::interfaces::klive_pox::KlivePoxMetadata;
+    use kliver_on_chain::components::session_registry_component::SessionMetadata;
 
     // Minimal NFT storage and indexing by simulation
     #[storage]
@@ -22,6 +24,31 @@ mod KlivePox {
         // Index simulation -> token and token -> simulation
         sim_to_token: Map<felt252, u256>,
         token_to_sim: Map<u256, felt252>,
+        // Store root hash per simulation and per token
+        root_hash_by_sim: Map<felt252, felt252>,
+        root_hash_by_token: Map<u256, felt252>,
+        // Store session id and score per token
+        session_id_by_token: Map<u256, felt252>,
+        score_by_token: Map<u256, u32>,
+    }
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        Minted: Minted,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct Minted {
+        #[key]
+        token_id: u256,
+        #[key]
+        simulation_id: felt252,
+        #[key]
+        session_id: felt252,
+        #[key]
+        author: ContractAddress,
+        root_hash: felt252,
     }
 
     pub mod Errors {
@@ -41,22 +68,15 @@ mod KlivePox {
 
     #[abi(embed_v0)]
     impl KlivePoxImpl of crate::interfaces::klive_pox::IKlivePox<ContractState> {
-        fn mint(
-            ref self: ContractState,
-            simulation_id: felt252,
-            author: ContractAddress,
-            character_id: felt252,
-            scenario_id: felt252,
-            simulation_hash: felt252,
-        ) {
+        fn mint(ref self: ContractState, metadata: SessionMetadata) {
             // Access control: only configured registry can mint
             let caller = get_caller_address();
             assert(caller == self.registry.read(), Errors::ONLY_REGISTRY);
 
             // Basic validations
-            assert(!author.is_zero(), Errors::INVALID_AUTHOR);
+            assert(!metadata.author.is_zero(), Errors::INVALID_AUTHOR);
             // Prevent duplicate mint for the same simulation
-            let existing = self.sim_to_token.read(simulation_id);
+            let existing = self.sim_to_token.read(metadata.simulation_id);
             assert(existing == 0, Errors::SIM_ALREADY_MINTED);
 
             // New token id = next_token_id + 1
@@ -65,19 +85,28 @@ mod KlivePox {
             self.next_token_id.write(token_id);
 
             // Assign ownership
-            self.token_owner.write(token_id, author);
-            let bal = self.balances.read(author);
-            self.balances.write(author, bal + 1);
+            self.token_owner.write(token_id, metadata.author);
+            let bal = self.balances.read(metadata.author);
+            self.balances.write(metadata.author, bal + 1);
 
             // Index by simulation
-            self.sim_to_token.write(simulation_id, token_id);
-            self.token_to_sim.write(token_id, simulation_id);
+            self.sim_to_token.write(metadata.simulation_id, token_id);
+            self.token_to_sim.write(token_id, metadata.simulation_id);
+            // Store root hash
+            self.root_hash_by_sim.write(metadata.simulation_id, metadata.root_hash);
+            self.root_hash_by_token.write(token_id, metadata.root_hash);
+            // Store session id and score
+            self.session_id_by_token.write(token_id, metadata.session_id);
+            self.score_by_token.write(token_id, metadata.score);
 
-            // Note: character_id, scenario_id, simulation_hash are accepted but kept internal-only for now
-            // (Future: store if needed for additional getters)
-            let _ = character_id;
-            let _ = scenario_id;
-            let _ = simulation_hash;
+            // Emit event
+            self.emit(Minted {
+                token_id,
+                simulation_id: metadata.simulation_id,
+                session_id: metadata.session_id,
+                author: metadata.author,
+                root_hash: metadata.root_hash,
+            });
         }
 
         fn balance_of(self: @ContractState, user: ContractAddress) -> u256 {
@@ -97,6 +126,29 @@ mod KlivePox {
             }
             let owner = self.token_owner.read(token_id);
             owner
+        }
+
+        fn get_metadata_by_token(self: @ContractState, token_id: u256) -> KlivePoxMetadata {
+            let author = self.token_owner.read(token_id);
+            assert(!author.is_zero(), Errors::TOKEN_NOT_FOUND);
+            let simulation_id = self.token_to_sim.read(token_id);
+            let session_id = self.session_id_by_token.read(token_id);
+            let root_hash = self.root_hash_by_token.read(token_id);
+            let score_u32 = self.score_by_token.read(token_id);
+            KlivePoxMetadata {
+                token_id,
+                session_id,
+                root_hash,
+                simulation_id,
+                author,
+                score: score_u32,
+            }
+        }
+
+        fn get_metadata_by_simulation(self: @ContractState, simulation_id: felt252) -> KlivePoxMetadata {
+            let token_id = self.sim_to_token.read(simulation_id);
+            assert(token_id != 0, 'Simulation not found');
+            self.get_metadata_by_token(token_id)
         }
     }
 }
