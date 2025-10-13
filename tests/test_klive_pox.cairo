@@ -74,13 +74,13 @@ fn test_mint_by_non_registry_panics() {
 
 #[test]
 #[should_panic(expected: ('Simulation already minted',))]
-fn test_double_mint_same_simulation_panics() {
+fn test_double_mint_same_session_panics() {
     let dispatcher = deploy_klive_pox(REGISTRY());
     start_cheat_caller_address(dispatcher.contract_address, REGISTRY());
     let meta1 = SessionMetadata { session_id: 'dup_s', root_hash: 'hash_dup', simulation_id: 'sim_dup', author: AUTHOR(), score: 7_u32 };
     dispatcher.mint(meta1);
-    // second mint for same simulation id should panic
-    let meta2 = SessionMetadata { session_id: 'dup_s2', root_hash: 'hash_dup', simulation_id: 'sim_dup', author: AUTHOR(), score: 8_u32 };
+    // second mint for same session id should panic (unicidad por session)
+    let meta2 = SessionMetadata { session_id: 'dup_s', root_hash: 'hash_dup', simulation_id: 'sim_dup2', author: AUTHOR(), score: 8_u32 };
     dispatcher.mint(meta2);
 }
 

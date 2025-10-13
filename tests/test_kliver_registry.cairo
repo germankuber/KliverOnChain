@@ -1744,9 +1744,17 @@ fn test_verify_session_valid() {
     nft_dispatcher.mint_to_user(author);
     stop_cheat_caller_address(nft_address);
 
-    // First register the session
-    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
+    // Set KlivePox address (deploy Pox with registry = contract_address)
+    let pox_cls = declare("KlivePox").unwrap().contract_class();
+    let mut pox_calldata = ArrayTrait::new();
+    pox_calldata.append(contract_address.into());
+    let (pox_addr, _) = pox_cls.deploy(@pox_calldata).unwrap();
+    let owner_iface = IOwnerRegistryDispatcher { contract_address };
     start_cheat_caller_address(contract_address, owner);
+    owner_iface.set_klive_pox_address(pox_addr);
+
+    // First register the session (mints in KlivePox)
+    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
     dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 
@@ -1784,9 +1792,17 @@ fn test_verify_session_invalid_hash() {
     nft_dispatcher.mint_to_user(author);
     stop_cheat_caller_address(nft_address);
 
+    // Set KlivePox address
+    let pox_cls = declare("KlivePox").unwrap().contract_class();
+    let mut pox_calldata = ArrayTrait::new();
+    pox_calldata.append(contract_address.into());
+    let (pox_addr, _) = pox_cls.deploy(@pox_calldata).unwrap();
+    let owner_iface = IOwnerRegistryDispatcher { contract_address };
+    start_cheat_caller_address(contract_address, owner);
+    owner_iface.set_klive_pox_address(pox_addr);
+
     // First register the session
     let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
-    start_cheat_caller_address(contract_address, owner);
     dispatcher.register_session(metadata);
     stop_cheat_caller_address(contract_address);
 
@@ -1797,7 +1813,17 @@ fn test_verify_session_invalid_hash() {
 
 #[test]
 fn test_verify_session_non_existent() {
-    let (dispatcher, _, _, _, _, _, _, _) = deploy_for_sessions();
+    let (dispatcher, _, _, _, _, contract_address, owner, _) = deploy_for_sessions();
+
+    // Set KlivePox address
+    let pox_cls = declare("KlivePox").unwrap().contract_class();
+    let mut pox_calldata = ArrayTrait::new();
+    pox_calldata.append(contract_address.into());
+    let (pox_addr, _) = pox_cls.deploy(@pox_calldata).unwrap();
+    let owner_iface = IOwnerRegistryDispatcher { contract_address };
+    start_cheat_caller_address(contract_address, owner);
+    owner_iface.set_klive_pox_address(pox_addr);
+    stop_cheat_caller_address(contract_address);
 
     let non_existent_id: felt252 = 999;
     let some_hash: felt252 = 456;
