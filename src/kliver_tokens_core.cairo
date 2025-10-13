@@ -703,10 +703,8 @@ mod KliverTokensCore {
             let registry = self.registry_address.read();
             let zero_address: ContractAddress = 0.try_into().unwrap();
 
-            // Si el registry no está configurado, permitir (para tests)
-            if registry == zero_address {
-                return;
-            }
+            // Registry must be configured
+            assert(registry != zero_address, 'Registry not configured');
 
             // Verificar que el caller sea el registry
             assert(caller == registry, 'Only registry can call');
