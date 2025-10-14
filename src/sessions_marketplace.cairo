@@ -14,10 +14,10 @@ pub mod SessionsMarketplace {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
-    use super::super::interfaces::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
+    use super::super::interfaces::session_registry::{ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait};
     // Bring marketplace types into scope
     use crate::interfaces::marketplace_interface::{Listing, Order, ListingStatus, OrderStatus};
-    // Registry no longer used directly here
+    // Registry used for proof verification
     // Types and dispatcher re-exported at file scope
 
     // use dispatcher imported at module level
@@ -30,7 +30,7 @@ pub mod SessionsMarketplace {
         owner: ContractAddress,
         // Direcciones de los contratos
         pox: ContractAddress,
-        verifier: ContractAddress,
+        registry: ContractAddress,
         // Token de pago (ERC20) y timeout de compra (en segundos)
         payment_token: ContractAddress,
         purchase_timeout: u64,
@@ -147,18 +147,18 @@ pub mod SessionsMarketplace {
     fn constructor(
         ref self: ContractState,
         pox_address: ContractAddress,
-        verifier_address: ContractAddress,
+        registry_address: ContractAddress,
         payment_token_address: ContractAddress,
         purchase_timeout_seconds: u64,
     ) {
         assert(!pox_address.is_zero(), 'Invalid KliverPox address');
-        assert(!verifier_address.is_zero(), 'Invalid verifier address');
+        assert(!registry_address.is_zero(), 'Invalid registry address');
         assert(!payment_token_address.is_zero(), 'Invalid payment token');
         assert(purchase_timeout_seconds > 0, 'Invalid purchase timeout');
 
         self.owner.write(get_caller_address());
         self.pox.write(pox_address);
-        self.verifier.write(verifier_address);
+        self.registry.write(registry_address);
         self.payment_token.write(payment_token_address);
         self.purchase_timeout.write(purchase_timeout_seconds);
         self.listing_counter.write(0);
@@ -325,9 +325,9 @@ pub mod SessionsMarketplace {
             assert(challenge == order.challenge, 'Challenge mismatch');
             assert(order.status == OrderStatus::Open, 'Order not open');
 
-            // Verificar proof directamente contra el Verifier
-            let verifier = IVerifierDispatcher { contract_address: self.verifier.read() };
-            let result = verifier.verify_ultra_starknet_honk_proof(proof);
+            // Verificar proof contra el Registry
+            let registry = ISessionRegistryDispatcher { contract_address: self.registry.read() };
+            let result = registry.verify_proof(proof, session_root, challenge);
             let is_valid = result.is_some();
 
             // Emitir evento de proof
@@ -450,20 +450,20 @@ pub mod SessionsMarketplace {
             self.pox.read()
         }
 
-        fn get_verifier_address(self: @ContractState) -> ContractAddress {
-            self.verifier.read()
+        fn get_registry_address(self: @ContractState) -> ContractAddress {
+            self.registry.read()
         }
 
         fn get_owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
         }
 
-        fn set_verifier_address(ref self: ContractState, new_verifier: ContractAddress) {
+        fn set_registry_address(ref self: ContractState, new_registry: ContractAddress) {
             let caller = get_caller_address();
             let owner = self.owner.read();
-            assert(caller == owner, 'Only owner can set verifier');
-            assert(!new_verifier.is_zero(), 'Invalid verifier address');
-            self.verifier.write(new_verifier);
+            assert(caller == owner, 'Only owner can set registry');
+            assert(!new_registry.is_zero(), 'Invalid registry address');
+            self.registry.write(new_registry);
         }
 
         fn transfer_ownership(ref self: ContractState, new_owner: ContractAddress) {
