@@ -605,3 +605,232 @@ class ContractDeployer:
         self.print_professional_summary(deployment_details)
 
         return deployment_details
+
+    def invoke_setter_method(
+        self,
+        contract_address: str,
+        method_name: str,
+        calldata: List[str],
+        description: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generic method to invoke a setter function on a contract.
+        
+        Args:
+            contract_address: Address of the contract to invoke
+            method_name: Name of the method to call (e.g., 'set_registry_address')
+            calldata: List of parameters for the method
+            description: Optional description for logging
+            
+        Returns:
+            Dictionary with transaction details or None if failed
+        """
+        desc = description or f"Invoking {method_name}"
+        print(f"{Colors.INFO}🔧 {desc}...{Colors.RESET}")
+
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "invoke", "--network", self.network_config.network,
+                "--contract-address", contract_address,
+                "--function", method_name,
+                "--calldata", *calldata,
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "invoke",
+                "--contract-address", contract_address,
+                "--function", method_name,
+                "--calldata", *calldata,
+            ]
+
+        result = CommandRunner.run_command(command, desc)
+
+        if not result["success"]:
+            print(f"{Colors.ERROR}Failed to invoke {method_name}:{Colors.RESET}")
+            print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
+            print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
+            return None
+
+        try:
+            tx_hash = StarknetUtils.parse_transaction_hash(result["stdout"])
+            print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
+
+            print(f"{Colors.BOLD}⏳ Waiting for transaction to be confirmed...{Colors.RESET}")
+            if not self.tx_waiter.wait_for_confirmation(tx_hash):
+                print(f"{Colors.ERROR}✗ Transaction not confirmed.{Colors.RESET}")
+                return None
+
+            print(f"{Colors.SUCCESS}✓ {method_name} executed successfully!{Colors.RESET}")
+
+            return {
+                "method": method_name,
+                "tx_hash": tx_hash,
+                "calldata": calldata,
+                "contract_address": contract_address,
+            }
+
+        except ValueError as e:
+            print(f"{Colors.ERROR}Could not parse transaction hash from output{Colors.RESET}")
+            print(f"{Colors.ERROR}Error: {str(e)}{Colors.RESET}")
+            return None
+
+    def call_view_method(
+        self,
+        contract_address: str,
+        method_name: str,
+        calldata: Optional[List[str]] = None
+    ) -> Optional[str]:
+        """
+        Generic method to call a view function on a contract.
+        
+        Args:
+            contract_address: Address of the contract to call
+            method_name: Name of the method to call (e.g., 'get_registry_address')
+            calldata: Optional list of parameters for the method
+            
+        Returns:
+            Parsed result or None if failed
+        """
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "call", "--network", self.network_config.network,
+                "--contract-address", contract_address,
+                "--function", method_name,
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "call",
+                "--contract-address", contract_address,
+                "--function", method_name,
+            ]
+
+        if calldata:
+            command.extend(["--calldata", *calldata])
+
+        result = CommandRunner.run_command(command, f"Calling {method_name}", verbose=False)
+
+        if not result["success"]:
+            return None
+
+        try:
+            # Try to parse as address first
+            return StarknetUtils.parse_contract_address_from_call(result["stdout"])
+        except ValueError:
+            # If not an address, return raw output
+            return result["stdout"].strip()
+
+    def set_registry_address(
+        self,
+        contract_address: str,
+        registry_address: str,
+        contract_name: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set registry address on TokensCore or SessionsMarketplace.
+        
+        Args:
+            contract_address: Address of the contract (TokensCore or SessionsMarketplace)
+            registry_address: Address of the Registry contract
+            contract_name: Optional name for better logging
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        name = contract_name or "contract"
+        result = self.invoke_setter_method(
+            contract_address=contract_address,
+            method_name="set_registry_address",
+            calldata=[registry_address],
+            description=f"Setting registry address on {name}"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(contract_address, "get_registry_address")
+            if actual:
+                expected = registry_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ Registry address validated on {name}{Colors.RESET}")
+                    result["validation"] = "✓ Registry address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ Registry address mismatch on {name}{Colors.RESET}")
+        
+        return result
+
+    def set_kliver_pox_address(
+        self,
+        registry_address: str,
+        pox_address: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set KliverPox address on Registry.
+        
+        Args:
+            registry_address: Address of the Registry contract
+            pox_address: Address of the KliverPox contract
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=registry_address,
+            method_name="set_kliver_pox_address",
+            calldata=[pox_address],
+            description="Setting KliverPox address on Registry"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(registry_address, "get_kliver_pox_address")
+            if actual:
+                expected = pox_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ KliverPox address validated on Registry{Colors.RESET}")
+                    result["validation"] = "✓ KliverPox address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ KliverPox address mismatch{Colors.RESET}")
+        
+        return result
+
+    def set_verifier_address(
+        self,
+        registry_address: str,
+        verifier_address: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set Verifier address on Registry.
+        
+        Args:
+            registry_address: Address of the Registry contract
+            verifier_address: Address of the Verifier contract
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=registry_address,
+            method_name="set_verifier_address",
+            calldata=[verifier_address],
+            description="Setting Verifier address on Registry"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(registry_address, "get_verifier_address")
+            if actual:
+                expected = verifier_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ Verifier address validated on Registry{Colors.RESET}")
+                    result["validation"] = "✓ Verifier address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ Verifier address mismatch{Colors.RESET}")
+        
+        return result
+
