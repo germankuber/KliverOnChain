@@ -66,33 +66,29 @@ pub mod ScenarioRegistryComponent {
         }
 
         /// Verify multiple scenarios at once
-        fn batch_verify_scenarios(
-            self: @ComponentState<TContractState>, scenarios: Array<ScenarioMetadata>,
-        ) -> Array<(felt252, VerificationResult)> {
-            let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
+        fn verify_scenarios(
+            self: @ComponentState<TContractState>,
+            scenarios: Array<kliver_on_chain::types::ScenarioVerificationRequest>,
+        ) -> Array<kliver_on_chain::types::ScenarioVerificationResult> {
+            let mut results: Array<kliver_on_chain::types::ScenarioVerificationResult> =
+                ArrayTrait::new();
             let mut i = 0;
             let len = scenarios.len();
 
             while i != len {
-                let metadata = *scenarios.at(i);
-                let scenario_id = metadata.scenario_id;
-                let scenario_hash = metadata.scenario_hash;
+                let request = *scenarios.at(i);
+                let scenario_id = request.scenario_id;
+                let scenario_hash = request.scenario_hash;
 
-                let verification_result = if scenario_id == 0 || scenario_hash == 0 {
-                    VerificationResult::NotFound
-                } else {
-                    let stored_hash = self.scenarios.entry(scenario_id).read();
+                // Call verify_scenario to reuse the verification logic
+                let verification_result = self.verify_scenario(scenario_id, scenario_hash);
 
-                    if stored_hash == 0 {
-                        VerificationResult::NotFound
-                    } else if stored_hash == scenario_hash {
-                        VerificationResult::Match
-                    } else {
-                        VerificationResult::Mismatch
-                    }
-                };
-
-                results.append((scenario_id, verification_result));
+                results
+                    .append(
+                        kliver_on_chain::types::ScenarioVerificationResult {
+                            scenario_id, result: verification_result,
+                        },
+                    );
                 i += 1;
             }
 

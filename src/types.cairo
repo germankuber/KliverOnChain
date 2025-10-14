@@ -21,3 +21,17 @@ pub struct SimulationVerificationResult {
     pub simulation_id: felt252,
     pub result: VerificationResult,
 }
+
+/// Struct for batch scenario verification request
+#[derive(Drop, Serde, Copy)]
+pub struct ScenarioVerificationRequest {
+    pub scenario_id: felt252,
+    pub scenario_hash: felt252,
+}
+
+/// Struct for batch scenario verification result
+#[derive(Drop, Serde, Copy)]
+pub struct ScenarioVerificationResult {
+    pub scenario_id: felt252,
+    pub result: VerificationResult,
+}

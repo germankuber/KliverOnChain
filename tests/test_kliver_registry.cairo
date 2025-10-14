@@ -19,6 +19,7 @@ use kliver_on_chain::interfaces::simulation_registry::{
 };
 use kliver_on_chain::types::{
     VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
+    ScenarioVerificationRequest, ScenarioVerificationResult,
 };
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
@@ -1279,27 +1280,36 @@ fn test_batch_verify_scenarios_all_valid() {
     dispatcher.register_scenario(metadata3);
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1);
-    batch_array.append(metadata2);
-    batch_array.append(metadata3);
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_1, scenario_hash: scenario_hash_1 },
+        );
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_2, scenario_hash: scenario_hash_2 },
+        );
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_3, scenario_hash: scenario_hash_3 },
+        );
 
     // Batch verify
-    let results = dispatcher.batch_verify_scenarios(batch_array);
+    let results = dispatcher.verify_scenarios(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, scenario_id_1);
-    assert!(result_valid_1 == VerificationResult::Match);
-    assert_eq!(result_id_2, scenario_id_2);
-    assert!(result_valid_2 == VerificationResult::Match);
-    assert_eq!(result_id_3, scenario_id_3);
-    assert!(result_valid_3 == VerificationResult::Match);
+    assert_eq!(result_1.scenario_id, scenario_id_1);
+    assert!(result_1.result == VerificationResult::Match);
+    assert_eq!(result_2.scenario_id, scenario_id_2);
+    assert!(result_2.result == VerificationResult::Match);
+    assert_eq!(result_3.scenario_id, scenario_id_3);
+    assert!(result_3.result == VerificationResult::Match);
 }
 
 #[test]
@@ -1325,37 +1335,36 @@ fn test_batch_verify_scenarios_mixed_results() {
     dispatcher.register_scenario(metadata2_register); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
-    let metadata1_verify = ScenarioMetadata {
-        scenario_id: scenario_id_1, scenario_hash: scenario_hash_1, author: owner,
-    };
-    let metadata2_verify = ScenarioMetadata {
-        scenario_id: scenario_id_2, scenario_hash: wrong_hash_2, author: owner,
-    };
-    let metadata3_verify = ScenarioMetadata {
-        scenario_id: scenario_id_3, scenario_hash: 202, author: owner,
-    };
-
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1_verify); // Should be valid
-    batch_array.append(metadata2_verify); // Should be invalid (wrong hash)
-    batch_array.append(metadata3_verify); // Should be invalid (not registered)
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_1, scenario_hash: scenario_hash_1 },
+        ); // Should be valid
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_2, scenario_hash: wrong_hash_2 },
+        ); // Should be invalid (wrong hash)
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_3, scenario_hash: 202 },
+        ); // Should be invalid (not registered)
 
     // Batch verify
-    let results = dispatcher.batch_verify_scenarios(batch_array);
+    let results = dispatcher.verify_scenarios(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, scenario_id_1);
-    assert!(result_valid_1 == VerificationResult::Match); // Should be Match
-    assert_eq!(result_id_2, scenario_id_2);
-    assert!(result_valid_2 == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
-    assert_eq!(result_id_3, scenario_id_3);
-    assert!(result_valid_3 == VerificationResult::NotFound); // Should be NotFound (not registered)
+    assert_eq!(result_1.scenario_id, scenario_id_1);
+    assert!(result_1.result == VerificationResult::Match); // Should be Match
+    assert_eq!(result_2.scenario_id, scenario_id_2);
+    assert!(result_2.result == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
+    assert_eq!(result_3.scenario_id, scenario_id_3);
+    assert!(result_3.result == VerificationResult::NotFound); // Should be NotFound (not registered)
 }
 
 #[test]
@@ -1366,7 +1375,7 @@ fn test_batch_verify_scenarios_empty_array() {
     let batch_array = ArrayTrait::new();
 
     // Batch verify
-    let results = dispatcher.batch_verify_scenarios(batch_array);
+    let results = dispatcher.verify_scenarios(batch_array);
 
     // Check results - should be empty
     assert_eq!(results.len(), 0);

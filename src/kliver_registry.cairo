@@ -6,6 +6,7 @@ use crate::interfaces::session_registry::ISessionRegistry;
 use crate::interfaces::simulation_registry::ISimulationRegistry;
 use crate::types::{
     VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
+    ScenarioVerificationRequest, ScenarioVerificationResult,
 };
 
 // Interfaces moved to crate::interfaces::{verifier, token_core}
@@ -35,7 +36,7 @@ pub mod kliver_registry {
     use super::{
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
         ISimulationRegistry, VerificationResult, SimulationVerificationRequest,
-        SimulationVerificationResult,
+        SimulationVerificationResult, ScenarioVerificationRequest, ScenarioVerificationResult,
     };
     use crate::interfaces::token_core::{ITokenCoreDispatcher, ITokenCoreDispatcherTrait};
     use crate::interfaces::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
@@ -246,11 +247,11 @@ pub mod kliver_registry {
             self.scenario_registry.verify_scenario(scenario_id, scenario_hash)
         }
 
-        fn batch_verify_scenarios(
-            self: @ContractState, scenarios: Array<ScenarioMetadata>,
-        ) -> Array<(felt252, VerificationResult)> {
+        fn verify_scenarios(
+            self: @ContractState, scenarios: Array<ScenarioVerificationRequest>,
+        ) -> Array<ScenarioVerificationResult> {
             // Delegate to component
-            self.scenario_registry.batch_verify_scenarios(scenarios)
+            self.scenario_registry.verify_scenarios(scenarios)
         }
 
         fn get_scenario_hash(self: @ContractState, scenario_id: felt252) -> felt252 {
