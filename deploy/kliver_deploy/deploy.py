@@ -401,14 +401,14 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
             # Resolve addresses and params
             pay_token = payment_token_address or adv_conf.payment_token_address
             timeout_s = purchase_timeout or adv_conf.purchase_timeout_seconds
-            reg_conf = config_manager.get_contract_config(environment, 'registry')
-            verif_addr = verifier_address or reg_conf.verifier_address
-            if not (deployed_addresses.get('pox') and verif_addr and pay_token and timeout_s):
-                click.echo(f"{Colors.WARNING}⚠️  Missing PoX, verifier, token or timeout for SessionsMarketplace. Skipping.{Colors.RESET}")
+            # SessionsMarketplace now requires registry_address instead of verifier_address
+            reg_addr = deployed_addresses.get('registry')
+            if not (deployed_addresses.get('pox') and reg_addr and pay_token and timeout_s):
+                click.echo(f"{Colors.WARNING}⚠️  Missing PoX, Registry, token or timeout for SessionsMarketplace. Skipping.{Colors.RESET}")
             else:
                 adv_result = adv_deployer.deploy_full_flow(owner, no_compile=no_compile,
                                                            pox_address=deployed_addresses['pox'],
-                                                           verifier_address=verif_addr,
+                                                           registry_address=reg_addr,
                                                            payment_token_address=pay_token,
                                                            purchase_timeout_seconds=timeout_s)
                 if adv_result:
@@ -517,19 +517,21 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
             payment_token_address = contract_config.payment_token_address
         if not purchase_timeout:
             purchase_timeout = contract_config.purchase_timeout_seconds
-        if not verifier_address:
-            try:
-                reg_conf = config_manager.get_contract_config(environment, 'registry')
-                verifier_address = reg_conf.verifier_address
-            except:
-                pass
+        
+        # For SessionsMarketplace, we need registry_address
+        actual_registry_address = registry_address
+        if not actual_registry_address:
+            # Try to get registry_address from config
+            actual_registry_address = contract_config.registry_address
+            if not actual_registry_address:
+                click.echo(f"{Colors.WARNING}⚠️  No --registry-address provided and none found in config. SessionsMarketplace requires Registry address.{Colors.RESET}")
 
-        if not (pox_address and payment_token_address and purchase_timeout and verifier_address):
+        if not (pox_address and payment_token_address and purchase_timeout and actual_registry_address):
             click.echo(f"{Colors.ERROR}❌ Missing required parameters for SessionsMarketplace deployment:{Colors.RESET}")
             if not pox_address:
                 click.echo(f"{Colors.ERROR}  --pox-address <address> is required (KliverPox contract address){Colors.RESET}")
-            if not verifier_address:
-                click.echo(f"{Colors.ERROR}  --verifier-address <address> is required{Colors.RESET}")
+            if not actual_registry_address:
+                click.echo(f"{Colors.ERROR}  --registry-address <address> is required (Registry contract address){Colors.RESET}")
             if not payment_token_address:
                 click.echo(f"{Colors.ERROR}  --payment-token-address <address> is required{Colors.RESET}")
             if not purchase_timeout:
@@ -538,7 +540,7 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
 
         # Set the parameters for deployment
         deploy_kwargs['pox_address'] = pox_address
-        deploy_kwargs['verifier_address'] = verifier_address
+        deploy_kwargs['registry_address'] = actual_registry_address
         deploy_kwargs['payment_token_address'] = payment_token_address
         deploy_kwargs['purchase_timeout_seconds'] = purchase_timeout
 

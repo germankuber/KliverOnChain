@@ -28,6 +28,7 @@ class ContractConfig:
     sierra_file: str
     base_uri: Optional[str] = None
     verifier_address: Optional[str] = None
+    registry_address: Optional[str] = None
     payment_token_address: Optional[str] = None
     purchase_timeout_seconds: Optional[int] = None
 
@@ -124,6 +125,7 @@ class ConfigManager:
             sierra_file=contract_data['sierra_file'],
             base_uri=contract_data.get('base_uri'),
             verifier_address=contract_data.get('verifier_address'),
+            registry_address=contract_data.get('registry_address'),
             payment_token_address=contract_data.get('payment_token_address'),
             purchase_timeout_seconds=contract_data.get('purchase_timeout_seconds'),
         )
