@@ -466,6 +466,30 @@ pub mod SessionsMarketplace {
             self.registry.write(new_registry);
         }
 
+        fn set_payment_token(ref self: ContractState, new_payment_token: ContractAddress) {
+            let caller = get_caller_address();
+            let owner = self.owner.read();
+            assert(caller == owner, 'Only owner can set token');
+            assert(!new_payment_token.is_zero(), 'Invalid payment token');
+            self.payment_token.write(new_payment_token);
+        }
+
+        fn set_pox_address(ref self: ContractState, new_pox_address: ContractAddress) {
+            let caller = get_caller_address();
+            let owner = self.owner.read();
+            assert(caller == owner, 'Only owner can set pox');
+            assert(!new_pox_address.is_zero(), 'Invalid pox address');
+            self.pox.write(new_pox_address);
+        }
+
+        fn set_purchase_timeout(ref self: ContractState, new_timeout: u64) {
+            let caller = get_caller_address();
+            let owner = self.owner.read();
+            assert(caller == owner, 'Only owner can set timeout');
+            assert(new_timeout > 0, 'Timeout must be positive');
+            self.purchase_timeout.write(new_timeout);
+        }
+
         fn transfer_ownership(ref self: ContractState, new_owner: ContractAddress) {
             let caller = get_caller_address();
             let owner = self.owner.read();

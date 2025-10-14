@@ -221,6 +221,28 @@ def deploy_all_contracts():
             for deployment in deployments:
                 print(f"  {deployment['contract_type']:20} {deployment['contract_address']}")
             print()
+            
+            # Create JSON output
+            import json
+            addresses_json = {}
+            for deployment in deployments:
+                contract_type = deployment['contract_type']
+                # Map contract types to JSON keys
+                key_mapping = {
+                    'nft': 'Nft',
+                    'kliver_tokens_core': 'TokenSimulation',
+                    'registry': 'Registry',
+                    'kliver_pox': 'KliverPox',
+                    'sessions_marketplace': 'MarketPlace',
+                    'payment_token': 'PaymentToken'
+                }
+                json_key = key_mapping.get(contract_type, contract_type)
+                addresses_json[json_key] = deployment['contract_address']
+            
+            # Print JSON
+            print(f"{Colors.BOLD}JSON Output:{Colors.RESET}")
+            print(json.dumps(addresses_json, indent=2))
+            print()
         else:
             print(f"\n{Colors.ERROR}❌ Deployment failed. Check logs above.{Colors.RESET}")
     

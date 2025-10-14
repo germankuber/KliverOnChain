@@ -36,11 +36,14 @@ def print_menu():
     print(f"  {Colors.INFO}2.{Colors.RESET} Set Registry Address on SessionsMarketplace")
     print(f"  {Colors.INFO}3.{Colors.RESET} Set KliverPox Address on Registry")
     print(f"  {Colors.INFO}4.{Colors.RESET} Set Verifier Address on Registry")
-    print(f"  {Colors.INFO}5.{Colors.RESET} Get Registry Address (from any contract)")
-    print(f"  {Colors.INFO}6.{Colors.RESET} Get KliverPox Address (from Registry)")
-    print(f"  {Colors.INFO}7.{Colors.RESET} Get Verifier Address (from Registry)")
-    print(f"  {Colors.INFO}8.{Colors.RESET} View All Configured Addresses")
-    print(f"  {Colors.INFO}9.{Colors.RESET} Generic Method Invocation")
+    print(f"  {Colors.INFO}5.{Colors.RESET} Set Payment Token on Marketplace")
+    print(f"  {Colors.INFO}6.{Colors.RESET} Set KliverPox Address on Marketplace")
+    print(f"  {Colors.INFO}7.{Colors.RESET} Set Purchase Timeout on Marketplace")
+    print(f"  {Colors.INFO}8.{Colors.RESET} Get Registry Address (from any contract)")
+    print(f"  {Colors.INFO}9.{Colors.RESET} Get KliverPox Address (from Registry)")
+    print(f"  {Colors.INFO}10.{Colors.RESET} Get Verifier Address (from Registry)")
+    print(f"  {Colors.INFO}11.{Colors.RESET} View All Configured Addresses")
+    print(f"  {Colors.INFO}12.{Colors.RESET} Generic Method Invocation")
     print(f"  {Colors.ERROR}0.{Colors.RESET} Exit")
     print()
 
@@ -620,6 +623,207 @@ def generic_invoke():
     input("\nPress Enter to continue...")
 
 
+def set_payment_token_on_marketplace():
+    """Interactive flow to set Payment Token on Marketplace."""
+    clear_screen()
+    print_header()
+    print(f"{Colors.BOLD}{Colors.INFO}Set Payment Token on SessionsMarketplace{Colors.RESET}\n")
+    print("This configures the ERC20 token to be used for payments in the marketplace.")
+    print()
+    
+    # Get parameters
+    environment = select_environment()
+    
+    print(f"\n{Colors.BOLD}Enter Contract Addresses:{Colors.RESET}")
+    marketplace_address = get_input("SessionsMarketplace contract address")
+    
+    if not validate_address(marketplace_address):
+        print(f"{Colors.ERROR}❌ Invalid Marketplace address{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    payment_token_address = get_input("Payment Token (ERC20) contract address")
+    
+    if not validate_address(payment_token_address):
+        print(f"{Colors.ERROR}❌ Invalid Payment Token address{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Confirm
+    print(f"\n{Colors.BOLD}Summary:{Colors.RESET}")
+    print(f"  Environment:     {environment}")
+    print(f"  Marketplace:     {marketplace_address}")
+    print(f"  Payment Token:   {payment_token_address}")
+    print()
+    
+    confirm = get_input("Proceed with configuration? (y/n)", "y").lower()
+    
+    if confirm != 'y':
+        print(f"{Colors.WARNING}⚠️  Operation cancelled{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Execute
+    try:
+        print(f"\n{Colors.INFO}🔧 Configuring...{Colors.RESET}\n")
+        config_manager = ConfigManager()
+        deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
+        
+        result = deployer.set_payment_token(
+            marketplace_address=marketplace_address,
+            payment_token_address=payment_token_address
+        )
+        
+        if result:
+            print(f"\n{Colors.SUCCESS}✅ Payment Token configured successfully!{Colors.RESET}")
+            print(f"  Transaction: {result['tx_hash']}")
+            if result.get('validation'):
+                print(f"  {result['validation']}")
+        else:
+            print(f"\n{Colors.ERROR}❌ Configuration failed{Colors.RESET}")
+    
+    except Exception as e:
+        print(f"\n{Colors.ERROR}❌ Error: {str(e)}{Colors.RESET}")
+    
+    input("\nPress Enter to continue...")
+
+
+def set_pox_on_marketplace():
+    """Interactive flow to set KliverPox on Marketplace."""
+    clear_screen()
+    print_header()
+    print(f"{Colors.BOLD}{Colors.INFO}Set KliverPox Address on SessionsMarketplace{Colors.RESET}\n")
+    print("This configures the Marketplace to mint POX NFTs when sales complete.")
+    print()
+    
+    # Get parameters
+    environment = select_environment()
+    
+    print(f"\n{Colors.BOLD}Enter Contract Addresses:{Colors.RESET}")
+    marketplace_address = get_input("SessionsMarketplace contract address")
+    
+    if not validate_address(marketplace_address):
+        print(f"{Colors.ERROR}❌ Invalid Marketplace address{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    pox_address = get_input("KliverPox contract address")
+    
+    if not validate_address(pox_address):
+        print(f"{Colors.ERROR}❌ Invalid KliverPox address{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Confirm
+    print(f"\n{Colors.BOLD}Summary:{Colors.RESET}")
+    print(f"  Environment:     {environment}")
+    print(f"  Marketplace:     {marketplace_address}")
+    print(f"  KliverPox:       {pox_address}")
+    print()
+    
+    confirm = get_input("Proceed with configuration? (y/n)", "y").lower()
+    
+    if confirm != 'y':
+        print(f"{Colors.WARNING}⚠️  Operation cancelled{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Execute
+    try:
+        print(f"\n{Colors.INFO}🔧 Configuring...{Colors.RESET}\n")
+        config_manager = ConfigManager()
+        deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
+        
+        result = deployer.set_pox_address_on_marketplace(
+            marketplace_address=marketplace_address,
+            pox_address=pox_address
+        )
+        
+        if result:
+            print(f"\n{Colors.SUCCESS}✅ KliverPox configured successfully!{Colors.RESET}")
+            print(f"  Transaction: {result['tx_hash']}")
+            if result.get('validation'):
+                print(f"  {result['validation']}")
+        else:
+            print(f"\n{Colors.ERROR}❌ Configuration failed{Colors.RESET}")
+    
+    except Exception as e:
+        print(f"\n{Colors.ERROR}❌ Error: {str(e)}{Colors.RESET}")
+    
+    input("\nPress Enter to continue...")
+
+
+def set_purchase_timeout_on_marketplace():
+    """Interactive flow to set Purchase Timeout on Marketplace."""
+    clear_screen()
+    print_header()
+    print(f"{Colors.BOLD}{Colors.INFO}Set Purchase Timeout on SessionsMarketplace{Colors.RESET}\n")
+    print("This sets how long buyers have to submit proof after opening a purchase.")
+    print()
+    
+    # Get parameters
+    environment = select_environment()
+    
+    print(f"\n{Colors.BOLD}Enter Configuration:{Colors.RESET}")
+    marketplace_address = get_input("SessionsMarketplace contract address")
+    
+    if not validate_address(marketplace_address):
+        print(f"{Colors.ERROR}❌ Invalid Marketplace address{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    timeout_str = get_input("Purchase timeout in seconds (e.g., 86400 for 24 hours)")
+    
+    try:
+        timeout = int(timeout_str)
+        if timeout <= 0:
+            print(f"{Colors.ERROR}❌ Timeout must be positive{Colors.RESET}")
+            input("\nPress Enter to continue...")
+            return
+    except ValueError:
+        print(f"{Colors.ERROR}❌ Invalid timeout value{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Confirm
+    print(f"\n{Colors.BOLD}Summary:{Colors.RESET}")
+    print(f"  Environment:     {environment}")
+    print(f"  Marketplace:     {marketplace_address}")
+    print(f"  Timeout:         {timeout} seconds ({timeout/3600:.1f} hours)")
+    print()
+    
+    confirm = get_input("Proceed with configuration? (y/n)", "y").lower()
+    
+    if confirm != 'y':
+        print(f"{Colors.WARNING}⚠️  Operation cancelled{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    # Execute
+    try:
+        print(f"\n{Colors.INFO}🔧 Configuring...{Colors.RESET}\n")
+        config_manager = ConfigManager()
+        deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
+        
+        result = deployer.set_purchase_timeout(
+            marketplace_address=marketplace_address,
+            timeout_seconds=timeout
+        )
+        
+        if result:
+            print(f"\n{Colors.SUCCESS}✅ Purchase timeout configured successfully!{Colors.RESET}")
+            print(f"  Transaction: {result['tx_hash']}")
+            if result.get('validation'):
+                print(f"  {result['validation']}")
+        else:
+            print(f"\n{Colors.ERROR}❌ Configuration failed{Colors.RESET}")
+    
+    except Exception as e:
+        print(f"\n{Colors.ERROR}❌ Error: {str(e)}{Colors.RESET}")
+    
+    input("\nPress Enter to continue...")
+
+
 def main():
     """Main application loop."""
     while True:
@@ -627,7 +831,7 @@ def main():
         print_header()
         print_menu()
         
-        choice = get_input("Select an option [0-9]")
+        choice = get_input("Select an option [0-12]")
         
         if choice == '1':
             set_registry_on_tokens_core()
@@ -638,14 +842,20 @@ def main():
         elif choice == '4':
             set_verifier_on_registry()
         elif choice == '5':
-            get_registry_address()
+            set_payment_token_on_marketplace()
         elif choice == '6':
-            get_pox_address()
+            set_pox_on_marketplace()
         elif choice == '7':
-            get_verifier_address()
+            set_purchase_timeout_on_marketplace()
         elif choice == '8':
-            view_all_addresses()
+            get_registry_address()
         elif choice == '9':
+            get_pox_address()
+        elif choice == '10':
+            get_verifier_address()
+        elif choice == '11':
+            view_all_addresses()
+        elif choice == '12':
             generic_invoke()
         elif choice == '0':
             clear_screen()

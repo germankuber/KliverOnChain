@@ -834,3 +834,109 @@ class ContractDeployer:
         
         return result
 
+    def set_payment_token(
+        self,
+        marketplace_address: str,
+        payment_token_address: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set Payment Token address on SessionsMarketplace.
+        
+        Args:
+            marketplace_address: Address of the SessionsMarketplace contract
+            payment_token_address: Address of the ERC20 payment token
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=marketplace_address,
+            method_name="set_payment_token",
+            calldata=[payment_token_address],
+            description="Setting Payment Token address on Marketplace"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(marketplace_address, "get_payment_token")
+            if actual:
+                expected = payment_token_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ Payment Token address validated on Marketplace{Colors.RESET}")
+                    result["validation"] = "✓ Payment Token address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ Payment Token address mismatch{Colors.RESET}")
+        
+        return result
+
+    def set_pox_address_on_marketplace(
+        self,
+        marketplace_address: str,
+        pox_address: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set KliverPox address on SessionsMarketplace.
+        
+        Args:
+            marketplace_address: Address of the SessionsMarketplace contract
+            pox_address: Address of the KliverPox contract
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=marketplace_address,
+            method_name="set_pox_address",
+            calldata=[pox_address],
+            description="Setting KliverPox address on Marketplace"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(marketplace_address, "get_pox_address")
+            if actual:
+                expected = pox_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ KliverPox address validated on Marketplace{Colors.RESET}")
+                    result["validation"] = "✓ KliverPox address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ KliverPox address mismatch{Colors.RESET}")
+        
+        return result
+
+    def set_purchase_timeout(
+        self,
+        marketplace_address: str,
+        timeout_seconds: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set purchase timeout on SessionsMarketplace.
+        
+        Args:
+            marketplace_address: Address of the SessionsMarketplace contract
+            timeout_seconds: Timeout in seconds
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=marketplace_address,
+            method_name="set_purchase_timeout",
+            calldata=[str(timeout_seconds)],
+            description="Setting purchase timeout on Marketplace"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(marketplace_address, "get_purchase_timeout")
+            if actual:
+                if actual == str(timeout_seconds):
+                    print(f"{Colors.SUCCESS}✓ Purchase timeout validated on Marketplace ({timeout_seconds}s){Colors.RESET}")
+                    result["validation"] = f"✓ Purchase timeout validated ({timeout_seconds}s)"
+                else:
+                    print(f"{Colors.WARNING}⚠️ Purchase timeout mismatch (expected: {timeout_seconds}, got: {actual}){Colors.RESET}")
+        
+        return result
+

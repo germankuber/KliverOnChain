@@ -66,6 +66,9 @@ pub trait IMarketplace<TContractState> {
     
     // Admin functions
     fn set_registry_address(ref self: TContractState, new_registry: ContractAddress);
+    fn set_payment_token(ref self: TContractState, new_payment_token: ContractAddress);
+    fn set_pox_address(ref self: TContractState, new_pox_address: ContractAddress);
+    fn set_purchase_timeout(ref self: TContractState, new_timeout: u64);
     fn transfer_ownership(ref self: TContractState, new_owner: ContractAddress);
     
     // View functions - History

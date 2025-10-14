@@ -60,6 +60,19 @@ mod SimpleERC20 {
             self.emit(TokensClaimed { claimer: caller, amount: CLAIM_AMOUNT });
         }
         
+        /// Public function to claim tokens to a specific address
+        /// Allows claiming tokens for another wallet
+        /// Can be used unlimited times
+        #[external(v0)]
+        fn claim_to(ref self: ContractState, recipient: ContractAddress) {
+            // Transfer tokens from contract to specified recipient
+            let contract_address = starknet::get_contract_address();
+            self.erc20._transfer(contract_address, recipient, CLAIM_AMOUNT);
+            
+            // Emit event (claimer is the recipient in this case)
+            self.emit(TokensClaimed { claimer: recipient, amount: CLAIM_AMOUNT });
+        }
+        
         /// Get the amount of tokens that can be claimed
         #[external(v0)]
         fn claim_amount(self: @ContractState) -> u256 {

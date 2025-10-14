@@ -197,6 +197,135 @@ def get_address(environment: str, contract_address: str, method: str):
 @cli.command()
 @click.option('--environment', '-e', required=True,
               help='Environment: dev, qa, or prod')
+@click.option('--marketplace-address', '-m', required=True,
+              help='Address of the SessionsMarketplace contract')
+@click.option('--payment-token-address', '-p', required=True,
+              help='Address of the ERC20 payment token')
+def set_payment_token(environment: str, marketplace_address: str, payment_token_address: str):
+    """
+    Set payment token address on SessionsMarketplace contract.
+    
+    Example:
+        python -m kliver_deploy.configure set-payment-token -e dev -m 0x123... -p 0x456...
+    """
+    try:
+        config_manager = ConfigManager()
+        deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
+        
+        click.echo(f"\n{Colors.BOLD}🔧 Setting Payment Token Address{Colors.RESET}")
+        click.echo(f"  Environment: {environment}")
+        click.echo(f"  Marketplace: {marketplace_address}")
+        click.echo(f"  Payment Token: {payment_token_address}\n")
+        
+        result = deployer.set_payment_token(
+            marketplace_address=marketplace_address,
+            payment_token_address=payment_token_address
+        )
+        
+        if result:
+            click.echo(f"\n{Colors.SUCCESS}✅ Payment Token address set successfully!{Colors.RESET}")
+            click.echo(f"  Transaction: {result['tx_hash']}")
+            if result.get('validation'):
+                click.echo(f"  {result['validation']}")
+            exit(0)
+        else:
+            click.echo(f"\n{Colors.ERROR}❌ Failed to set payment token address{Colors.RESET}")
+            exit(1)
+            
+    except Exception as e:
+        click.echo(f"\n{Colors.ERROR}❌ Error: {str(e)}{Colors.RESET}")
+        exit(1)
+
+
+@cli.command()
+@click.option('--environment', '-e', required=True,
+              help='Environment: dev, qa, or prod')
+@click.option('--marketplace-address', '-m', required=True,
+              help='Address of the SessionsMarketplace contract')
+@click.option('--pox-address', '-p', required=True,
+              help='Address of the KliverPox contract')
+def set_marketplace_pox(environment: str, marketplace_address: str, pox_address: str):
+    """
+    Set KliverPox address on SessionsMarketplace contract.
+    
+    Example:
+        python -m kliver_deploy.configure set-marketplace-pox -e dev -m 0x123... -p 0x456...
+    """
+    try:
+        config_manager = ConfigManager()
+        deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
+        
+        click.echo(f"\n{Colors.BOLD}🔧 Setting KliverPox Address on Marketplace{Colors.RESET}")
+        click.echo(f"  Environment: {environment}")
+        click.echo(f"  Marketplace: {marketplace_address}")
+        click.echo(f"  KliverPox: {pox_address}\n")
+        
+        result = deployer.set_pox_address_on_marketplace(
+            marketplace_address=marketplace_address,
+            pox_address=pox_address
+        )
+        
+        if result:
+            click.echo(f"\n{Colors.SUCCESS}✅ KliverPox address set successfully!{Colors.RESET}")
+            click.echo(f"  Transaction: {result['tx_hash']}")
+            if result.get('validation'):
+                click.echo(f"  {result['validation']}")
+            exit(0)
+        else:
+            click.echo(f"\n{Colors.ERROR}❌ Failed to set KliverPox address{Colors.RESET}")
+            exit(1)
+            
+    except Exception as e:
+        click.echo(f"\n{Colors.ERROR}❌ Error: {str(e)}{Colors.RESET}")
+        exit(1)
+
+
+@cli.command()
+@click.option('--environment', '-e', required=True,
+              help='Environment: dev, qa, or prod')
+@click.option('--marketplace-address', '-m', required=True,
+              help='Address of the SessionsMarketplace contract')
+@click.option('--timeout', '-t', required=True, type=int,
+              help='Purchase timeout in seconds')
+def set_timeout(environment: str, marketplace_address: str, timeout: int):
+    """
+    Set purchase timeout on SessionsMarketplace contract.
+    
+    Example:
+        python -m kliver_deploy.configure set-timeout -e dev -m 0x123... -t 86400
+    """
+    try:
+        config_manager = ConfigManager()
+        deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
+        
+        click.echo(f"\n{Colors.BOLD}🔧 Setting Purchase Timeout{Colors.RESET}")
+        click.echo(f"  Environment: {environment}")
+        click.echo(f"  Marketplace: {marketplace_address}")
+        click.echo(f"  Timeout: {timeout} seconds ({timeout/3600:.1f} hours)\n")
+        
+        result = deployer.set_purchase_timeout(
+            marketplace_address=marketplace_address,
+            timeout_seconds=timeout
+        )
+        
+        if result:
+            click.echo(f"\n{Colors.SUCCESS}✅ Purchase timeout set successfully!{Colors.RESET}")
+            click.echo(f"  Transaction: {result['tx_hash']}")
+            if result.get('validation'):
+                click.echo(f"  {result['validation']}")
+            exit(0)
+        else:
+            click.echo(f"\n{Colors.ERROR}❌ Failed to set purchase timeout{Colors.RESET}")
+            exit(1)
+            
+    except Exception as e:
+        click.echo(f"\n{Colors.ERROR}❌ Error: {str(e)}{Colors.RESET}")
+        exit(1)
+
+
+@cli.command()
+@click.option('--environment', '-e', required=True,
+              help='Environment: dev, qa, or prod')
 @click.option('--contract-address', '-c', required=True,
               help='Address of the contract')
 @click.option('--method', '-m', required=True,
