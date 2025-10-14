@@ -12,4 +12,7 @@ pub trait IOwnerRegistry<TContractState> {
     // KliverPox address management
     fn set_kliver_pox_address(ref self: TContractState, addr: ContractAddress);
     fn get_kliver_pox_address(self: @TContractState) -> ContractAddress;
+    // Verifier address management
+    fn get_verifier_address(self: @TContractState) -> ContractAddress;
+    fn set_verifier_address(ref self: TContractState, new_verifier: ContractAddress);
 }

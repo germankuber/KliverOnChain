@@ -458,6 +458,17 @@ pub mod kliver_registry {
         fn get_kliver_pox_address(self: @ContractState) -> ContractAddress {
             self.kliver_pox_address.read()
         }
+
+        // Get and Set Verifier address (only owner)
+        fn get_verifier_address(self: @ContractState) -> ContractAddress {
+            self.verifier_address.read()
+        }
+
+        fn set_verifier_address(ref self: ContractState, new_verifier: ContractAddress) {
+            self._assert_only_owner();
+            assert(!new_verifier.is_zero(), 'Verifier addr cannot be zero');
+            self.verifier_address.write(new_verifier);
+        }
     }
 
     #[generate_trait]

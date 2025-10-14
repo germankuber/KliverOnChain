@@ -1700,3 +1700,130 @@ fn test_simulation_exists_zero_id() {
     let exists = dispatcher.simulation_exists(0);
     assert(!exists, 'Zero ID should not exist');
 }
+
+// ===== VERIFIER ADDRESS MANAGEMENT TESTS =====
+
+#[test]
+fn test_get_verifier_address() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    
+    // Get the verifier address set during deployment
+    let verifier_addr = owner_dispatcher.get_verifier_address();
+    let expected_verifier: ContractAddress = 'verifier'.try_into().unwrap();
+    
+    assert(verifier_addr == expected_verifier, 'Verifier address mismatch');
+}
+
+#[test]
+fn test_set_verifier_address_by_owner() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    // New verifier address
+    let new_verifier: ContractAddress = 'new_verifier'.try_into().unwrap();
+    
+    // Owner sets new verifier address
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(new_verifier);
+    stop_cheat_caller_address(contract_address);
+    
+    // Verify the change
+    let current_verifier = owner_dispatcher.get_verifier_address();
+    assert(current_verifier == new_verifier, 'Verifier not updated');
+}
+
+#[test]
+#[should_panic(expected: ('Not owner',))]
+fn test_set_verifier_address_by_non_owner_fails() {
+    let (_, _, _, owner_dispatcher, _, _) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    let non_owner: ContractAddress = 'non_owner'.try_into().unwrap();
+    let new_verifier: ContractAddress = 'new_verifier'.try_into().unwrap();
+    
+    // Non-owner tries to set verifier address (should panic)
+    start_cheat_caller_address(contract_address, non_owner);
+    owner_dispatcher.set_verifier_address(new_verifier);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Verifier addr cannot be zero',))]
+fn test_set_verifier_address_zero_fails() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    let zero_address: ContractAddress = 0.try_into().unwrap();
+    
+    // Owner tries to set zero address (should panic)
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(zero_address);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+fn test_set_verifier_address_multiple_times() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    // First change
+    let verifier1: ContractAddress = 'verifier_1'.try_into().unwrap();
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(verifier1);
+    stop_cheat_caller_address(contract_address);
+    
+    let current = owner_dispatcher.get_verifier_address();
+    assert(current == verifier1, 'First update failed');
+    
+    // Second change
+    let verifier2: ContractAddress = 'verifier_2'.try_into().unwrap();
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(verifier2);
+    stop_cheat_caller_address(contract_address);
+    
+    let current = owner_dispatcher.get_verifier_address();
+    assert(current == verifier2, 'Second update failed');
+}
+
+#[test]
+fn test_verifier_address_after_ownership_transfer() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    let new_owner: ContractAddress = 'new_owner'.try_into().unwrap();
+    let new_verifier: ContractAddress = 'new_verifier'.try_into().unwrap();
+    
+    // Transfer ownership
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(contract_address);
+    
+    // New owner sets verifier address
+    start_cheat_caller_address(contract_address, new_owner);
+    owner_dispatcher.set_verifier_address(new_verifier);
+    stop_cheat_caller_address(contract_address);
+    
+    // Verify
+    let current = owner_dispatcher.get_verifier_address();
+    assert(current == new_verifier, 'New owner cannot set verifier');
+}
+
+#[test]
+#[should_panic(expected: ('Not owner',))]
+fn test_old_owner_cannot_set_verifier_after_transfer() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    let new_owner: ContractAddress = 'new_owner'.try_into().unwrap();
+    let new_verifier: ContractAddress = 'new_verifier'.try_into().unwrap();
+    
+    // Transfer ownership
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(contract_address);
+    
+    // Old owner tries to set verifier (should panic)
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(new_verifier);
+    stop_cheat_caller_address(contract_address);
+}
