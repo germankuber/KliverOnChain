@@ -7,3 +7,17 @@ pub enum VerificationResult {
     Mismatch, // ID exists but the hash does not match
     Match // ID exists and the hash matches
 }
+
+/// Struct for batch simulation verification request
+#[derive(Drop, Serde, Copy)]
+pub struct SimulationVerificationRequest {
+    pub simulation_id: felt252,
+    pub simulation_hash: felt252,
+}
+
+/// Struct for batch simulation verification result
+#[derive(Drop, Serde, Copy)]
+pub struct SimulationVerificationResult {
+    pub simulation_id: felt252,
+    pub result: VerificationResult,
+}

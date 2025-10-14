@@ -155,7 +155,7 @@ fn register_session(metadata: SessionMetadata)  // Validates + mints in KliverPo
 ```cairo
 fn verify_character(character_id: felt252, hash: felt252) -> VerificationResult
 fn verify_simulation(simulation_id: felt252, hash: felt252) -> VerificationResult
-fn batch_verify_simulations(simulations: Span<SimulationVerification>) -> Span<VerificationResult>
+fn verify_simulations(simulations: Array<SimulationVerificationRequest>) -> Array<SimulationVerificationResult>
 ```
 
 **Features**:
@@ -479,6 +479,7 @@ register_simulation(simulation_id: felt252, scenario_id: felt252,
                    character_id: felt252, hash: felt252, author: ContractAddress)
 register_session(metadata: SessionMetadata)
 verify_simulation(simulation_id: felt252, hash: felt252) -> VerificationResult
+verify_simulations(simulations: Array<SimulationVerificationRequest>) -> Array<SimulationVerificationResult>
 set_kliver_pox_address(pox: ContractAddress)  // Post-deployment
 ```
 

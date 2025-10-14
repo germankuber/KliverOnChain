@@ -1,7 +1,9 @@
 pub use kliver_on_chain::components::simulation_registry_component::{
     SimulationMetadata, SimulationWithTokenMetadata,
 };
-use crate::types::VerificationResult;
+use crate::types::{
+    VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
+};
 
 #[starknet::interface]
 pub trait ISimulationRegistry<TContractState> {
@@ -12,9 +14,9 @@ pub trait ISimulationRegistry<TContractState> {
     fn verify_simulation(
         self: @TContractState, simulation_id: felt252, simulation_hash: felt252,
     ) -> VerificationResult;
-    fn batch_verify_simulations(
-        self: @TContractState, simulations: Array<SimulationMetadata>,
-    ) -> Array<(felt252, VerificationResult)>;
+    fn verify_simulations(
+        self: @TContractState, simulations: Array<SimulationVerificationRequest>,
+    ) -> Array<SimulationVerificationResult>;
     fn get_simulation_hash(self: @TContractState, simulation_id: felt252) -> felt252;
     fn get_simulation_info(self: @TContractState, simulation_id: felt252) -> SimulationMetadata;
     fn get_simulation_with_token_info(

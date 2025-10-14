@@ -17,7 +17,9 @@ use kliver_on_chain::interfaces::simulation_registry::{
     ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata,
     SimulationWithTokenMetadata,
 };
-use kliver_on_chain::types::VerificationResult;
+use kliver_on_chain::types::{
+    VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
+};
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
     stop_cheat_caller_address,
@@ -1417,27 +1419,36 @@ fn test_batch_verify_simulations_all_valid() {
     dispatcher.register_simulation(metadata_3);
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata_1);
-    batch_array.append(metadata_2);
-    batch_array.append(metadata_3);
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_1, simulation_hash: sim_hash_1 },
+        );
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_2, simulation_hash: sim_hash_2 },
+        );
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_3, simulation_hash: sim_hash_3 },
+        );
 
     // Batch verify
-    let results = dispatcher.batch_verify_simulations(batch_array);
+    let results = dispatcher.verify_simulations(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, sim_id_1);
-    assert!(result_valid_1 == VerificationResult::Match);
-    assert_eq!(result_id_2, sim_id_2);
-    assert!(result_valid_2 == VerificationResult::Match);
-    assert_eq!(result_id_3, sim_id_3);
-    assert!(result_valid_3 == VerificationResult::Match);
+    assert_eq!(result_1.simulation_id, sim_id_1);
+    assert!(result_1.result == VerificationResult::Match);
+    assert_eq!(result_2.simulation_id, sim_id_2);
+    assert!(result_2.result == VerificationResult::Match);
+    assert_eq!(result_3.simulation_id, sim_id_3);
+    assert!(result_3.result == VerificationResult::Match);
 }
 
 #[test]
@@ -1477,43 +1488,38 @@ fn test_batch_verify_simulations_mixed_results() {
     dispatcher.register_simulation(metadata_2); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array with metadata for verification
-    let metadata_1_check = metadata_1; // Should be valid
-    let metadata_2_wrong = SimulationMetadata {
-        simulation_id: sim_id_2,
-        author: owner,
-        character_id,
-        scenario_id,
-        simulation_hash: wrong_hash_2 // Wrong hash
-    };
-    let metadata_3_not_registered = SimulationMetadata {
-        simulation_id: sim_id_3,
-        author: owner,
-        character_id,
-        scenario_id,
-        simulation_hash: 202 // Not registered
-    };
-
+    // Prepare batch verification array with requests for verification
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata_1_check); // Should be valid
-    batch_array.append(metadata_2_wrong); // Should be invalid (wrong hash)
-    batch_array.append(metadata_3_not_registered); // Should be invalid (not registered)
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_1, simulation_hash: sim_hash_1 },
+        ); // Should be valid
+    batch_array
+        .append(
+            SimulationVerificationRequest {
+                simulation_id: sim_id_2, simulation_hash: wrong_hash_2,
+            },
+        ); // Should be invalid (wrong hash)
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_3, simulation_hash: 202 },
+        ); // Should be invalid (not registered)
 
     // Batch verify
-    let results = dispatcher.batch_verify_simulations(batch_array);
+    let results = dispatcher.verify_simulations(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, sim_id_1);
-    assert!(result_valid_1 == VerificationResult::Match); // Should be Match
-    assert_eq!(result_id_2, sim_id_2);
-    assert!(result_valid_2 == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
-    assert_eq!(result_id_3, sim_id_3);
-    assert!(result_valid_3 == VerificationResult::NotFound); // Should be NotFound (not registered)
+    assert_eq!(result_1.simulation_id, sim_id_1);
+    assert!(result_1.result == VerificationResult::Match); // Should be Match
+    assert_eq!(result_2.simulation_id, sim_id_2);
+    assert!(result_2.result == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
+    assert_eq!(result_3.simulation_id, sim_id_3);
+    assert!(result_3.result == VerificationResult::NotFound); // Should be NotFound (not registered)
 }
 
 #[test]
@@ -1524,7 +1530,7 @@ fn test_batch_verify_simulations_empty_array() {
     let batch_array = ArrayTrait::new();
 
     // Batch verify
-    let results = dispatcher.batch_verify_simulations(batch_array);
+    let results = dispatcher.verify_simulations(batch_array);
 
     // Check results - should be empty
     assert_eq!(results.len(), 0);

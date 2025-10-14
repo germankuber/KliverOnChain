@@ -4,7 +4,9 @@ use crate::interfaces::owner_registry::IOwnerRegistry;
 use crate::interfaces::scenario_registry::IScenarioRegistry;
 use crate::interfaces::session_registry::ISessionRegistry;
 use crate::interfaces::simulation_registry::ISimulationRegistry;
-use crate::types::VerificationResult;
+use crate::types::{
+    VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
+};
 
 // Interfaces moved to crate::interfaces::{verifier, token_core}
 
@@ -31,8 +33,9 @@ pub mod kliver_registry {
     use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
     use crate::interfaces::kliver_pox::{IKliverPoxDispatcher, IKliverPoxDispatcherTrait};
     use super::{
-        ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry, ISimulationRegistry,
-        VerificationResult,
+        ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
+        ISimulationRegistry, VerificationResult, SimulationVerificationRequest,
+        SimulationVerificationResult,
     };
     use crate::interfaces::token_core::{ITokenCoreDispatcher, ITokenCoreDispatcherTrait};
     use crate::interfaces::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
@@ -339,11 +342,11 @@ pub mod kliver_registry {
             self.simulation_registry.verify_simulation(simulation_id, simulation_hash)
         }
 
-        fn batch_verify_simulations(
-            self: @ContractState, simulations: Array<SimulationMetadata>,
-        ) -> Array<(felt252, VerificationResult)> {
+        fn verify_simulations(
+            self: @ContractState, simulations: Array<SimulationVerificationRequest>,
+        ) -> Array<SimulationVerificationResult> {
             // Delegate to component
-            self.simulation_registry.batch_verify_simulations(simulations)
+            self.simulation_registry.verify_simulations(simulations)
         }
 
         fn get_simulation_hash(self: @ContractState, simulation_id: felt252) -> felt252 {

@@ -148,33 +148,29 @@ pub mod SimulationRegistryComponent {
         }
 
         /// Verify multiple simulations at once
-        fn batch_verify_simulations(
-            self: @ComponentState<TContractState>, simulations: Array<SimulationMetadata>,
-        ) -> Array<(felt252, VerificationResult)> {
-            let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
+        fn verify_simulations(
+            self: @ComponentState<TContractState>,
+            simulations: Array<kliver_on_chain::types::SimulationVerificationRequest>,
+        ) -> Array<kliver_on_chain::types::SimulationVerificationResult> {
+            let mut results: Array<kliver_on_chain::types::SimulationVerificationResult> =
+                ArrayTrait::new();
             let mut i = 0;
             let len = simulations.len();
 
             while i != len {
-                let metadata = *simulations.at(i);
-                let simulation_id = metadata.simulation_id;
-                let simulation_hash = metadata.simulation_hash;
+                let request = *simulations.at(i);
+                let simulation_id = request.simulation_id;
+                let simulation_hash = request.simulation_hash;
 
-                let verification_result = if simulation_id == 0 || simulation_hash == 0 {
-                    VerificationResult::NotFound
-                } else {
-                    let stored_hash = self.simulations.entry(simulation_id).read();
+                // Call verify_simulation to reuse the verification logic
+                let verification_result = self.verify_simulation(simulation_id, simulation_hash);
 
-                    if stored_hash == 0 {
-                        VerificationResult::NotFound
-                    } else if stored_hash == simulation_hash {
-                        VerificationResult::Match
-                    } else {
-                        VerificationResult::Mismatch
-                    }
-                };
-
-                results.append((simulation_id, verification_result));
+                results
+                    .append(
+                        kliver_on_chain::types::SimulationVerificationResult {
+                            simulation_id, result: verification_result,
+                        },
+                    );
                 i += 1;
             }
 

@@ -54,4 +54,6 @@ pub mod demo;
 
 
 // Re-export key types for easier access
-pub use types::VerificationResult;
+pub use types::{
+    VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
+};
