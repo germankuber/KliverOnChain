@@ -19,7 +19,8 @@ use kliver_on_chain::interfaces::simulation_registry::{
 };
 use kliver_on_chain::types::{
     VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
-    ScenarioVerificationRequest, ScenarioVerificationResult,
+    ScenarioVerificationRequest, ScenarioVerificationResult, CharacterVerificationRequest,
+    CharacterVerificationResult,
 };
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
@@ -1085,27 +1086,36 @@ fn test_batch_verify_characters_all_valid() {
     dispatcher.register_character(metadata3);
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1);
-    batch_array.append(metadata2);
-    batch_array.append(metadata3);
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_1, character_hash: char_hash_1 },
+        );
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_2, character_hash: char_hash_2 },
+        );
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_3, character_hash: char_hash_3 },
+        );
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_1) = *results.at(0);
-    let (result_id_2, result_2) = *results.at(1);
-    let (result_id_3, result_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, char_id_1);
-    assert!(result_1 == VerificationResult::Match);
-    assert_eq!(result_id_2, char_id_2);
-    assert!(result_2 == VerificationResult::Match);
-    assert_eq!(result_id_3, char_id_3);
-    assert!(result_3 == VerificationResult::Match);
+    assert_eq!(result_1.character_id, char_id_1);
+    assert!(result_1.result == VerificationResult::Match);
+    assert_eq!(result_2.character_id, char_id_2);
+    assert!(result_2.result == VerificationResult::Match);
+    assert_eq!(result_3.character_id, char_id_3);
+    assert!(result_3.result == VerificationResult::Match);
 }
 
 #[test]
@@ -1131,68 +1141,63 @@ fn test_batch_verify_characters_mixed_results() {
     dispatcher.register_character(metadata2_register); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
-    let metadata1_verify = CharacterMetadata {
-        character_id: char_id_1, character_hash: char_hash_1, author: owner,
-    };
-    let metadata2_verify = CharacterMetadata {
-        character_id: char_id_2, character_hash: wrong_hash_2, author: owner,
-    };
-    let metadata3_verify = CharacterMetadata {
-        character_id: char_id_3, character_hash: 202, author: owner,
-    };
-
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1_verify); // Should be valid
-    batch_array.append(metadata2_verify); // Should be invalid (wrong hash)
-    batch_array.append(metadata3_verify); // Should be invalid (not registered)
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_1, character_hash: char_hash_1 },
+        ); // Should be valid
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_2, character_hash: wrong_hash_2 },
+        ); // Should be invalid (wrong hash)
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_3, character_hash: 202 },
+        ); // Should be invalid (not registered)
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_1) = *results.at(0);
-    let (result_id_2, result_2) = *results.at(1);
-    let (result_id_3, result_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, char_id_1);
-    assert!(result_1 == VerificationResult::Match); // Should be Match
-    assert_eq!(result_id_2, char_id_2);
-    assert!(result_2 == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
-    assert_eq!(result_id_3, char_id_3);
-    assert!(result_3 == VerificationResult::NotFound); // Should be NotFound (not registered)
+    assert_eq!(result_1.character_id, char_id_1);
+    assert!(result_1.result == VerificationResult::Match); // Should be Match
+    assert_eq!(result_2.character_id, char_id_2);
+    assert!(result_2.result == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
+    assert_eq!(result_3.character_id, char_id_3);
+    assert!(result_3.result == VerificationResult::NotFound); // Should be NotFound (not registered)
 }
 
 #[test]
 fn test_batch_verify_characters_with_zero_values() {
-    let (dispatcher, _, owner) = deploy_for_characters();
+    let (dispatcher, _, _) = deploy_for_characters();
 
     // Prepare batch verification array with zero values
-    let metadata1 = CharacterMetadata { character_id: 0, character_hash: 200, author: owner };
-    let metadata2 = CharacterMetadata { character_id: 100, character_hash: 0, author: owner };
-    let metadata3 = CharacterMetadata { character_id: 0, character_hash: 0, author: owner };
-
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1); // Zero ID
-    batch_array.append(metadata2); // Zero hash
-    batch_array.append(metadata3); // Both zero
+    batch_array.append(CharacterVerificationRequest { character_id: 0, character_hash: 200 }); // Zero ID
+    batch_array.append(CharacterVerificationRequest { character_id: 100, character_hash: 0 }); // Zero hash
+    batch_array.append(CharacterVerificationRequest { character_id: 0, character_hash: 0 }); // Both zero
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results - all should be NotFound due to zero values
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_1) = *results.at(0);
-    let (result_id_2, result_2) = *results.at(1);
-    let (result_id_3, result_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, 0);
-    assert!(result_1 == VerificationResult::NotFound); // Should be NotFound (zero ID)
-    assert_eq!(result_id_2, 100);
-    assert!(result_2 == VerificationResult::NotFound); // Should be NotFound (zero hash)
-    assert_eq!(result_id_3, 0);
-    assert!(result_3 == VerificationResult::NotFound); // Should be NotFound (both zero)
+    assert_eq!(result_1.character_id, 0);
+    assert!(result_1.result == VerificationResult::NotFound); // Should be NotFound (zero ID)
+    assert_eq!(result_2.character_id, 100);
+    assert!(result_2.result == VerificationResult::NotFound); // Should be NotFound (zero hash)
+    assert_eq!(result_3.character_id, 0);
+    assert!(result_3.result == VerificationResult::NotFound); // Should be NotFound (both zero)
 }
 
 #[test]
@@ -1203,7 +1208,7 @@ fn test_batch_verify_characters_empty_array() {
     let batch_array = ArrayTrait::new();
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results - should be empty
     assert_eq!(results.len(), 0);
@@ -1229,23 +1234,25 @@ fn test_batch_verify_characters_large_batch() {
     let mut batch_array = ArrayTrait::new();
     let mut j = 1;
     while j != 11 {
-        let metadata = CharacterMetadata {
-            character_id: j.into(), character_hash: (j + 100).into(), author: owner,
-        };
-        batch_array.append(metadata);
+        batch_array
+            .append(
+                CharacterVerificationRequest {
+                    character_id: j.into(), character_hash: (j + 100).into(),
+                },
+            );
         j += 1;
     }
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results - all should be Match
     assert_eq!(results.len(), 10);
     let mut k = 0;
     while k != 10 {
-        let (result_id, result) = *results.at(k);
-        assert_eq!(result_id, (k + 1).into());
-        assert!(result == VerificationResult::Match);
+        let result = *results.at(k);
+        assert_eq!(result.character_id, (k + 1).into());
+        assert!(result.result == VerificationResult::Match);
         k += 1;
     };
 }

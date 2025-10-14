@@ -6,7 +6,8 @@ use crate::interfaces::session_registry::ISessionRegistry;
 use crate::interfaces::simulation_registry::ISimulationRegistry;
 use crate::types::{
     VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
-    ScenarioVerificationRequest, ScenarioVerificationResult,
+    ScenarioVerificationRequest, ScenarioVerificationResult, CharacterVerificationRequest,
+    CharacterVerificationResult,
 };
 
 // Interfaces moved to crate::interfaces::{verifier, token_core}
@@ -37,6 +38,7 @@ pub mod kliver_registry {
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
         ISimulationRegistry, VerificationResult, SimulationVerificationRequest,
         SimulationVerificationResult, ScenarioVerificationRequest, ScenarioVerificationResult,
+        CharacterVerificationRequest, CharacterVerificationResult,
     };
     use crate::interfaces::token_core::{ITokenCoreDispatcher, ITokenCoreDispatcherTrait};
     use crate::interfaces::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
@@ -175,11 +177,11 @@ pub mod kliver_registry {
             self.character_registry.verify_character(character_id, character_hash)
         }
 
-        fn batch_verify_characters(
-            self: @ContractState, characters: Array<CharacterMetadata>,
-        ) -> Array<(felt252, VerificationResult)> {
+        fn verify_characters(
+            self: @ContractState, characters: Array<CharacterVerificationRequest>,
+        ) -> Array<CharacterVerificationResult> {
             // Use component for batch verification
-            self.character_registry.batch_verify_characters(characters)
+            self.character_registry.verify_characters(characters)
         }
 
         fn get_character_hash(self: @ContractState, character_id: felt252) -> felt252 {

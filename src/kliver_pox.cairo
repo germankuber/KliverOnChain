@@ -177,6 +177,35 @@ mod KliverPox {
             }
         }
 
+        fn verify_sessions_by_session_id(
+            self: @ContractState,
+            sessions: Array<kliver_on_chain::types::SessionVerificationRequest>,
+        ) -> Array<kliver_on_chain::types::SessionVerificationResult> {
+            let mut results: Array<kliver_on_chain::types::SessionVerificationResult> =
+                ArrayTrait::new();
+            let mut i = 0;
+            let len = sessions.len();
+
+            while i != len {
+                let request = *sessions.at(i);
+                let session_id = request.session_id;
+                let root_hash = request.root_hash;
+
+                // Call verify_session_by_session_id to reuse the verification logic
+                let verification_result = self.verify_session_by_session_id(session_id, root_hash);
+
+                results
+                    .append(
+                        kliver_on_chain::types::SessionVerificationResult {
+                            session_id, result: verification_result,
+                        },
+                    );
+                i += 1;
+            }
+
+            results
+        }
+
         fn get_registry_address(self: @ContractState) -> ContractAddress {
             self.registry.read()
         }
