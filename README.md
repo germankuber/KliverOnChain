@@ -44,18 +44,30 @@
                       │SessionsMarket│
                       │    place     │
                       └──────────────┘
+                             │
+                             ▼
+                      ┌──────────────┐
+                      │   Verifier   │
+                      │ (External)   │
+                      └──────────────┘
 ```
+
+**External Dependencies:**
+- **Verifier Contract**: Zero-knowledge proof verification contract (deployed separately)
+- **Payment Token**: ERC20 token for marketplace payments (deployed separately)
 
 ### Deployment Order
 
 ```
 1. KliverNFT           (Independent)
 2. KliverTokensCore    (Independent)
-3. Registry            (needs: NFT + TokensCore + Verifier)
+3. Registry            (needs: NFT + TokensCore + Verifier*)
    └─► Post-config:    TokensCore.set_registry_address(Registry)
 4. KliverPox           (needs: Registry)
    └─► Post-config:    Registry.set_kliver_pox_address(KliverPox)
-5. SessionsMarketplace (needs: KliverPox + Verifier + PaymentToken)
+5. SessionsMarketplace (needs: KliverPox + Verifier* + PaymentToken*)
+
+* = External dependency (deployed separately)
 ```
 
 ---
@@ -188,6 +200,10 @@ struct KliverPoxMetadata {
 ### 5. **SessionsMarketplace** - Session Trading Platform
 
 Decentralized marketplace for buying/selling sessions with ERC20 payments and ZK proof verification.
+
+**External Dependencies:**
+- **Verifier Contract**: Required for ZK proof verification during purchase settlement
+- **Payment Token**: ERC20 token used for escrow payments
 
 **Constructor**:
 ```cairo
