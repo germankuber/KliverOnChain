@@ -26,6 +26,8 @@ pub mod SessionsMarketplace {
 
     #[storage]
     struct Storage {
+        // Owner del contrato
+        owner: ContractAddress,
         // Direcciones de los contratos
         pox: ContractAddress,
         verifier: ContractAddress,
@@ -154,6 +156,7 @@ pub mod SessionsMarketplace {
         assert(!payment_token_address.is_zero(), 'Invalid payment token');
         assert(purchase_timeout_seconds > 0, 'Invalid purchase timeout');
 
+        self.owner.write(get_caller_address());
         self.pox.write(pox_address);
         self.verifier.write(verifier_address);
         self.payment_token.write(payment_token_address);
@@ -445,6 +448,30 @@ pub mod SessionsMarketplace {
 
         fn get_pox_address(self: @ContractState) -> ContractAddress {
             self.pox.read()
+        }
+
+        fn get_verifier_address(self: @ContractState) -> ContractAddress {
+            self.verifier.read()
+        }
+
+        fn get_owner(self: @ContractState) -> ContractAddress {
+            self.owner.read()
+        }
+
+        fn set_verifier_address(ref self: ContractState, new_verifier: ContractAddress) {
+            let caller = get_caller_address();
+            let owner = self.owner.read();
+            assert(caller == owner, 'Only owner can set verifier');
+            assert(!new_verifier.is_zero(), 'Invalid verifier address');
+            self.verifier.write(new_verifier);
+        }
+
+        fn transfer_ownership(ref self: ContractState, new_owner: ContractAddress) {
+            let caller = get_caller_address();
+            let owner = self.owner.read();
+            assert(caller == owner, 'Only owner can transfer');
+            assert(!new_owner.is_zero(), 'Invalid new owner address');
+            self.owner.write(new_owner);
         }
 
         // History functions - nuevas funciones para consultar historial

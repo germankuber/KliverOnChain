@@ -59,8 +59,14 @@ pub trait IMarketplace<TContractState> {
     fn get_listing_status(self: @TContractState, token_id: u256) -> ListingStatus;
     fn get_listing_count(self: @TContractState) -> u256;
     fn get_pox_address(self: @TContractState) -> ContractAddress;
+    fn get_verifier_address(self: @TContractState) -> ContractAddress;
     fn get_payment_token(self: @TContractState) -> ContractAddress;
     fn get_purchase_timeout(self: @TContractState) -> u64;
+    fn get_owner(self: @TContractState) -> ContractAddress;
+    
+    // Admin functions
+    fn set_verifier_address(ref self: TContractState, new_verifier: ContractAddress);
+    fn transfer_ownership(ref self: TContractState, new_owner: ContractAddress);
     
     // View functions - History
     fn get_token_listing_count(self: @TContractState, token_id: u256) -> u256;
