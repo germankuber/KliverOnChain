@@ -1,0 +1,4 @@
+[core]
+block_time = 1000   # en milisegundos (100ms = 0.1s entre bloques)
+[explorer]
+explorer = true  

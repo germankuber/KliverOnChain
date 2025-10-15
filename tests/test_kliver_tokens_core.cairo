@@ -454,6 +454,27 @@ fn test_register_simulation_non_owner_should_fail() {
 }
 
 #[test]
+#[should_panic(expected: ('Registry not configured',))]
+fn test_register_simulation_registry_not_configured() {
+    let owner: ContractAddress = 'owner'.try_into().unwrap();
+    let dispatcher = deploy_contract(owner);
+    let caller: ContractAddress = 'caller'.try_into().unwrap();
+
+    // Create a token first
+    start_cheat_caller_address(dispatcher.contract_address, owner);
+    let token_id = dispatcher.create_token(12, 1000, 0);
+    stop_cheat_caller_address(dispatcher.contract_address);
+
+    // NOTE: Registry is NOT configured (no call to set_registry_address)
+
+    // Try to register simulation without registry configured
+    // This should panic with "Registry not configured"
+    start_cheat_caller_address(dispatcher.contract_address, caller);
+    dispatcher.register_simulation(789, token_id, 1735689600);
+    stop_cheat_caller_address(dispatcher.contract_address);
+}
+
+#[test]
 #[should_panic(expected: ('Not owner',))]
 fn test_create_token_non_owner_should_fail() {
     let owner: ContractAddress = 'owner'.try_into().unwrap();

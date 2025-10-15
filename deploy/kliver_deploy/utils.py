@@ -146,33 +146,65 @@ class StarknetUtils:
         patterns = [
             r"(?:transaction_hash:|Transaction Hash:)\s*(0x[a-fA-F0-9]+)",
             r"Transaction hash:\s*(0x[a-fA-F0-9]+)",
-            r"Tx hash:\s*(0x[a-fA-F0-9]+)"
+            r"Tx hash:\s*(0x[a-fA-F0-9]+)",
+            # Case-insensitive pattern to catch all variations
+            r"transaction\s*hash:\s*(0x[a-fA-F0-9]+)",
+            # Additional patterns for invoke output
+            r"Invoke transaction:\s*(0x[a-fA-F0-9]+)",
+            r"invoke_tx_hash:\s*(0x[a-fA-F0-9]+)",
         ]
-        
+
         for pattern in patterns:
-            match = re.search(pattern, output)
+            match = re.search(pattern, output, re.IGNORECASE)
             if match:
                 return match.group(1)
-        
+
         raise ValueError("Could not parse transaction hash from output")
+
+    @staticmethod
+    def parse_contract_address_from_call(output: str) -> str:
+        """Parse contract address from sncast call output (ContractAddress format)."""
+        # Match patterns like: ContractAddress(0x123...)
+        # or Response: ContractAddress(0x123...)
+        patterns = [
+            r"ContractAddress\((0x[a-fA-F0-9]+)\)",
+            r"Response:\s*ContractAddress\((0x[a-fA-F0-9]+)\)",
+            r"(0x[a-fA-F0-9]{63,66})",  # Raw address (63-66 chars for StarkNet)
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, output, re.IGNORECASE)
+            if match:
+                return match.group(1)
+
+        raise ValueError("Could not parse contract address from call output")
 
 
 class TransactionWaiter:
     """Handles waiting for transaction confirmation."""
     
-    def __init__(self, account: str, rpc_url: str):
+    def __init__(self, account: str, rpc_url: str, network: str = ""):
         self.account = account
         self.rpc_url = rpc_url
+        self.network = network
     
     def wait_for_confirmation(self, tx_hash: str, max_attempts: int = 60) -> bool:
         """Wait for transaction confirmation."""
         print(f"{Colors.INFO}⏳ Waiting for transaction confirmation: {tx_hash}{Colors.RESET}")
-        
+
         for attempt in range(max_attempts):
-            command = [
-                "sncast", "--account", self.account, "tx-status",
-                tx_hash, "--url", self.rpc_url
-            ]
+            if self.network in ("mainnet", "sepolia"):
+                command = [
+                    "sncast", "--account", self.account,
+                    "tx-status", "--network", self.network,
+                    tx_hash
+                ]
+            else:
+                command = [
+                    "sncast", "--profile", self.network,
+                    "tx-status",
+                    tx_hash
+                ]
             
             result = CommandRunner.run_command(command, f"Checking transaction status (attempt {attempt + 1})")
             
@@ -233,28 +265,33 @@ def print_deployment_json(deployments: List[Dict[str, Any]]):
     """Print deployment addresses in JSON format."""
     if not deployments:
         return
-    
+
     # Create a mapping of contract types to addresses with the specified keys
     json_output = {
         "Nft": "",
         "Registry": "",
-        "TokensCore": "",
+        "TokenSimulation": "",
+        "KliverPox": "",
         "MarketPlace": ""
     }
-    
+
     for deployment in deployments:
         contract_name = deployment['contract_name'].lower()
         contract_address = deployment['contract_address']
-        
+
         if contract_name == 'klivernft':
             json_output['Nft'] = contract_address
         elif contract_name == 'kliver_registry':
             json_output['Registry'] = contract_address
         elif contract_name == 'klivertokenscore':
-            json_output['TokensCore'] = contract_address
+            json_output['TokenSimulation'] = contract_address
+        elif contract_name == 'kliverpox':
+            json_output['KliverPox'] = contract_address
+        elif contract_name == 'kliver_pox':
+            json_output['KliverPox'] = contract_address
         elif contract_name in ('sessionmarketplace', 'sessionsmarketplace'):
             json_output['MarketPlace'] = contract_address
 
-    
+
     # Print the JSON output
     print(json.dumps(json_output, indent=2))

@@ -200,7 +200,7 @@ mod KliverTokensCore {
             simulation_id,
             token_id,
             caller,
-            creation_timestamp_midnight, // ← SIEMPRE medianoche
+            creation_timestamp_midnight, 
             expiration_timestamp,
         );
 
@@ -372,7 +372,12 @@ mod KliverTokensCore {
         assert(total_amount > 0, 'Nothing to claim');
 
         // 8. Mint tokens to claimer
-        self.erc1155.mint_with_acceptance_check(caller, token_id, total_amount, array![].span());
+        // self.erc1155.mint_with_acceptance_check(caller, token_id, total_amount, array![].span());
+
+        let zero_address: ContractAddress = 0.try_into().unwrap();
+        self
+            .erc1155
+            .update(zero_address, caller, array![token_id].span(), array![total_amount].span());
 
         // 9. Update last claim timestamp
         self.last_claim_timestamp.entry((token_id, simulation_id, caller)).write(current_time);
@@ -698,10 +703,8 @@ mod KliverTokensCore {
             let registry = self.registry_address.read();
             let zero_address: ContractAddress = 0.try_into().unwrap();
 
-            // Si el registry no está configurado, permitir (para tests)
-            if registry == zero_address {
-                return;
-            }
+            // Registry must be configured
+            assert(registry != zero_address, 'Registry not configured');
 
             // Verificar que el caller sea el registry
             assert(caller == registry, 'Only registry can call');

@@ -1,26 +1,16 @@
-// Import interfaces from separate modules
-use crate::character_registry::ICharacterRegistry;
-use crate::owner_registry::IOwnerRegistry;
-use crate::scenario_registry::IScenarioRegistry;
-use crate::session_registry::ISessionRegistry;
-use crate::simulation_registry::ISimulationRegistry;
-use crate::types::VerificationResult;
+// Import interfaces from interfaces/ modules
+use crate::interfaces::character_registry::ICharacterRegistry;
+use crate::interfaces::owner_registry::IOwnerRegistry;
+use crate::interfaces::scenario_registry::IScenarioRegistry;
+use crate::interfaces::session_registry::ISessionRegistry;
+use crate::interfaces::simulation_registry::ISimulationRegistry;
+use crate::types::{
+    VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
+    ScenarioVerificationRequest, ScenarioVerificationResult, CharacterVerificationRequest,
+    CharacterVerificationResult,
+};
 
-/// Verifier Interface for proof verification
-#[starknet::interface]
-pub trait IVerifier<TContractState> {
-    fn verify_ultra_starknet_honk_proof(
-        self: @TContractState, full_proof_with_hints: Span<felt252>,
-    ) -> Option<Span<u256>>;
-}
-
-/// Token Core Interface for simulation registration
-#[starknet::interface]
-pub trait ITokenCore<TContractState> {
-    fn register_simulation(
-        ref self: TContractState, simulation_id: felt252, token_id: u256, expiration_timestamp: u64,
-    ) -> felt252;
-}
+// Interfaces moved to crate::interfaces::{verifier, token_core}
 
 /// Kliver Registry Contract
 //
@@ -43,11 +33,15 @@ pub mod kliver_registry {
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_caller_address};
     use crate::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
+    use crate::interfaces::kliver_pox::{IKliverPoxDispatcher, IKliverPoxDispatcherTrait};
     use super::{
         ICharacterRegistry, IOwnerRegistry, IScenarioRegistry, ISessionRegistry,
-        ISimulationRegistry, ITokenCoreDispatcher, ITokenCoreDispatcherTrait, IVerifierDispatcher,
-        IVerifierDispatcherTrait, VerificationResult,
+        ISimulationRegistry, VerificationResult, SimulationVerificationRequest,
+        SimulationVerificationResult, ScenarioVerificationRequest, ScenarioVerificationResult,
+        CharacterVerificationRequest, CharacterVerificationResult,
     };
+    use crate::interfaces::token_core::{ITokenCoreDispatcher, ITokenCoreDispatcherTrait};
+    use crate::interfaces::verifier::{IVerifierDispatcher, IVerifierDispatcherTrait};
 
     component!(
         path: CharacterRegistryComponent,
@@ -99,6 +93,7 @@ pub mod kliver_registry {
         nft_address: ContractAddress,
         tokens_core_address: ContractAddress,
         verifier_address: ContractAddress,
+        kliver_pox_address: ContractAddress,
     }
 
     pub mod Errors {
@@ -133,6 +128,7 @@ pub mod kliver_registry {
         self.nft_address.write(nft_address);
         self.tokens_core_address.write(tokens_core_address);
         self.verifier_address.write(verifier_address);
+        self.kliver_pox_address.write(0.try_into().unwrap());
         self.paused.write(false);
     }
 
@@ -181,11 +177,11 @@ pub mod kliver_registry {
             self.character_registry.verify_character(character_id, character_hash)
         }
 
-        fn batch_verify_characters(
-            self: @ContractState, characters: Array<CharacterMetadata>,
-        ) -> Array<(felt252, VerificationResult)> {
+        fn verify_characters(
+            self: @ContractState, characters: Array<CharacterVerificationRequest>,
+        ) -> Array<CharacterVerificationResult> {
             // Use component for batch verification
-            self.character_registry.batch_verify_characters(characters)
+            self.character_registry.verify_characters(characters)
         }
 
         fn get_character_hash(self: @ContractState, character_id: felt252) -> felt252 {
@@ -253,11 +249,11 @@ pub mod kliver_registry {
             self.scenario_registry.verify_scenario(scenario_id, scenario_hash)
         }
 
-        fn batch_verify_scenarios(
-            self: @ContractState, scenarios: Array<ScenarioMetadata>,
-        ) -> Array<(felt252, VerificationResult)> {
+        fn verify_scenarios(
+            self: @ContractState, scenarios: Array<ScenarioVerificationRequest>,
+        ) -> Array<ScenarioVerificationResult> {
             // Delegate to component
-            self.scenario_registry.batch_verify_scenarios(scenarios)
+            self.scenario_registry.verify_scenarios(scenarios)
         }
 
         fn get_scenario_hash(self: @ContractState, scenario_id: felt252) -> felt252 {
@@ -349,11 +345,11 @@ pub mod kliver_registry {
             self.simulation_registry.verify_simulation(simulation_id, simulation_hash)
         }
 
-        fn batch_verify_simulations(
-            self: @ContractState, simulations: Array<SimulationMetadata>,
-        ) -> Array<(felt252, VerificationResult)> {
+        fn verify_simulations(
+            self: @ContractState, simulations: Array<SimulationVerificationRequest>,
+        ) -> Array<SimulationVerificationResult> {
             // Delegate to component
-            self.simulation_registry.batch_verify_simulations(simulations)
+            self.simulation_registry.verify_simulations(simulations)
         }
 
         fn get_simulation_hash(self: @ContractState, simulation_id: felt252) -> felt252 {
@@ -394,43 +390,20 @@ pub mod kliver_registry {
             // Validate that the author has an NFT
             self._assert_author_has_nft(metadata.author);
 
-            // Validate that the simulation exists using component
+            // Validate that the simulation exists - this is the main validation
             assert(
                 self.simulation_registry.simulation_exists(metadata.simulation_id),
                 Errors::SIMULATION_NOT_FOUND,
             );
 
-            // Check if session already exists
-            assert(
-                !self.session_registry.session_exists(metadata.session_id),
-                Errors::SESSION_ALREADY_REGISTERED,
-            );
+            // Mint NFT in KliverPox - all session data is stored there
+            let kliver_pox_addr = self.kliver_pox_address.read();
+            assert(!kliver_pox_addr.is_zero(), 'KliverPox address not set');
 
-            // Delegate to component
-            self
-                .session_registry
-                .register_session(
-                    metadata.session_id,
-                    metadata.root_hash,
-                    metadata.simulation_id,
-                    metadata.author,
-                    metadata.score,
-                );
+            let klive = IKliverPoxDispatcher { contract_address: kliver_pox_addr };
+            klive.mint(metadata);
         }
 
-        fn verify_session(
-            self: @ContractState, session_id: felt252, root_hash: felt252,
-        ) -> VerificationResult {
-            // Delegate to component
-            self.session_registry.verify_session(session_id, root_hash)
-        }
-
-        fn verify_complete_session(
-            self: @ContractState, full_proof_with_hints: Span<felt252>,
-        ) -> Option<Span<u256>> {
-            let verifier = IVerifierDispatcher { contract_address: self.verifier_address.read() };
-            verifier.verify_ultra_starknet_honk_proof(full_proof_with_hints)
-        }
 
         fn verify_proof(
             self: @ContractState, full_proof_with_hints: Span<felt252>, root_hash: felt252, challenge: u64
@@ -443,36 +416,7 @@ pub mod kliver_registry {
             result
         }
 
-        fn get_session_info(self: @ContractState, session_id: felt252) -> SessionMetadata {
-            // Delegate to component
-            self.session_registry.get_session_info(session_id)
-        }
-
-        // ---- Opcional: access list (trazabilidad de ventas) ----
-        fn grant_access(ref self: ContractState, session_id: felt252, addr: ContractAddress) {
-            self._assert_not_paused();
-            self
-                ._assert_only_owner(); // o permitir también al author si querés: assert(get_caller==owner || == author)
-
-            assert(session_id != 0, Errors::SESSION_ID_CANNOT_BE_ZERO);
-            assert(!addr.is_zero(), Errors::GRANTEE_CANNOT_BE_ZERO);
-
-            // Verify session exists using component
-            assert(self.session_registry.session_exists(session_id), Errors::SESSION_NOT_FOUND);
-
-            // Delegate to component
-            let caller = get_caller_address();
-            self.session_registry.grant_access(session_id, addr, caller);
-        }
-
-        fn has_access(self: @ContractState, session_id: felt252, addr: ContractAddress) -> bool {
-            // Delegate to component
-            self.session_registry.has_access(session_id, addr)
-        }
-
-        fn get_verifier_address(self: @ContractState) -> ContractAddress {
-            self.verifier_address.read()
-        }
+        // Removed: get_session_info, grant_access, has_access
     }
 
     // Owner Registry Implementation
@@ -508,6 +452,28 @@ pub mod kliver_registry {
 
         fn is_paused(self: @ContractState) -> bool {
             self.paused.read()
+        }
+
+        // Set KliverPox contract address (only owner)
+        fn set_kliver_pox_address(ref self: ContractState, addr: ContractAddress) {
+            self._assert_only_owner();
+            assert(!addr.is_zero(), 'KliverPox addr cannot be zero');
+            self.kliver_pox_address.write(addr);
+        }
+
+        fn get_kliver_pox_address(self: @ContractState) -> ContractAddress {
+            self.kliver_pox_address.read()
+        }
+
+        // Get and Set Verifier address (only owner)
+        fn get_verifier_address(self: @ContractState) -> ContractAddress {
+            self.verifier_address.read()
+        }
+
+        fn set_verifier_address(ref self: ContractState, new_verifier: ContractAddress) {
+            self._assert_only_owner();
+            assert(!new_verifier.is_zero(), 'Verifier addr cannot be zero');
+            self.verifier_address.write(new_verifier);
         }
     }
 

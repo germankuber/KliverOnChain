@@ -1,0 +1,40 @@
+use starknet::ContractAddress;
+use kliver_on_chain::components::session_registry_component::SessionMetadata;
+use crate::types::{
+    VerificationResult, SessionVerificationRequest, SessionVerificationResult,
+};
+
+#[derive(Drop, Serde, Copy, starknet::Store)]
+pub struct KliverPoxMetadata {
+    pub token_id: u256,
+    pub session_id: felt252,
+    pub root_hash: felt252,
+    pub simulation_id: felt252,
+    pub author: ContractAddress,
+    pub score: u32,
+}
+
+#[starknet::interface]
+pub trait IKliverPox<TContractState> {
+    // Mint (only registry can call)
+    fn mint(ref self: TContractState, metadata: SessionMetadata);
+
+    // Public getters
+    fn balance_of(self: @TContractState, user: ContractAddress) -> u256;
+    fn owner_of_token(self: @TContractState, token_id: u256) -> ContractAddress;
+
+    // Full metadata getters
+    fn get_metadata_by_token(self: @TContractState, token_id: u256) -> KliverPoxMetadata;
+    fn get_metadata_by_session(self: @TContractState, session_id: felt252) -> KliverPoxMetadata;
+    fn has_session(self: @TContractState, session_id: felt252) -> bool;
+
+    // Verification functions
+    fn verify_session_by_token(self: @TContractState, token_id: u256, root_hash: felt252) -> VerificationResult;
+    fn verify_session_by_session_id(self: @TContractState, session_id: felt252, root_hash: felt252) -> VerificationResult;
+    fn verify_sessions_by_session_id(
+        self: @TContractState, sessions: Array<SessionVerificationRequest>,
+    ) -> Array<SessionVerificationResult>;
+
+    // Get registry address
+    fn get_registry_address(self: @TContractState) -> ContractAddress;
+}

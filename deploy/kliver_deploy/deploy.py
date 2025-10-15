@@ -16,17 +16,19 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.option('--environment', '-e', required=True, 
               help='Environment to deploy to: dev, qa, or prod')
 @click.option('--contract', '-c', default='registry',
-              help='Contract to deploy: registry, nft, kliver_tokens_core, or all')
+              help='Contract to deploy: registry, nft, kliver_tokens_core, kliver_pox, sessions_marketplace, simple_erc20, or all')
 @click.option('--owner', '-o', 
               help='Owner address for the contract (uses account address if not specified)')
 @click.option('--nft-address', '-n',
               help='NFT contract address (required when deploying registry separately)')
-@click.option('--tokens-core-address',
-              help='Tokens Core contract address (required when deploying registry separately)')
+@click.option('--token-simulation-address',
+              help='TokenSimulation contract address (required when deploying registry separately)')
 @click.option('--verifier-address',
               help='Verifier contract address (optional for Registry, uses 0x0 if not provided)')
 @click.option('--registry-address',
-              help='Registry contract address (required for session_marketplace, sessions_marketplace if deploying separately)')
+              help='Registry contract address (required for session_marketplace if deploying separately)')
+@click.option('--pox-address',
+              help='KliverPox contract address (required for sessions_marketplace if deploying separately)')
 @click.option('--payment-token-address',
               help='Payment ERC20 address (required for sessions_marketplace)')
 @click.option('--purchase-timeout', type=int,
@@ -38,8 +40,8 @@ from kliver_deploy.utils import Colors, print_deployment_summary, print_deployme
 @click.option('--output-json', is_flag=True, 
               help='Output deployment addresses in JSON format')
 def deploy(environment: str, contract: str, owner: Optional[str],
-           nft_address: Optional[str], tokens_core_address: Optional[str], verifier_address: Optional[str],
-           registry_address: Optional[str], payment_token_address: Optional[str], purchase_timeout: Optional[int],
+           nft_address: Optional[str], token_simulation_address: Optional[str], verifier_address: Optional[str],
+           registry_address: Optional[str], pox_address: Optional[str], payment_token_address: Optional[str], purchase_timeout: Optional[int],
            verbose: bool, no_compile: bool, output_json: bool):
     """
     Deploy Kliver contracts to StarkNet using environment-based configuration.
@@ -52,22 +54,23 @@ def deploy(environment: str, contract: str, owner: Optional[str],
     
     DEPLOYMENT MODES:
 
-    1. Deploy Everything (NFT → Token1155 → Registry → Configure Token1155):
+    1. Deploy Everything (NFT → TokenSimulation → Registry → KliverPox → SessionsMarketplace):
         python deploy.py --environment dev --contract all
 
     2. Deploy Individual Contracts:
         python deploy.py --environment dev --contract nft
         python deploy.py --environment dev --contract kliver_tokens_core
-        python deploy.py --environment dev --contract registry --nft-address 0x456... --tokens-core-address 0x789...
+        python deploy.py --environment dev --contract registry --nft-address 0x456... --token-simulation-address 0x789...
+        python deploy.py --environment dev --contract simple_erc20
 
     3. Contract Dependencies:
         - NFT: No dependencies
-        - Token1155: No dependencies (configured with Registry address after deployment)
-        - Registry: Requires NFT address and Tokens Core address
+        - TokenSimulation: No dependencies (configured with Registry address after deployment)
+        - Registry: Requires NFT address and TokenSimulation address
     
     Example usage:
         python deploy.py --environment dev --contract all
-        python deploy.py --environment qa --contract registry --nft-address 0x123... --tokens-core-address 0x456...
+        python deploy.py --environment qa --contract registry --nft-address 0x123... --token-simulation-address 0x456...
         python deploy.py --environment prod --contract kliver_tokens_core
     """
     
@@ -106,7 +109,7 @@ def deploy(environment: str, contract: str, owner: Optional[str],
         else:
             success = deploy_single_contract(
                 config_manager, environment, contract, owner,
-                nft_address, tokens_core_address, registry_address, verifier_address,
+                nft_address, token_simulation_address, registry_address, pox_address, verifier_address,
                 deployments=deployments, no_compile=no_compile,
                 payment_token_address=payment_token_address, purchase_timeout=purchase_timeout,
             )
@@ -144,7 +147,7 @@ def print_comprehensive_summary(deployments: List[Dict[str, Any]], network: str)
     print(f"{Colors.BOLD}{'='*100}{Colors.RESET}")
 
     for i, deployment in enumerate(deployments, 1):
-        print(f"\n{Colors.BOLD}{Colors.BLUE}Contract {i}: {deployment['contract_name'].upper()}{Colors.RESET}")
+        print(f"\n{Colors.BOLD}{Colors.INFO}Contract {i}: {deployment['contract_name'].upper()}{Colors.RESET}")
         print(f"{Colors.BOLD}{'-'*50}{Colors.RESET}")
 
         # Basic contract info
@@ -206,12 +209,12 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
                          payment_token_address: Optional[str] = None, purchase_timeout: Optional[int] = None) -> bool:
     """Deploy all contracts in the correct order."""
     click.echo(f"\n{Colors.BOLD}🚀 COMPLETE DEPLOYMENT MODE{Colors.RESET}")
-    click.echo(f"{Colors.INFO}This will deploy: NFT → Token1155 → Registry (+ optional Marketplaces){Colors.RESET}\n")
+    click.echo(f"{Colors.INFO}This will deploy: NFT → TokenSimulation → Registry → KliverPox → SessionsMarketplace{Colors.RESET}\n")
 
     deployed_addresses = {}
 
     # Step 1: Deploy NFT
-    click.echo(f"{Colors.BOLD}Step 1/3: Deploying NFT Contract{Colors.RESET}")
+    click.echo(f"{Colors.BOLD}Step 1/5: Deploying NFT Contract{Colors.RESET}")
     nft_deployer = ContractDeployer(environment, 'nft', config_manager)
 
     # Get base_uri from config
@@ -226,8 +229,8 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.ERROR}✗ NFT deployment failed. Aborting.{Colors.RESET}")
         return False
 
-    # Step 2: Deploy Token1155
-    click.echo(f"{Colors.BOLD}Step 2/3: Deploying Token1155 Contract{Colors.RESET}")
+    # Step 2: Deploy TokenSimulation
+    click.echo(f"{Colors.BOLD}Step 2/5: Deploying TokenSimulation Contract{Colors.RESET}")
     token_deployer = ContractDeployer(environment, 'kliver_tokens_core', config_manager)
 
     # Get base_uri from config
@@ -237,13 +240,13 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
     if token_result:
         deployments.append(token_result)
         deployed_addresses['token'] = token_result['contract_address']
-        click.echo(f"\n{Colors.SUCCESS}✓ Token1155 deployed successfully at: {deployed_addresses['token']}{Colors.RESET}\n")
+        click.echo(f"\n{Colors.SUCCESS}✓ TokenSimulation deployed successfully at: {deployed_addresses['token']}{Colors.RESET}\n")
     else:
-        click.echo(f"\n{Colors.ERROR}✗ Token1155 deployment failed. Aborting.{Colors.RESET}")
+        click.echo(f"\n{Colors.ERROR}✗ TokenSimulation deployment failed. Aborting.{Colors.RESET}")
         return False
 
     # Step 3: Deploy Registry
-    click.echo(f"{Colors.BOLD}Step 3/4: Deploying Registry Contract{Colors.RESET}")
+    click.echo(f"{Colors.BOLD}Step 3/5: Deploying Registry Contract{Colors.RESET}")
     registry_deployer = ContractDeployer(environment, 'registry', config_manager)
 
     # Get verifier_address from config if not provided
@@ -255,7 +258,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         owner,
         no_compile=no_compile,
         nft_address=deployed_addresses['nft'],
-        tokens_core_address=deployed_addresses['token'],
+        token_simulation_address=deployed_addresses['token'],
         verifier_address=verifier_address
     )
 
@@ -267,12 +270,97 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         click.echo(f"\n{Colors.ERROR}✗ Registry deployment failed. Aborting.{Colors.RESET}")
         return False
 
-    # Step 4: Configure Token1155 with Registry address
-    click.echo(f"{Colors.BOLD}Step 4/4: Configuring Token1155 with Registry address{Colors.RESET}")
-    click.echo(f"{Colors.INFO}Setting registry address on Token1155 contract...{Colors.RESET}")
+    # Step 4: Deploy KliverPox and set in Registry
+    click.echo(f"{Colors.BOLD}Step 4/5: Deploying KliverPox Contract{Colors.RESET}")
+    pox_deployer = ContractDeployer(environment, 'kliver_pox', config_manager)
+    pox_result = pox_deployer.deploy_full_flow(owner, no_compile=no_compile, registry_address=deployed_addresses['registry'])
+    if pox_result:
+        deployments.append(pox_result)
+        deployed_addresses['pox'] = pox_result['contract_address']
+        click.echo(f"\n{Colors.SUCCESS}✓ KliverPox deployed successfully at: {deployed_addresses['pox']}{Colors.RESET}\n")
+        # Set KliverPox in Registry
+        click.echo(f"{Colors.INFO}🔗 Setting KliverPox address in Registry...{Colors.RESET}")
+        from kliver_deploy.utils import CommandRunner
+        env_cfg = config_manager.get_environment_config(environment)
 
-    # Call set_registry_address on the Token1155 contract
-    set_registry_result = registry_deployer.set_registry_on_tokencore(
+        if env_cfg.network in ("mainnet", "sepolia"):
+            base_cmd = [
+                "sncast", "--account", env_cfg.account,
+                "invoke", "--network", env_cfg.network,
+                "--contract-address", deployed_addresses['registry'],
+                "--function", "set_kliver_pox_address",
+                "--calldata", deployed_addresses['pox'],
+            ]
+        else:
+            base_cmd = [
+                "sncast", "--profile", env_cfg.network,
+                "invoke",
+                "--contract-address", deployed_addresses['registry'],
+                "--function", "set_kliver_pox_address",
+                "--calldata", deployed_addresses['pox'],
+            ]
+
+        set_pox = CommandRunner.run_command(base_cmd, "Setting KliverPox in Registry")
+
+        # CRITICAL: Wait for the set_kliver_pox_address transaction to be confirmed before proceeding
+        if set_pox["success"]:
+            try:
+                from kliver_deploy.utils import StarknetUtils
+                tx_hash = StarknetUtils.parse_transaction_hash(set_pox["stdout"])
+                click.echo(f"{Colors.INFO}⏳ Waiting for set_kliver_pox_address transaction to be confirmed...{Colors.RESET}")
+                from kliver_deploy.utils import TransactionWaiter
+                tx_waiter = TransactionWaiter(env_cfg.account, env_cfg.rpc_url, env_cfg.network)
+                if not tx_waiter.wait_for_confirmation(tx_hash):
+                    click.echo(f"{Colors.ERROR}✗ set_kliver_pox_address transaction not confirmed. Aborting.{Colors.RESET}")
+                    return False
+                click.echo(f"{Colors.SUCCESS}✓ set_kliver_pox_address transaction confirmed{Colors.RESET}")
+            except ValueError as e:
+                click.echo(f"{Colors.WARNING}⚠️ Could not parse transaction hash from set_kliver_pox_address output: {str(e)}{Colors.RESET}")
+                # Continue anyway, might still work
+
+        # Verify get_kliver_pox_address
+        if set_pox["success"]:
+            if env_cfg.network in ("mainnet", "sepolia"):
+                base_verify = [
+                    "sncast", "--account", env_cfg.account,
+                    "call", "--network", env_cfg.network,
+                    "--contract-address", deployed_addresses['registry'],
+                    "--function", "get_kliver_pox_address",
+                ]
+            else:
+                base_verify = [
+                    "sncast", "--profile", env_cfg.network,
+                    "call",
+                    "--contract-address", deployed_addresses['registry'],
+                    "--function", "get_kliver_pox_address",
+                ]
+
+            verify = CommandRunner.run_command(base_verify, "Verifying KliverPox in Registry")
+            if verify["success"]:
+                try:
+                    from kliver_deploy.utils import StarknetUtils
+                    returned_address = StarknetUtils.parse_contract_address_from_call(verify["stdout"])
+                    # Normalize addresses for comparison (remove leading zeros)
+                    expected = deployed_addresses['pox'].lower().replace('0x', '').lstrip('0')
+                    returned = returned_address.lower().replace('0x', '').lstrip('0')
+                    if expected == returned:
+                        click.echo(f"{Colors.SUCCESS}✓ Verified KliverPox in Registry: {deployed_addresses['pox']}{Colors.RESET}")
+                    else:
+                        click.echo(f"{Colors.WARNING}⚠️ KliverPox address mismatch. Expected: {deployed_addresses['pox']}, Got: {returned_address}{Colors.RESET}")
+                except ValueError as e:
+                    click.echo(f"{Colors.WARNING}⚠️ Could not parse KliverPox address from output: {str(e)}{Colors.RESET}")
+            else:
+                click.echo(f"{Colors.WARNING}⚠️ Could not verify KliverPox address via get_kliver_pox_address{Colors.RESET}")
+    else:
+        click.echo(f"\n{Colors.ERROR}✗ KliverPox deployment failed. Aborting.{Colors.RESET}")
+        return False
+
+    # Step 5: Configure TokenSimulation with Registry address
+    click.echo(f"{Colors.BOLD}Step 5/5: Configuring TokenSimulation with Registry address{Colors.RESET}")
+    click.echo(f"{Colors.INFO}Setting registry address on TokenSimulation contract...{Colors.RESET}")
+
+    # Call set_registry_address on the TokenSimulation contract
+    set_registry_result = token_deployer.set_registry_on_tokencore(
         deployed_addresses['token'],
         deployed_addresses['registry'],
         owner
@@ -285,7 +373,7 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
         if token_result:
             token_result['post_deployment_ops'].append(set_registry_result)
 
-        click.echo(f"\n{Colors.SUCCESS}✓ Token1155 configured with Registry address{Colors.RESET}\n")
+        click.echo(f"\n{Colors.SUCCESS}✓ TokenSimulation configured with Registry address{Colors.RESET}\n")
 
         # Optionally deploy marketplaces if configured
         # SessionMarketplace (simple)
@@ -310,33 +398,68 @@ def deploy_all_contracts(config_manager: ConfigManager, environment: str,
             click.echo(f"\n{Colors.BOLD}Step 6: Deploying SessionsMarketplace (advanced){Colors.RESET}")
             adv_conf = config_manager.get_contract_config(environment, 'sessions_marketplace')
             adv_deployer = ContractDeployer(environment, 'sessions_marketplace', config_manager)
-            # Resolve payment token and timeout
+            # Resolve addresses and params
             pay_token = payment_token_address or adv_conf.payment_token_address
             timeout_s = purchase_timeout or adv_conf.purchase_timeout_seconds
-            if not pay_token or not timeout_s:
-                click.echo(f"{Colors.WARNING}⚠️  Missing payment token or timeout for SessionsMarketplace. Skipping.{Colors.RESET}")
+            # SessionsMarketplace now requires registry_address instead of verifier_address
+            reg_addr = deployed_addresses.get('registry')
+            if not (deployed_addresses.get('pox') and reg_addr and pay_token and timeout_s):
+                click.echo(f"{Colors.WARNING}⚠️  Missing PoX, Registry, token or timeout for SessionsMarketplace. Skipping.{Colors.RESET}")
             else:
                 adv_result = adv_deployer.deploy_full_flow(owner, no_compile=no_compile,
-                                                           registry_address=deployed_addresses['registry'],
+                                                           pox_address=deployed_addresses['pox'],
+                                                           registry_address=reg_addr,
                                                            payment_token_address=pay_token,
                                                            purchase_timeout_seconds=timeout_s)
                 if adv_result:
                     deployments.append(adv_result)
                     deployed_addresses['sessions_marketplace'] = adv_result['contract_address']
                     click.echo(f"{Colors.SUCCESS}✓ SessionsMarketplace deployed at: {adv_result['contract_address']}{Colors.RESET}")
+                    # Verify pox address wiring
+                    if env_cfg.network in ("mainnet", "sepolia"):
+                        base_sm = [
+                            "sncast", "--account", env_cfg.account,
+                            "call", "--network", env_cfg.network,
+                            "--contract-address", deployed_addresses['sessions_marketplace'],
+                            "--function", "get_pox_address",
+                        ]
+                    else:
+                        base_sm = [
+                            "sncast", "--profile", env_cfg.network,
+                            "call",
+                            "--contract-address", deployed_addresses['sessions_marketplace'],
+                            "--function", "get_pox_address",
+                        ]
+
+                    verify_sm = CommandRunner.run_command(base_sm, "Verifying SessionsMarketplace PoX wiring")
+                    if verify_sm["success"]:
+                        try:
+                            from kliver_deploy.utils import StarknetUtils
+                            returned_address = StarknetUtils.parse_contract_address_from_call(verify_sm["stdout"])
+                            # Normalize addresses for comparison (remove leading zeros)
+                            expected = deployed_addresses['pox'].lower().replace('0x', '').lstrip('0')
+                            returned = returned_address.lower().replace('0x', '').lstrip('0')
+                            if expected == returned:
+                                click.echo(f"{Colors.SUCCESS}✓ Verified SessionsMarketplace uses PoX: {deployed_addresses['pox']}{Colors.RESET}")
+                            else:
+                                click.echo(f"{Colors.WARNING}⚠️ SessionsMarketplace PoX address mismatch. Expected: {deployed_addresses['pox']}, Got: {returned_address}{Colors.RESET}")
+                        except ValueError as e:
+                            click.echo(f"{Colors.WARNING}⚠️ Could not parse PoX address from output: {str(e)}{Colors.RESET}")
+                    else:
+                        click.echo(f"{Colors.WARNING}⚠️ Could not verify SessionsMarketplace PoX wiring via get_pox_address{Colors.RESET}")
                 else:
                     click.echo(f"{Colors.ERROR}✗ SessionsMarketplace deployment failed (skipping).{Colors.RESET}")
 
         return True
     else:
-        click.echo(f"\n{Colors.ERROR}✗ Failed to configure Token1155 with Registry address{Colors.RESET}")
+        click.echo(f"\n{Colors.ERROR}✗ Failed to configure TokenSimulation with Registry address{Colors.RESET}")
         return False
 
 
 def deploy_single_contract(config_manager: ConfigManager, environment: str,
                           contract: str, owner: Optional[str],
-                          nft_address: Optional[str], tokens_core_address: Optional[str],
-                          registry_address: Optional[str], verifier_address: Optional[str],
+                          nft_address: Optional[str], token_simulation_address: Optional[str],
+                          registry_address: Optional[str], pox_address: Optional[str], verifier_address: Optional[str],
                           deployments: List[Dict[str, Any]], no_compile: bool = False,
                           payment_token_address: Optional[str] = None, purchase_timeout: Optional[int] = None) -> bool:
     """Deploy a single contract."""
@@ -357,24 +480,24 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
             click.echo(f"{Colors.INFO}Use: --nft-address 0x... or deploy with --contract all{Colors.RESET}\n")
             return False
 
-        if not tokens_core_address:
-            click.echo(f"\n{Colors.ERROR}❌ Tokens Core address is required when deploying Registry separately{Colors.RESET}")
-            click.echo(f"{Colors.INFO}Use: --tokens-core-address 0x... or deploy with --contract all{Colors.RESET}\n")
+        if not token_simulation_address:
+            click.echo(f"\n{Colors.ERROR}❌ TokenSimulation address is required when deploying Registry separately{Colors.RESET}")
+            click.echo(f"{Colors.INFO}Use: --token-simulation-address 0x... or deploy with --contract all{Colors.RESET}\n")
             return False
 
         click.echo(f"\n{Colors.BOLD}🎯 SEPARATE REGISTRY DEPLOYMENT{Colors.RESET}")
         click.echo(f"{Colors.INFO}Using NFT contract at: {nft_address}{Colors.RESET}")
-        click.echo(f"{Colors.INFO}Using Tokens Core contract at: {tokens_core_address}{Colors.RESET}\n")
+        click.echo(f"{Colors.INFO}Using TokenSimulation contract at: {token_simulation_address}{Colors.RESET}\n")
 
         deploy_kwargs['nft_address'] = nft_address
-        deploy_kwargs['tokens_core_address'] = tokens_core_address
+        deploy_kwargs['token_simulation_address'] = token_simulation_address
         if not verifier_address:
             registry_config = config_manager.get_contract_config(environment, contract)
             verifier_address = registry_config.verifier_address or "0x0"
         deploy_kwargs['verifier_address'] = verifier_address
         
     elif contract == 'kliver_tokens_core':
-        click.echo(f"\n{Colors.BOLD}🎯 TOKEN1155-ONLY DEPLOYMENT{Colors.RESET}\n")
+        click.echo(f"\n{Colors.BOLD}🎯 TOKENSIMULATION-ONLY DEPLOYMENT{Colors.RESET}\n")
         contract_config = config_manager.get_contract_config(environment, contract)
         deploy_kwargs['base_uri'] = contract_config.base_uri
     elif contract == 'session_marketplace':
@@ -383,26 +506,44 @@ def deploy_single_contract(config_manager: ConfigManager, environment: str,
             click.echo(f"{Colors.ERROR}❌ Registry address is required --registry-address 0x...{Colors.RESET}")
             return False
         deploy_kwargs['registry_address'] = registry_address
+    elif contract == 'simple_erc20':
+        click.echo(f"\n{Colors.BOLD}🎯 SIMPLE ERC20 DEPLOYMENT{Colors.RESET}\n")
     elif contract == 'sessions_marketplace':
         click.echo(f"\n{Colors.BOLD}🎯 SESSIONS MARKETPLACE DEPLOYMENT{Colors.RESET}\n")
-        if not registry_address:
-            click.echo(f"{Colors.ERROR}❌ Registry address is required --registry-address 0x...{Colors.RESET}")
-            return False
+
+        # Resolve defaults from config if not provided
+        contract_config = config_manager.get_contract_config(environment, contract)
         if not payment_token_address:
-            contract_config = config_manager.get_contract_config(environment, contract)
             payment_token_address = contract_config.payment_token_address
         if not purchase_timeout:
-            contract_config = config_manager.get_contract_config(environment, contract)
             purchase_timeout = contract_config.purchase_timeout_seconds
-        if not payment_token_address or not purchase_timeout:
-            click.echo(f"{Colors.ERROR}❌ Require --payment-token-address and --purchase-timeout (or config).{Colors.RESET}")
+        
+        # For SessionsMarketplace, we need registry_address
+        actual_registry_address = registry_address
+        if not actual_registry_address:
+            # Try to get registry_address from config
+            actual_registry_address = contract_config.registry_address
+            if not actual_registry_address:
+                click.echo(f"{Colors.WARNING}⚠️  No --registry-address provided and none found in config. SessionsMarketplace requires Registry address.{Colors.RESET}")
+
+        if not (pox_address and payment_token_address and purchase_timeout and actual_registry_address):
+            click.echo(f"{Colors.ERROR}❌ Missing required parameters for SessionsMarketplace deployment:{Colors.RESET}")
+            if not pox_address:
+                click.echo(f"{Colors.ERROR}  --pox-address <address> is required (KliverPox contract address){Colors.RESET}")
+            if not actual_registry_address:
+                click.echo(f"{Colors.ERROR}  --registry-address <address> is required (Registry contract address){Colors.RESET}")
+            if not payment_token_address:
+                click.echo(f"{Colors.ERROR}  --payment-token-address <address> is required{Colors.RESET}")
+            if not purchase_timeout:
+                click.echo(f"{Colors.ERROR}  --purchase-timeout <seconds> is required{Colors.RESET}")
             return False
-        deploy_kwargs.update({
-            'registry_address': registry_address,
-            'payment_token_address': payment_token_address,
-            'purchase_timeout_seconds': purchase_timeout,
-        })
-    
+
+        # Set the parameters for deployment
+        deploy_kwargs['pox_address'] = pox_address
+        deploy_kwargs['registry_address'] = actual_registry_address
+        deploy_kwargs['payment_token_address'] = payment_token_address
+        deploy_kwargs['purchase_timeout_seconds'] = purchase_timeout
+
     # Deploy the contract
     result = deployer.deploy_full_flow(owner, no_compile=no_compile, **deploy_kwargs)
     

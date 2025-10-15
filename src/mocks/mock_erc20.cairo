@@ -34,7 +34,7 @@ pub mod MockERC20 {
     }
 
     #[abi(embed_v0)]
-    impl ERC20Impl of IERC20<ContractState> {
+    impl ERC20Impl of crate::interfaces::erc20::IERC20<ContractState> {
         fn name(self: @ContractState) -> felt252 { self.name.read() }
         fn symbol(self: @ContractState) -> felt252 { self.symbol.read() }
         fn decimals(self: @ContractState) -> u8 { 18_u8 }
@@ -80,21 +80,6 @@ pub mod MockERC20 {
         }
     }
 
-    #[starknet::interface]
-    pub trait IERC20<TContractState> {
-        fn name(self: @TContractState) -> felt252;
-        fn symbol(self: @TContractState) -> felt252;
-        fn decimals(self: @TContractState) -> u8;
-        fn total_supply(self: @TContractState) -> u256;
-        fn balance_of(self: @TContractState, account: ContractAddress) -> u256;
-        fn allowance(self: @TContractState, owner: ContractAddress, spender: ContractAddress) -> u256;
-        fn approve(ref self: TContractState, spender: ContractAddress, amount: u256) -> bool;
-        fn transfer(ref self: TContractState, recipient: ContractAddress, amount: u256) -> bool;
-        fn transfer_from(
-            ref self: TContractState,
-            sender: ContractAddress,
-            recipient: ContractAddress,
-            amount: u256,
-        ) -> bool;
-    }
+    // Re-export dispatcher types for compatibility under MockERC20 module
+    pub use crate::interfaces::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
 }

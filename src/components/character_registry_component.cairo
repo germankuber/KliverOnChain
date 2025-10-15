@@ -77,34 +77,29 @@ pub mod CharacterRegistryComponent {
         }
 
         /// Verify multiple characters at once
-        fn batch_verify_characters(
-            self: @ComponentState<TContractState>, characters: Array<CharacterMetadata>,
-        ) -> Array<(felt252, VerificationResult)> {
-            let mut results: Array<(felt252, VerificationResult)> = ArrayTrait::new();
+        fn verify_characters(
+            self: @ComponentState<TContractState>,
+            characters: Array<kliver_on_chain::types::CharacterVerificationRequest>,
+        ) -> Array<kliver_on_chain::types::CharacterVerificationResult> {
+            let mut results: Array<kliver_on_chain::types::CharacterVerificationResult> =
+                ArrayTrait::new();
             let mut i = 0;
             let len = characters.len();
 
             while i != len {
-                let metadata = *characters.at(i);
-                let character_id = metadata.character_id;
-                let character_hash = metadata.character_hash;
+                let request = *characters.at(i);
+                let character_id = request.character_id;
+                let character_hash = request.character_hash;
 
-                // For batch operations, handle zero values gracefully instead of panicking
-                let verification_result = if character_id == 0 || character_hash == 0 {
-                    VerificationResult::NotFound // Treat invalid inputs as NotFound
-                } else {
-                    let stored_hash = self.characters.entry(character_id).read();
+                // Call verify_character to reuse the verification logic
+                let verification_result = self.verify_character(character_id, character_hash);
 
-                    if stored_hash == 0 {
-                        VerificationResult::NotFound // ID doesn't exist
-                    } else if stored_hash == character_hash {
-                        VerificationResult::Match // ID exists and hash matches
-                    } else {
-                        VerificationResult::Mismatch // ID exists but hash doesn't match
-                    }
-                };
-
-                results.append((character_id, verification_result));
+                results
+                    .append(
+                        kliver_on_chain::types::CharacterVerificationResult {
+                            character_id, result: verification_result,
+                        },
+                    );
                 i += 1;
             }
 

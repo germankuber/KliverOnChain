@@ -1,23 +1,26 @@
 use core::array::ArrayTrait;
 
 // Import contract interfaces from modular structure
-use kliver_on_chain::character_registry::{
+use kliver_on_chain::interfaces::character_registry::{
     ICharacterRegistryDispatcher, ICharacterRegistryDispatcherTrait,
 };
 use kliver_on_chain::components::character_registry_component::CharacterMetadata;
 use kliver_on_chain::kliver_nft::{IKliverNFTDispatcher, IKliverNFTDispatcherTrait};
-use kliver_on_chain::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
-use kliver_on_chain::scenario_registry::{
+use kliver_on_chain::interfaces::owner_registry::{IOwnerRegistryDispatcher, IOwnerRegistryDispatcherTrait};
+use kliver_on_chain::interfaces::scenario_registry::{
     IScenarioRegistryDispatcher, IScenarioRegistryDispatcherTrait, ScenarioMetadata,
 };
-use kliver_on_chain::session_registry::{
+use kliver_on_chain::interfaces::session_registry::{
     ISessionRegistryDispatcher, ISessionRegistryDispatcherTrait, SessionMetadata,
 };
-use kliver_on_chain::simulation_registry::{
+use kliver_on_chain::interfaces::simulation_registry::{
     ISimulationRegistryDispatcher, ISimulationRegistryDispatcherTrait, SimulationMetadata,
     SimulationWithTokenMetadata,
 };
-use kliver_on_chain::types::VerificationResult;
+use kliver_on_chain::types::{
+    VerificationResult, SimulationVerificationRequest,
+    ScenarioVerificationRequest, CharacterVerificationRequest,
+};
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
     stop_cheat_caller_address,
@@ -1082,27 +1085,36 @@ fn test_batch_verify_characters_all_valid() {
     dispatcher.register_character(metadata3);
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1);
-    batch_array.append(metadata2);
-    batch_array.append(metadata3);
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_1, character_hash: char_hash_1 },
+        );
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_2, character_hash: char_hash_2 },
+        );
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_3, character_hash: char_hash_3 },
+        );
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_1) = *results.at(0);
-    let (result_id_2, result_2) = *results.at(1);
-    let (result_id_3, result_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, char_id_1);
-    assert!(result_1 == VerificationResult::Match);
-    assert_eq!(result_id_2, char_id_2);
-    assert!(result_2 == VerificationResult::Match);
-    assert_eq!(result_id_3, char_id_3);
-    assert!(result_3 == VerificationResult::Match);
+    assert_eq!(result_1.character_id, char_id_1);
+    assert!(result_1.result == VerificationResult::Match);
+    assert_eq!(result_2.character_id, char_id_2);
+    assert!(result_2.result == VerificationResult::Match);
+    assert_eq!(result_3.character_id, char_id_3);
+    assert!(result_3.result == VerificationResult::Match);
 }
 
 #[test]
@@ -1128,68 +1140,63 @@ fn test_batch_verify_characters_mixed_results() {
     dispatcher.register_character(metadata2_register); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
-    let metadata1_verify = CharacterMetadata {
-        character_id: char_id_1, character_hash: char_hash_1, author: owner,
-    };
-    let metadata2_verify = CharacterMetadata {
-        character_id: char_id_2, character_hash: wrong_hash_2, author: owner,
-    };
-    let metadata3_verify = CharacterMetadata {
-        character_id: char_id_3, character_hash: 202, author: owner,
-    };
-
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1_verify); // Should be valid
-    batch_array.append(metadata2_verify); // Should be invalid (wrong hash)
-    batch_array.append(metadata3_verify); // Should be invalid (not registered)
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_1, character_hash: char_hash_1 },
+        ); // Should be valid
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_2, character_hash: wrong_hash_2 },
+        ); // Should be invalid (wrong hash)
+    batch_array
+        .append(
+            CharacterVerificationRequest { character_id: char_id_3, character_hash: 202 },
+        ); // Should be invalid (not registered)
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_1) = *results.at(0);
-    let (result_id_2, result_2) = *results.at(1);
-    let (result_id_3, result_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, char_id_1);
-    assert!(result_1 == VerificationResult::Match); // Should be Match
-    assert_eq!(result_id_2, char_id_2);
-    assert!(result_2 == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
-    assert_eq!(result_id_3, char_id_3);
-    assert!(result_3 == VerificationResult::NotFound); // Should be NotFound (not registered)
+    assert_eq!(result_1.character_id, char_id_1);
+    assert!(result_1.result == VerificationResult::Match); // Should be Match
+    assert_eq!(result_2.character_id, char_id_2);
+    assert!(result_2.result == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
+    assert_eq!(result_3.character_id, char_id_3);
+    assert!(result_3.result == VerificationResult::NotFound); // Should be NotFound (not registered)
 }
 
 #[test]
 fn test_batch_verify_characters_with_zero_values() {
-    let (dispatcher, _, owner) = deploy_for_characters();
+    let (dispatcher, _, _) = deploy_for_characters();
 
     // Prepare batch verification array with zero values
-    let metadata1 = CharacterMetadata { character_id: 0, character_hash: 200, author: owner };
-    let metadata2 = CharacterMetadata { character_id: 100, character_hash: 0, author: owner };
-    let metadata3 = CharacterMetadata { character_id: 0, character_hash: 0, author: owner };
-
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1); // Zero ID
-    batch_array.append(metadata2); // Zero hash
-    batch_array.append(metadata3); // Both zero
+    batch_array.append(CharacterVerificationRequest { character_id: 0, character_hash: 200 }); // Zero ID
+    batch_array.append(CharacterVerificationRequest { character_id: 100, character_hash: 0 }); // Zero hash
+    batch_array.append(CharacterVerificationRequest { character_id: 0, character_hash: 0 }); // Both zero
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results - all should be NotFound due to zero values
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_1) = *results.at(0);
-    let (result_id_2, result_2) = *results.at(1);
-    let (result_id_3, result_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, 0);
-    assert!(result_1 == VerificationResult::NotFound); // Should be NotFound (zero ID)
-    assert_eq!(result_id_2, 100);
-    assert!(result_2 == VerificationResult::NotFound); // Should be NotFound (zero hash)
-    assert_eq!(result_id_3, 0);
-    assert!(result_3 == VerificationResult::NotFound); // Should be NotFound (both zero)
+    assert_eq!(result_1.character_id, 0);
+    assert!(result_1.result == VerificationResult::NotFound); // Should be NotFound (zero ID)
+    assert_eq!(result_2.character_id, 100);
+    assert!(result_2.result == VerificationResult::NotFound); // Should be NotFound (zero hash)
+    assert_eq!(result_3.character_id, 0);
+    assert!(result_3.result == VerificationResult::NotFound); // Should be NotFound (both zero)
 }
 
 #[test]
@@ -1200,7 +1207,7 @@ fn test_batch_verify_characters_empty_array() {
     let batch_array = ArrayTrait::new();
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results - should be empty
     assert_eq!(results.len(), 0);
@@ -1226,23 +1233,25 @@ fn test_batch_verify_characters_large_batch() {
     let mut batch_array = ArrayTrait::new();
     let mut j = 1;
     while j != 11 {
-        let metadata = CharacterMetadata {
-            character_id: j.into(), character_hash: (j + 100).into(), author: owner,
-        };
-        batch_array.append(metadata);
+        batch_array
+            .append(
+                CharacterVerificationRequest {
+                    character_id: j.into(), character_hash: (j + 100).into(),
+                },
+            );
         j += 1;
     }
 
     // Batch verify
-    let results = dispatcher.batch_verify_characters(batch_array);
+    let results = dispatcher.verify_characters(batch_array);
 
     // Check results - all should be Match
     assert_eq!(results.len(), 10);
     let mut k = 0;
     while k != 10 {
-        let (result_id, result) = *results.at(k);
-        assert_eq!(result_id, (k + 1).into());
-        assert!(result == VerificationResult::Match);
+        let result = *results.at(k);
+        assert_eq!(result.character_id, (k + 1).into());
+        assert!(result.result == VerificationResult::Match);
         k += 1;
     };
 }
@@ -1277,27 +1286,36 @@ fn test_batch_verify_scenarios_all_valid() {
     dispatcher.register_scenario(metadata3);
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1);
-    batch_array.append(metadata2);
-    batch_array.append(metadata3);
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_1, scenario_hash: scenario_hash_1 },
+        );
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_2, scenario_hash: scenario_hash_2 },
+        );
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_3, scenario_hash: scenario_hash_3 },
+        );
 
     // Batch verify
-    let results = dispatcher.batch_verify_scenarios(batch_array);
+    let results = dispatcher.verify_scenarios(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, scenario_id_1);
-    assert!(result_valid_1 == VerificationResult::Match);
-    assert_eq!(result_id_2, scenario_id_2);
-    assert!(result_valid_2 == VerificationResult::Match);
-    assert_eq!(result_id_3, scenario_id_3);
-    assert!(result_valid_3 == VerificationResult::Match);
+    assert_eq!(result_1.scenario_id, scenario_id_1);
+    assert!(result_1.result == VerificationResult::Match);
+    assert_eq!(result_2.scenario_id, scenario_id_2);
+    assert!(result_2.result == VerificationResult::Match);
+    assert_eq!(result_3.scenario_id, scenario_id_3);
+    assert!(result_3.result == VerificationResult::Match);
 }
 
 #[test]
@@ -1323,37 +1341,36 @@ fn test_batch_verify_scenarios_mixed_results() {
     dispatcher.register_scenario(metadata2_register); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
-    let metadata1_verify = ScenarioMetadata {
-        scenario_id: scenario_id_1, scenario_hash: scenario_hash_1, author: owner,
-    };
-    let metadata2_verify = ScenarioMetadata {
-        scenario_id: scenario_id_2, scenario_hash: wrong_hash_2, author: owner,
-    };
-    let metadata3_verify = ScenarioMetadata {
-        scenario_id: scenario_id_3, scenario_hash: 202, author: owner,
-    };
-
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata1_verify); // Should be valid
-    batch_array.append(metadata2_verify); // Should be invalid (wrong hash)
-    batch_array.append(metadata3_verify); // Should be invalid (not registered)
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_1, scenario_hash: scenario_hash_1 },
+        ); // Should be valid
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_2, scenario_hash: wrong_hash_2 },
+        ); // Should be invalid (wrong hash)
+    batch_array
+        .append(
+            ScenarioVerificationRequest { scenario_id: scenario_id_3, scenario_hash: 202 },
+        ); // Should be invalid (not registered)
 
     // Batch verify
-    let results = dispatcher.batch_verify_scenarios(batch_array);
+    let results = dispatcher.verify_scenarios(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, scenario_id_1);
-    assert!(result_valid_1 == VerificationResult::Match); // Should be Match
-    assert_eq!(result_id_2, scenario_id_2);
-    assert!(result_valid_2 == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
-    assert_eq!(result_id_3, scenario_id_3);
-    assert!(result_valid_3 == VerificationResult::NotFound); // Should be NotFound (not registered)
+    assert_eq!(result_1.scenario_id, scenario_id_1);
+    assert!(result_1.result == VerificationResult::Match); // Should be Match
+    assert_eq!(result_2.scenario_id, scenario_id_2);
+    assert!(result_2.result == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
+    assert_eq!(result_3.scenario_id, scenario_id_3);
+    assert!(result_3.result == VerificationResult::NotFound); // Should be NotFound (not registered)
 }
 
 #[test]
@@ -1364,7 +1381,7 @@ fn test_batch_verify_scenarios_empty_array() {
     let batch_array = ArrayTrait::new();
 
     // Batch verify
-    let results = dispatcher.batch_verify_scenarios(batch_array);
+    let results = dispatcher.verify_scenarios(batch_array);
 
     // Check results - should be empty
     assert_eq!(results.len(), 0);
@@ -1417,27 +1434,36 @@ fn test_batch_verify_simulations_all_valid() {
     dispatcher.register_simulation(metadata_3);
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array
+    // Prepare batch verification array with requests
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata_1);
-    batch_array.append(metadata_2);
-    batch_array.append(metadata_3);
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_1, simulation_hash: sim_hash_1 },
+        );
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_2, simulation_hash: sim_hash_2 },
+        );
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_3, simulation_hash: sim_hash_3 },
+        );
 
     // Batch verify
-    let results = dispatcher.batch_verify_simulations(batch_array);
+    let results = dispatcher.verify_simulations(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, sim_id_1);
-    assert!(result_valid_1 == VerificationResult::Match);
-    assert_eq!(result_id_2, sim_id_2);
-    assert!(result_valid_2 == VerificationResult::Match);
-    assert_eq!(result_id_3, sim_id_3);
-    assert!(result_valid_3 == VerificationResult::Match);
+    assert_eq!(result_1.simulation_id, sim_id_1);
+    assert!(result_1.result == VerificationResult::Match);
+    assert_eq!(result_2.simulation_id, sim_id_2);
+    assert!(result_2.result == VerificationResult::Match);
+    assert_eq!(result_3.simulation_id, sim_id_3);
+    assert!(result_3.result == VerificationResult::Match);
 }
 
 #[test]
@@ -1477,43 +1503,38 @@ fn test_batch_verify_simulations_mixed_results() {
     dispatcher.register_simulation(metadata_2); // Register with different hash
     stop_cheat_caller_address(contract_address);
 
-    // Prepare batch verification array with metadata for verification
-    let metadata_1_check = metadata_1; // Should be valid
-    let metadata_2_wrong = SimulationMetadata {
-        simulation_id: sim_id_2,
-        author: owner,
-        character_id,
-        scenario_id,
-        simulation_hash: wrong_hash_2 // Wrong hash
-    };
-    let metadata_3_not_registered = SimulationMetadata {
-        simulation_id: sim_id_3,
-        author: owner,
-        character_id,
-        scenario_id,
-        simulation_hash: 202 // Not registered
-    };
-
+    // Prepare batch verification array with requests for verification
     let mut batch_array = ArrayTrait::new();
-    batch_array.append(metadata_1_check); // Should be valid
-    batch_array.append(metadata_2_wrong); // Should be invalid (wrong hash)
-    batch_array.append(metadata_3_not_registered); // Should be invalid (not registered)
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_1, simulation_hash: sim_hash_1 },
+        ); // Should be valid
+    batch_array
+        .append(
+            SimulationVerificationRequest {
+                simulation_id: sim_id_2, simulation_hash: wrong_hash_2,
+            },
+        ); // Should be invalid (wrong hash)
+    batch_array
+        .append(
+            SimulationVerificationRequest { simulation_id: sim_id_3, simulation_hash: 202 },
+        ); // Should be invalid (not registered)
 
     // Batch verify
-    let results = dispatcher.batch_verify_simulations(batch_array);
+    let results = dispatcher.verify_simulations(batch_array);
 
     // Check results
     assert_eq!(results.len(), 3);
-    let (result_id_1, result_valid_1) = *results.at(0);
-    let (result_id_2, result_valid_2) = *results.at(1);
-    let (result_id_3, result_valid_3) = *results.at(2);
+    let result_1 = *results.at(0);
+    let result_2 = *results.at(1);
+    let result_3 = *results.at(2);
 
-    assert_eq!(result_id_1, sim_id_1);
-    assert!(result_valid_1 == VerificationResult::Match); // Should be Match
-    assert_eq!(result_id_2, sim_id_2);
-    assert!(result_valid_2 == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
-    assert_eq!(result_id_3, sim_id_3);
-    assert!(result_valid_3 == VerificationResult::NotFound); // Should be NotFound (not registered)
+    assert_eq!(result_1.simulation_id, sim_id_1);
+    assert!(result_1.result == VerificationResult::Match); // Should be Match
+    assert_eq!(result_2.simulation_id, sim_id_2);
+    assert!(result_2.result == VerificationResult::Mismatch); // Should be Mismatch (wrong hash)
+    assert_eq!(result_3.simulation_id, sim_id_3);
+    assert!(result_3.result == VerificationResult::NotFound); // Should be NotFound (not registered)
 }
 
 #[test]
@@ -1524,95 +1545,15 @@ fn test_batch_verify_simulations_empty_array() {
     let batch_array = ArrayTrait::new();
 
     // Batch verify
-    let results = dispatcher.batch_verify_simulations(batch_array);
+    let results = dispatcher.verify_simulations(batch_array);
 
     // Check results - should be empty
     assert_eq!(results.len(), 0);
 }
 
 // ===== SESSION REGISTRY TESTS =====
-
-#[test]
-fn test_register_session_success() {
-    let (
-        dispatcher,
-        sim_dispatcher,
-        char_dispatcher,
-        scenario_dispatcher,
-        nft_dispatcher,
-        contract_address,
-        owner,
-        nft_address,
-    ) =
-        deploy_for_sessions();
-
-    // First register a simulation
-    let simulation_id = register_test_simulation(
-        sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner,
-    );
-
-    let session_id: felt252 = 'session123';
-    let root_hash: felt252 = 'hash456';
-    let author: ContractAddress = 'author'.try_into().unwrap();
-
-    // Mint NFT to author so they can be validated
-    start_cheat_caller_address(nft_address, owner);
-    nft_dispatcher.mint_to_user(author);
-    stop_cheat_caller_address(nft_address);
-
-    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
-
-    start_cheat_caller_address(contract_address, owner);
-    // Should not panic - first registration
-    dispatcher.register_session(metadata);
-    stop_cheat_caller_address(contract_address);
-}
-
-#[test]
-#[should_panic(expected: ('Session already registered',))]
-fn test_register_session_duplicate() {
-    let (
-        dispatcher,
-        sim_dispatcher,
-        char_dispatcher,
-        scenario_dispatcher,
-        nft_dispatcher,
-        contract_address,
-        owner,
-        nft_address,
-    ) =
-        deploy_for_sessions();
-
-    // First register a simulation
-    let simulation_id = register_test_simulation(
-        sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner,
-    );
-
-    let session_id: felt252 = 'session123';
-    let hash1: felt252 = 'hash456';
-    let hash2: felt252 = 'hash789';
-    let author: ContractAddress = 'author'.try_into().unwrap();
-
-    // Mint NFT to author
-    start_cheat_caller_address(nft_address, owner);
-    nft_dispatcher.mint_to_user(author);
-    stop_cheat_caller_address(nft_address);
-
-    let metadata1 = SessionMetadata {
-        session_id, root_hash: hash1, simulation_id, author, score: 100_u32,
-    };
-    let metadata2 = SessionMetadata {
-        session_id, root_hash: hash2, simulation_id, author, score: 200_u32,
-    };
-
-    start_cheat_caller_address(contract_address, owner);
-    // First registration should succeed
-    dispatcher.register_session(metadata1);
-
-    // Second registration with same session ID should fail
-    dispatcher.register_session(metadata2);
-    stop_cheat_caller_address(contract_address);
-}
+// Note: Session registration tests are now in test_kliver_registry_kliver_pox.cairo
+// because sessions are stored in KliverPox, not in the Registry directly.
 
 #[test]
 #[should_panic(expected: ('Session ID cannot be zero',))]
@@ -1717,246 +1658,6 @@ fn test_register_session_zero_author() {
 }
 
 #[test]
-fn test_verify_session_valid() {
-    let (
-        dispatcher,
-        sim_dispatcher,
-        char_dispatcher,
-        scenario_dispatcher,
-        nft_dispatcher,
-        contract_address,
-        owner,
-        nft_address,
-    ) =
-        deploy_for_sessions();
-
-    // Register a simulation first
-    let simulation_id = register_test_simulation(
-        sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner,
-    );
-
-    let session_id: felt252 = 123;
-    let root_hash: felt252 = 456;
-    let author: ContractAddress = 'author'.try_into().unwrap();
-
-    // Mint NFT to author
-    start_cheat_caller_address(nft_address, owner);
-    nft_dispatcher.mint_to_user(author);
-    stop_cheat_caller_address(nft_address);
-
-    // First register the session
-    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
-    start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(metadata);
-    stop_cheat_caller_address(contract_address);
-
-    // Then verify it
-    let result = dispatcher.verify_session(session_id, root_hash);
-    assert!(result == VerificationResult::Match);
-}
-
-#[test]
-fn test_verify_session_invalid_hash() {
-    let (
-        dispatcher,
-        sim_dispatcher,
-        char_dispatcher,
-        scenario_dispatcher,
-        nft_dispatcher,
-        contract_address,
-        owner,
-        nft_address,
-    ) =
-        deploy_for_sessions();
-
-    // Register a simulation first
-    let simulation_id = register_test_simulation(
-        sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner,
-    );
-
-    let session_id: felt252 = 123;
-    let root_hash: felt252 = 456;
-    let wrong_hash: felt252 = 789;
-    let author: ContractAddress = 'author'.try_into().unwrap();
-
-    // Mint NFT to author
-    start_cheat_caller_address(nft_address, owner);
-    nft_dispatcher.mint_to_user(author);
-    stop_cheat_caller_address(nft_address);
-
-    // First register the session
-    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
-    start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(metadata);
-    stop_cheat_caller_address(contract_address);
-
-    // Then verify with wrong hash
-    let result = dispatcher.verify_session(session_id, wrong_hash);
-    assert!(result == VerificationResult::Mismatch);
-}
-
-#[test]
-fn test_verify_session_non_existent() {
-    let (dispatcher, _, _, _, _, _, _, _) = deploy_for_sessions();
-
-    let non_existent_id: felt252 = 999;
-    let some_hash: felt252 = 456;
-
-    // Try to verify non-existent session
-    let result = dispatcher.verify_session(non_existent_id, some_hash);
-    assert!(result == VerificationResult::NotFound);
-}
-
-#[test]
-fn test_get_session_info_success() {
-    let (
-        dispatcher,
-        sim_dispatcher,
-        char_dispatcher,
-        scenario_dispatcher,
-        nft_dispatcher,
-        contract_address,
-        owner,
-        nft_address,
-    ) =
-        deploy_for_sessions();
-
-    // Register a simulation first
-    let simulation_id = register_test_simulation(
-        sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner,
-    );
-
-    let session_id: felt252 = 123;
-    let root_hash: felt252 = 456;
-    let author: ContractAddress = 'author'.try_into().unwrap();
-
-    // Mint NFT to author
-    start_cheat_caller_address(nft_address, owner);
-    nft_dispatcher.mint_to_user(author);
-    stop_cheat_caller_address(nft_address);
-
-    // First register the session
-    start_cheat_caller_address(contract_address, owner);
-    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 150_u32 };
-    dispatcher.register_session(metadata);
-    stop_cheat_caller_address(contract_address);
-
-    // Then get the session info
-    let session_metadata = dispatcher.get_session_info(session_id);
-    assert_eq!(session_metadata.session_id, session_id);
-    assert_eq!(session_metadata.root_hash, root_hash);
-    assert_eq!(session_metadata.simulation_id, simulation_id);
-    assert_eq!(session_metadata.author, author);
-    assert_eq!(session_metadata.score, 150_u32);
-}
-
-#[test]
-#[should_panic(expected: ('Session not found',))]
-fn test_get_session_info_not_found() {
-    let (dispatcher, _, _, _, _, _, _, _) = deploy_for_sessions();
-
-    let non_existent_id: felt252 = 999;
-
-    // Try to get info for non-existent session
-    dispatcher.get_session_info(non_existent_id);
-}
-
-#[test]
-fn test_grant_access_success() {
-    let (
-        dispatcher,
-        sim_dispatcher,
-        char_dispatcher,
-        scenario_dispatcher,
-        nft_dispatcher,
-        contract_address,
-        owner,
-        nft_address,
-    ) =
-        deploy_for_sessions();
-
-    // Register a simulation first
-    let simulation_id = register_test_simulation(
-        sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner,
-    );
-
-    let session_id: felt252 = 123;
-    let root_hash: felt252 = 456;
-    let author: ContractAddress = 'author'.try_into().unwrap();
-    let grantee: ContractAddress = 'grantee'.try_into().unwrap();
-
-    // Mint NFT to author
-    start_cheat_caller_address(nft_address, owner);
-    nft_dispatcher.mint_to_user(author);
-    stop_cheat_caller_address(nft_address);
-
-    // First register the session
-    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
-    start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(metadata);
-
-    // Grant access
-    dispatcher.grant_access(session_id, grantee);
-    stop_cheat_caller_address(contract_address);
-
-    // Verify access was granted
-    assert!(dispatcher.has_access(session_id, grantee));
-}
-
-#[test]
-fn test_has_access_returns_false_for_no_access() {
-    let (
-        dispatcher,
-        sim_dispatcher,
-        char_dispatcher,
-        scenario_dispatcher,
-        nft_dispatcher,
-        contract_address,
-        owner,
-        nft_address,
-    ) =
-        deploy_for_sessions();
-
-    // Register a simulation first
-    let simulation_id = register_test_simulation(
-        sim_dispatcher, char_dispatcher, scenario_dispatcher, contract_address, owner,
-    );
-
-    let session_id: felt252 = 123;
-    let root_hash: felt252 = 456;
-    let author: ContractAddress = 'author'.try_into().unwrap();
-
-    // Mint NFT to author
-    start_cheat_caller_address(nft_address, owner);
-    nft_dispatcher.mint_to_user(author);
-    stop_cheat_caller_address(nft_address);
-    let random_addr: ContractAddress = 'random'.try_into().unwrap();
-
-    // Register the session but don't grant access
-    let metadata = SessionMetadata { session_id, root_hash, simulation_id, author, score: 100_u32 };
-    start_cheat_caller_address(contract_address, owner);
-    dispatcher.register_session(metadata);
-    stop_cheat_caller_address(contract_address);
-
-    // Check access (should be false)
-    assert!(!dispatcher.has_access(session_id, random_addr));
-}
-
-#[test]
-#[should_panic(expected: ('Session not found',))]
-fn test_grant_access_nonexistent_session() {
-    let (dispatcher, _, _, _, _, contract_address, owner, _) = deploy_for_sessions();
-
-    let non_existent_session: felt252 = 999;
-    let grantee: ContractAddress = 'grantee'.try_into().unwrap();
-
-    start_cheat_caller_address(contract_address, owner);
-    // Try to grant access to non-existent session
-    dispatcher.grant_access(non_existent_session, grantee);
-    stop_cheat_caller_address(contract_address);
-}
-
-#[test]
 #[should_panic(expected: ('Author must own a Kliver NFT',))]
 fn test_register_session_invalid_simulation() {
     let (dispatcher, _, _, _, _, contract_address, owner, _) = deploy_for_sessions();
@@ -2021,3 +1722,129 @@ fn test_simulation_exists_zero_id() {
     assert(!exists, 'Zero ID should not exist');
 }
 
+// ===== VERIFIER ADDRESS MANAGEMENT TESTS =====
+
+#[test]
+fn test_get_verifier_address() {
+    let (_, _, _, owner_dispatcher, _, _owner) = deploy_contract();
+    
+    // Get the verifier address set during deployment
+    let verifier_addr = owner_dispatcher.get_verifier_address();
+    let expected_verifier: ContractAddress = 'verifier'.try_into().unwrap();
+    
+    assert(verifier_addr == expected_verifier, 'Verifier address mismatch');
+}
+
+#[test]
+fn test_set_verifier_address_by_owner() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    // New verifier address
+    let new_verifier: ContractAddress = 'new_verifier'.try_into().unwrap();
+    
+    // Owner sets new verifier address
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(new_verifier);
+    stop_cheat_caller_address(contract_address);
+    
+    // Verify the change
+    let current_verifier = owner_dispatcher.get_verifier_address();
+    assert(current_verifier == new_verifier, 'Verifier not updated');
+}
+
+#[test]
+#[should_panic(expected: ('Not owner',))]
+fn test_set_verifier_address_by_non_owner_fails() {
+    let (_, _, _, owner_dispatcher, _, _) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    let non_owner: ContractAddress = 'non_owner'.try_into().unwrap();
+    let new_verifier: ContractAddress = 'new_verifier'.try_into().unwrap();
+    
+    // Non-owner tries to set verifier address (should panic)
+    start_cheat_caller_address(contract_address, non_owner);
+    owner_dispatcher.set_verifier_address(new_verifier);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+#[should_panic(expected: ('Verifier addr cannot be zero',))]
+fn test_set_verifier_address_zero_fails() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    let zero_address: ContractAddress = 0.try_into().unwrap();
+    
+    // Owner tries to set zero address (should panic)
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(zero_address);
+    stop_cheat_caller_address(contract_address);
+}
+
+#[test]
+fn test_set_verifier_address_multiple_times() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    // First change
+    let verifier1: ContractAddress = 'verifier_1'.try_into().unwrap();
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(verifier1);
+    stop_cheat_caller_address(contract_address);
+    
+    let current = owner_dispatcher.get_verifier_address();
+    assert(current == verifier1, 'First update failed');
+    
+    // Second change
+    let verifier2: ContractAddress = 'verifier_2'.try_into().unwrap();
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(verifier2);
+    stop_cheat_caller_address(contract_address);
+    
+    let current = owner_dispatcher.get_verifier_address();
+    assert(current == verifier2, 'Second update failed');
+}
+
+#[test]
+fn test_verifier_address_after_ownership_transfer() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    let new_owner: ContractAddress = 'new_owner'.try_into().unwrap();
+    let new_verifier: ContractAddress = 'new_verifier'.try_into().unwrap();
+    
+    // Transfer ownership
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(contract_address);
+    
+    // New owner sets verifier address
+    start_cheat_caller_address(contract_address, new_owner);
+    owner_dispatcher.set_verifier_address(new_verifier);
+    stop_cheat_caller_address(contract_address);
+    
+    // Verify
+    let current = owner_dispatcher.get_verifier_address();
+    assert(current == new_verifier, 'New owner cannot set verifier');
+}
+
+#[test]
+#[should_panic(expected: ('Not owner',))]
+fn test_old_owner_cannot_set_verifier_after_transfer() {
+    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let contract_address = owner_dispatcher.contract_address;
+    
+    let new_owner: ContractAddress = 'new_owner'.try_into().unwrap();
+    let new_verifier: ContractAddress = 'new_verifier'.try_into().unwrap();
+    
+    // Transfer ownership
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.transfer_ownership(new_owner);
+    stop_cheat_caller_address(contract_address);
+    
+    // Old owner tries to set verifier (should panic)
+    start_cheat_caller_address(contract_address, owner);
+    owner_dispatcher.set_verifier_address(new_verifier);
+    stop_cheat_caller_address(contract_address);
+}

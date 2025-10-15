@@ -37,7 +37,7 @@ class ContractDeployer:
         self.contract = get_contract(contract_type)
         
         # Initialize transaction waiter
-        self.tx_waiter = TransactionWaiter(self.network_config.account, self.network_config.rpc_url)
+        self.tx_waiter = TransactionWaiter(self.network_config.account, self.network_config.rpc_url, self.network_config.network)
 
     def check_prerequisites(self) -> bool:
         """Check if all required tools and configurations are available."""
@@ -97,12 +97,23 @@ class ContractDeployer:
     def declare_contract(self) -> Optional[str]:
         """Declare the contract and return the class hash."""
         print(f"\n{Colors.BOLD}📤 Declaring contract...{Colors.RESET}")
-        
-        command = [
-            "sncast", "--account", self.network_config.account, "declare",
-            "--contract-name", self.contract_config.name,
-            "--url", self.network_config.rpc_url
-        ]
+
+        def _net_flags() -> list[str]:
+            return ["--network", self.network_config.network] if self.network_config.network in ("mainnet", "sepolia") else []
+
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "declare", "--network", self.network_config.network,
+                "--contract-name", self.contract_config.name,
+            ]
+        else:
+            # For local/katana networks, use profile instead of --url to get proper account resolution
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "declare",
+                "--contract-name", self.contract_config.name,
+            ]
         
         result = CommandRunner.run_command(command, f"Declaring {self.contract_config.name} to {self.network_config.network}")
 
@@ -155,11 +166,22 @@ class ContractDeployer:
         # Get constructor calldata
         constructor_calldata = self.contract.get_constructor_calldata(owner_address, **kwargs)
 
-        command = [
-            "sncast", "--account", self.network_config.account, "deploy",
-            "--class-hash", class_hash,
-            "--constructor-calldata"
-        ] + constructor_calldata + ["--url", self.network_config.rpc_url]
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "deploy", "--network", self.network_config.network,
+                "--class-hash", class_hash,
+            ]
+            if constructor_calldata:  # Only add --constructor-calldata if there are parameters
+                command.extend(["--constructor-calldata"] + constructor_calldata)
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "deploy",
+                "--class-hash", class_hash,
+            ]
+            if constructor_calldata:  # Only add --constructor-calldata if there are parameters
+                command.extend(["--constructor-calldata"] + constructor_calldata)
 
         result = CommandRunner.run_command(command, f"Deploying {self.contract_config.name}")
 
@@ -205,26 +227,40 @@ class ContractDeployer:
             return None
 
     def set_registry_on_tokencore(self, tokencore_address: str, registry_address: str, owner_address: str) -> Optional[Dict[str, Any]]:
-        """Set the registry address on the TokenCore contract."""
-        print(f"{Colors.INFO}🔗 Setting registry address on TokenCore contract...{Colors.RESET}")
+        """Set the registry address on the TokenSimulation contract."""
+        print(f"{Colors.INFO}🔗 Setting registry address on TokenSimulation contract...{Colors.RESET}")
 
-        command = [
-            "sncast", "--account", self.network_config.account, "invoke",
-            "--contract-address", tokencore_address,
-            "--function", "set_registry_address",
-            "--calldata", registry_address,
-            "--url", self.network_config.rpc_url
-        ]
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "invoke", "--network", self.network_config.network,
+                "--contract-address", tokencore_address,
+                "--function", "set_registry_address",
+                "--calldata", registry_address,
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "invoke",
+                "--contract-address", tokencore_address,
+                "--function", "set_registry_address",
+                "--calldata", registry_address,
+            ]
 
-        result = CommandRunner.run_command(command, f"Setting registry address on TokenCore")
+        result = CommandRunner.run_command(command, f"Setting registry address on TokenSimulation")
 
         if not result["success"]:
-            print(f"{Colors.ERROR}Failed to set registry address on TokenCore:{Colors.RESET}")
+            print(f"{Colors.ERROR}Failed to set registry address on TokenSimulation:{Colors.RESET}")
             print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
             print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
             return None
 
         try:
+            # Debug: print the output to see what we're parsing
+            print(f"{Colors.INFO}DEBUG - Command output:{Colors.RESET}")
+            print(f"STDOUT: {result['stdout']}")
+            print(f"STDERR: {result['stderr']}")
+
             tx_hash = StarknetUtils.parse_transaction_hash(result["stdout"])
             print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
 
@@ -233,7 +269,7 @@ class ContractDeployer:
                 print(f"{Colors.ERROR}✗ Transaction not confirmed.{Colors.RESET}")
                 return None
 
-            print(f"{Colors.SUCCESS}✓ Registry address set successfully on TokenCore!{Colors.RESET}")
+            print(f"{Colors.SUCCESS}✓ Registry address set successfully on TokenSimulation!{Colors.RESET}")
 
             # Validate that the registry address was set correctly
             if not self.validate_registry_address_set(tokencore_address, registry_address):
@@ -254,20 +290,28 @@ class ContractDeployer:
             return None
 
     def validate_registry_address_set(self, tokencore_address: str, expected_registry_address: str) -> bool:
-        """Validate that the registry address was set correctly on the TokenCore contract."""
-        print(f"{Colors.INFO}🔍 Validating registry address on TokenCore contract...{Colors.RESET}")
+        """Validate that the registry address was set correctly on the TokenSimulation contract."""
+        print(f"{Colors.INFO}🔍 Validating registry address on TokenSimulation contract...{Colors.RESET}")
 
-        command = [
-            "sncast", "--account", self.network_config.account, "call",
-            "--contract-address", tokencore_address,
-            "--function", "get_registry_address",
-            "--url", self.network_config.rpc_url
-        ]
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "call", "--network", self.network_config.network,
+                "--contract-address", tokencore_address,
+                "--function", "get_registry_address",
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "call",
+                "--contract-address", tokencore_address,
+                "--function", "get_registry_address",
+            ]
 
-        result = CommandRunner.run_command(command, f"Validating registry address on TokenCore")
+        result = CommandRunner.run_command(command, f"Validating registry address on TokenSimulation")
 
         if not result["success"]:
-            print(f"{Colors.ERROR}Failed to call get_registry_address on TokenCore:{Colors.RESET}")
+            print(f"{Colors.ERROR}Failed to call get_registry_address on TokenSimulation:{Colors.RESET}")
             print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
             print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
             return False
@@ -386,42 +430,69 @@ class ContractDeployer:
     def validate_contract(self, contract_address: str, contract_type: str) -> bool:
         """Validate that a contract exists and is of the expected type."""
         print(f"{Colors.INFO}🔍 Validating {contract_type} contract at {contract_address}...{Colors.RESET}")
-        
+
         # Define validation functions based on contract type
         validation_functions = {
             "nft": "name",           # ERC721
             "registry": "get_owner",  # Registry specific
-            "token": "balance_of",   # ERC1155 (KliverTokensCore)
-            "payment_token": "decimals",  # ERC20-style payment token
+            "token": "balance_of",  # ERC1155
+            "token_simulation": "balance_of",  # ERC1155 (TokenSimulation)
+            "pox": "get_registry_address",  # KliverPox - validates it has registry
+            "verifier": None,  # TODO: Add verifier validation once we know the interface
+            "payment_token": "total_supply",  # ERC20 - validates it's a token contract
         }
-        
+
         function_name = validation_functions.get(contract_type)
-        if not function_name:
-            print(f"{Colors.WARNING}⚠️  No validation function defined for {contract_type}{Colors.RESET}")
+
+        # Special case: verifier contract - we don't know the interface yet
+        if contract_type == "verifier":
+            print(f"{Colors.WARNING}⚠️  Verifier contract validation not implemented yet - skipping{Colors.RESET}")
+            print(f"{Colors.INFO}ℹ️  Assuming verifier address {contract_address} is valid{Colors.RESET}")
             return True
-        
+
+        if not function_name:
+            print(f"{Colors.ERROR}✗ No validation function defined for {contract_type}{Colors.RESET}")
+            print(f"{Colors.ERROR}✗ Cannot proceed with deployment without validation{Colors.RESET}")
+            return False
+
         # Prepare calldata based on function
         calldata = []
         if function_name == "balance_of":
-            calldata = ["0x0", "0x1"]  # dummy address and token id
-        
-        command = [
-            "sncast", "--account", self.network_config.account, "call",
-            "--contract-address", contract_address,
-            "--function", function_name,
-            "--url", self.network_config.rpc_url
-        ]
-        
+            calldata = ["0x0", "0x1"]  # dummy address and token id for ERC1155
+
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "call", "--network", self.network_config.network,
+                "--contract-address", contract_address,
+                "--function", function_name,
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "call",
+                "--contract-address", contract_address,
+                "--function", function_name,
+            ]
+
         if calldata:
             command.extend(["--calldata"] + calldata)
-        
+
         result = CommandRunner.run_command(command, f"Validating {contract_type} contract")
-        
+
         if result["success"]:
             print(f"{Colors.SUCCESS}✓ {contract_type.title()} contract validated successfully{Colors.RESET}")
             return True
         else:
+            # Special case: payment_token might be Cairo 0 contract (can't validate with sncast)
+            all_output = result.get("stdout", "") + result.get("stderr", "")
+            if contract_type == "payment_token" and ("Cairo Zero" in all_output or "Transformation of arguments" in all_output):
+                print(f"{Colors.WARNING}⚠️  Payment token appears to be a Cairo 0 contract - cannot validate with sncast{Colors.RESET}")
+                print(f"{Colors.INFO}ℹ️  Assuming payment token address {contract_address} is valid{Colors.RESET}")
+                return True
+
             print(f"{Colors.ERROR}✗ Invalid {contract_type} contract address or contract not deployed{Colors.RESET}")
+            print(f"{Colors.ERROR}✗ Please verify the address and ensure the contract is deployed{Colors.RESET}")
             return False
 
     def save_deployment_info(self, class_hash: str, contract_address: str, owner_address: str, **kwargs):
@@ -534,3 +605,338 @@ class ContractDeployer:
         self.print_professional_summary(deployment_details)
 
         return deployment_details
+
+    def invoke_setter_method(
+        self,
+        contract_address: str,
+        method_name: str,
+        calldata: List[str],
+        description: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generic method to invoke a setter function on a contract.
+        
+        Args:
+            contract_address: Address of the contract to invoke
+            method_name: Name of the method to call (e.g., 'set_registry_address')
+            calldata: List of parameters for the method
+            description: Optional description for logging
+            
+        Returns:
+            Dictionary with transaction details or None if failed
+        """
+        desc = description or f"Invoking {method_name}"
+        print(f"{Colors.INFO}🔧 {desc}...{Colors.RESET}")
+
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "invoke", "--network", self.network_config.network,
+                "--contract-address", contract_address,
+                "--function", method_name,
+                "--calldata", *calldata,
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "invoke",
+                "--contract-address", contract_address,
+                "--function", method_name,
+                "--calldata", *calldata,
+            ]
+
+        result = CommandRunner.run_command(command, desc)
+
+        if not result["success"]:
+            print(f"{Colors.ERROR}Failed to invoke {method_name}:{Colors.RESET}")
+            print(f"{Colors.ERROR}STDOUT: {result['stdout']}{Colors.RESET}")
+            print(f"{Colors.ERROR}STDERR: {result['stderr']}{Colors.RESET}")
+            return None
+
+        try:
+            tx_hash = StarknetUtils.parse_transaction_hash(result["stdout"])
+            print(f"{Colors.INFO}📋 Transaction hash: {tx_hash}{Colors.RESET}")
+
+            print(f"{Colors.BOLD}⏳ Waiting for transaction to be confirmed...{Colors.RESET}")
+            if not self.tx_waiter.wait_for_confirmation(tx_hash):
+                print(f"{Colors.ERROR}✗ Transaction not confirmed.{Colors.RESET}")
+                return None
+
+            print(f"{Colors.SUCCESS}✓ {method_name} executed successfully!{Colors.RESET}")
+
+            return {
+                "method": method_name,
+                "tx_hash": tx_hash,
+                "calldata": calldata,
+                "contract_address": contract_address,
+            }
+
+        except ValueError as e:
+            print(f"{Colors.ERROR}Could not parse transaction hash from output{Colors.RESET}")
+            print(f"{Colors.ERROR}Error: {str(e)}{Colors.RESET}")
+            return None
+
+    def call_view_method(
+        self,
+        contract_address: str,
+        method_name: str,
+        calldata: Optional[List[str]] = None
+    ) -> Optional[str]:
+        """
+        Generic method to call a view function on a contract.
+        
+        Args:
+            contract_address: Address of the contract to call
+            method_name: Name of the method to call (e.g., 'get_registry_address')
+            calldata: Optional list of parameters for the method
+            
+        Returns:
+            Parsed result or None if failed
+        """
+        if self.network_config.network in ("mainnet", "sepolia"):
+            command = [
+                "sncast", "--account", self.network_config.account,
+                "call", "--network", self.network_config.network,
+                "--contract-address", contract_address,
+                "--function", method_name,
+            ]
+        else:
+            command = [
+                "sncast", "--profile", self.network_config.network,
+                "call",
+                "--contract-address", contract_address,
+                "--function", method_name,
+            ]
+
+        if calldata:
+            command.extend(["--calldata", *calldata])
+
+        result = CommandRunner.run_command(command, f"Calling {method_name}", verbose=False)
+
+        if not result["success"]:
+            return None
+
+        try:
+            # Try to parse as address first
+            return StarknetUtils.parse_contract_address_from_call(result["stdout"])
+        except ValueError:
+            # If not an address, return raw output
+            return result["stdout"].strip()
+
+    def set_registry_address(
+        self,
+        contract_address: str,
+        registry_address: str,
+        contract_name: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set registry address on TokensCore or SessionsMarketplace.
+        
+        Args:
+            contract_address: Address of the contract (TokensCore or SessionsMarketplace)
+            registry_address: Address of the Registry contract
+            contract_name: Optional name for better logging
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        name = contract_name or "contract"
+        result = self.invoke_setter_method(
+            contract_address=contract_address,
+            method_name="set_registry_address",
+            calldata=[registry_address],
+            description=f"Setting registry address on {name}"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(contract_address, "get_registry_address")
+            if actual:
+                expected = registry_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ Registry address validated on {name}{Colors.RESET}")
+                    result["validation"] = "✓ Registry address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ Registry address mismatch on {name}{Colors.RESET}")
+        
+        return result
+
+    def set_kliver_pox_address(
+        self,
+        registry_address: str,
+        pox_address: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set KliverPox address on Registry.
+        
+        Args:
+            registry_address: Address of the Registry contract
+            pox_address: Address of the KliverPox contract
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=registry_address,
+            method_name="set_kliver_pox_address",
+            calldata=[pox_address],
+            description="Setting KliverPox address on Registry"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(registry_address, "get_kliver_pox_address")
+            if actual:
+                expected = pox_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ KliverPox address validated on Registry{Colors.RESET}")
+                    result["validation"] = "✓ KliverPox address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ KliverPox address mismatch{Colors.RESET}")
+        
+        return result
+
+    def set_verifier_address(
+        self,
+        registry_address: str,
+        verifier_address: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set Verifier address on Registry.
+        
+        Args:
+            registry_address: Address of the Registry contract
+            verifier_address: Address of the Verifier contract
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=registry_address,
+            method_name="set_verifier_address",
+            calldata=[verifier_address],
+            description="Setting Verifier address on Registry"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(registry_address, "get_verifier_address")
+            if actual:
+                expected = verifier_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ Verifier address validated on Registry{Colors.RESET}")
+                    result["validation"] = "✓ Verifier address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ Verifier address mismatch{Colors.RESET}")
+        
+        return result
+
+    def set_payment_token(
+        self,
+        marketplace_address: str,
+        payment_token_address: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set Payment Token address on SessionsMarketplace.
+        
+        Args:
+            marketplace_address: Address of the SessionsMarketplace contract
+            payment_token_address: Address of the ERC20 payment token
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=marketplace_address,
+            method_name="set_payment_token",
+            calldata=[payment_token_address],
+            description="Setting Payment Token address on Marketplace"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(marketplace_address, "get_payment_token")
+            if actual:
+                expected = payment_token_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ Payment Token address validated on Marketplace{Colors.RESET}")
+                    result["validation"] = "✓ Payment Token address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ Payment Token address mismatch{Colors.RESET}")
+        
+        return result
+
+    def set_pox_address_on_marketplace(
+        self,
+        marketplace_address: str,
+        pox_address: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set KliverPox address on SessionsMarketplace.
+        
+        Args:
+            marketplace_address: Address of the SessionsMarketplace contract
+            pox_address: Address of the KliverPox contract
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=marketplace_address,
+            method_name="set_pox_address",
+            calldata=[pox_address],
+            description="Setting KliverPox address on Marketplace"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(marketplace_address, "get_pox_address")
+            if actual:
+                expected = pox_address.lower().replace('0x', '').lstrip('0')
+                returned = actual.lower().replace('0x', '').lstrip('0')
+                if expected == returned:
+                    print(f"{Colors.SUCCESS}✓ KliverPox address validated on Marketplace{Colors.RESET}")
+                    result["validation"] = "✓ KliverPox address validated"
+                else:
+                    print(f"{Colors.WARNING}⚠️ KliverPox address mismatch{Colors.RESET}")
+        
+        return result
+
+    def set_purchase_timeout(
+        self,
+        marketplace_address: str,
+        timeout_seconds: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Set purchase timeout on SessionsMarketplace.
+        
+        Args:
+            marketplace_address: Address of the SessionsMarketplace contract
+            timeout_seconds: Timeout in seconds
+            
+        Returns:
+            Transaction details or None if failed
+        """
+        result = self.invoke_setter_method(
+            contract_address=marketplace_address,
+            method_name="set_purchase_timeout",
+            calldata=[str(timeout_seconds)],
+            description="Setting purchase timeout on Marketplace"
+        )
+        
+        if result:
+            # Validate
+            actual = self.call_view_method(marketplace_address, "get_purchase_timeout")
+            if actual:
+                if actual == str(timeout_seconds):
+                    print(f"{Colors.SUCCESS}✓ Purchase timeout validated on Marketplace ({timeout_seconds}s){Colors.RESET}")
+                    result["validation"] = f"✓ Purchase timeout validated ({timeout_seconds}s)"
+                else:
+                    print(f"{Colors.WARNING}⚠️ Purchase timeout mismatch (expected: {timeout_seconds}, got: {actual}){Colors.RESET}")
+        
+        return result
+

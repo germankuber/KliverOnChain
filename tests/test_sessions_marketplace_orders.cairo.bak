@@ -35,9 +35,8 @@ fn deploy_kliver_pox(registry: ContractAddress) -> IKliverPoxDispatcher {
     IKliverPoxDispatcher { contract_address: addr }
 }
 
-
-fn deploy_mock_registry() -> ContractAddress {
-    let contract = declare("MockSessionRegistry").unwrap().contract_class();
+fn deploy_mock_verifier() -> ContractAddress {
+    let contract = declare("MockVerifier").unwrap().contract_class();
     let (addr, _) = contract.deploy(@ArrayTrait::new()).unwrap();
     addr
 }
@@ -148,10 +147,11 @@ fn test_successful_sale_releases_escrow() {
     let price: u256 = 500;
     // Fund BUYER with enough tokens to open an order and also fund BUYER2
     let token = deploy_mock_erc20(BUYER(), price * 2);
-    let registry_addr = deploy_mock_registry(); // Deploy real mock registry
+    let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     // Register session owned by SELLER and list
     let session_id = 'session_2';
@@ -209,9 +209,9 @@ fn test_refund_before_timeout_panics() {
     let token = deploy_mock_erc20(BUYER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 100;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     // Register session and create listing
     let meta3 = SessionMetadata { session_id: 'session_refund', root_hash: 'root_r', simulation_id: 'sim_r', author: SELLER(), score: 1_u32 };
@@ -241,9 +241,9 @@ fn test_open_purchase_invalid_amount() {
     let token = deploy_mock_erc20(BUYER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     // Register session owned by SELLER and list
     let meta4 = SessionMetadata { session_id: 'session_3', root_hash: 'root_3', simulation_id: 'sim_3', author: SELLER(), score: 1_u32 };
@@ -271,9 +271,9 @@ fn test_refund_immediate_after_close() {
     let token = deploy_mock_erc20(BUYER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 100;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     // Mint session and list by SELLER
     let meta = SessionMetadata { session_id: 'session_close_refund', root_hash: 'root_r', simulation_id: 'sim_r', author: SELLER(), score: 1_u32 };
@@ -313,17 +313,17 @@ fn test_refund_immediate_after_close() {
 // ============ ADMIN & VERIFIER MANAGEMENT TESTS ============
 
 #[test]
-fn test_get_registry_address() {
+fn test_get_verifier_address() {
     let price: u256 = 100;
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
-    let retrieved_registry = marketplace.get_registry_address();
-    assert!(retrieved_registry == registry_addr, "Registry address mismatch");
+    let retrieved_verifier = marketplace.get_verifier_address();
+    assert!(retrieved_verifier == verifier, "Verifier address mismatch");
 }
 
 #[test]
@@ -332,9 +332,9 @@ fn test_get_owner() {
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
     
     // Just verify that get_owner returns a non-zero address
     let owner = marketplace.get_owner();
@@ -343,67 +343,67 @@ fn test_get_owner() {
 }
 
 #[test]
-fn test_set_registry_address_by_owner() {
+fn test_set_verifier_address_by_owner() {
     let price: u256 = 100;
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     // Get initial owner (deployer)
     let owner = marketplace.get_owner();
     
     // Deploy a new verifier
-    let new_registry = deploy_mock_registry();
+    let new_verifier = deploy_mock_verifier();
     
     // Owner changes verifier
     start_cheat_caller_address(marketplace.contract_address, owner);
-    marketplace.set_registry_address(new_registry);
+    marketplace.set_verifier_address(new_verifier);
     stop_cheat_caller_address(marketplace.contract_address);
     
     // Verify change
-    let current_registry = marketplace.get_registry_address();
-    assert!(current_registry == new_registry, "Registry should be updated");
+    let current_verifier = marketplace.get_verifier_address();
+    assert!(current_verifier == new_verifier, "Verifier should be updated");
 }
 
 #[test]
-#[should_panic(expected: ('Only owner can set registry',))]
-fn test_set_registry_address_by_non_owner_should_fail() {
+#[should_panic(expected: ('Only owner can set verifier',))]
+fn test_set_verifier_address_by_non_owner_should_fail() {
     let price: u256 = 100;
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
-    let new_registry = deploy_mock_registry();
+    let new_verifier = deploy_mock_verifier();
     
     // Non-owner tries to change verifier
     start_cheat_caller_address(marketplace.contract_address, BUYER());
-    marketplace.set_registry_address(new_registry);
+    marketplace.set_verifier_address(new_verifier);
     stop_cheat_caller_address(marketplace.contract_address);
 }
 
 #[test]
-#[should_panic(expected: ('Invalid registry address',))]
-fn test_set_registry_address_zero_should_fail() {
+#[should_panic(expected: ('Invalid verifier address',))]
+fn test_set_verifier_address_zero_should_fail() {
     let price: u256 = 100;
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     let owner = marketplace.get_owner();
     let zero_address: ContractAddress = 0.try_into().unwrap();
     
     // Owner tries to set zero address
     start_cheat_caller_address(marketplace.contract_address, owner);
-    marketplace.set_registry_address(zero_address);
+    marketplace.set_verifier_address(zero_address);
     stop_cheat_caller_address(marketplace.contract_address);
 }
 
@@ -413,9 +413,9 @@ fn test_transfer_ownership() {
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     let initial_owner = marketplace.get_owner();
     let new_owner: ContractAddress = 'new_owner'.try_into().unwrap();
@@ -437,9 +437,9 @@ fn test_transfer_ownership_by_non_owner_should_fail() {
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     let new_owner: ContractAddress = 'new_owner'.try_into().unwrap();
     
@@ -456,9 +456,9 @@ fn test_transfer_ownership_zero_should_fail() {
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     let owner = marketplace.get_owner();
     let zero_address: ContractAddress = 0.try_into().unwrap();
@@ -475,9 +475,9 @@ fn test_new_owner_can_set_verifier() {
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     let initial_owner = marketplace.get_owner();
     let new_owner: ContractAddress = 'new_owner'.try_into().unwrap();
@@ -488,26 +488,26 @@ fn test_new_owner_can_set_verifier() {
     stop_cheat_caller_address(marketplace.contract_address);
     
     // New owner sets verifier
-    let new_registry = deploy_mock_registry();
+    let new_verifier = deploy_mock_verifier();
     start_cheat_caller_address(marketplace.contract_address, new_owner);
-    marketplace.set_registry_address(new_registry);
+    marketplace.set_verifier_address(new_verifier);
     stop_cheat_caller_address(marketplace.contract_address);
     
     // Verify
-    let current_registry = marketplace.get_registry_address();
-    assert!(current_registry == new_registry, "New owner should be able to set registry");
+    let current_verifier = marketplace.get_verifier_address();
+    assert!(current_verifier == new_verifier, "New owner should be able to set verifier");
 }
 
 #[test]
-#[should_panic(expected: ('Only owner can set registry',))]
+#[should_panic(expected: ('Only owner can set verifier',))]
 fn test_old_owner_cannot_set_verifier_after_transfer() {
     let price: u256 = 100;
     let token = deploy_mock_erc20(SELLER(), price);
     let registry_addr: ContractAddress = 'registry'.try_into().unwrap();
     let pox = deploy_kliver_pox(registry_addr);
-    // let verifier = deploy_mock_verifier(); // Not needed anymore
+    let verifier = deploy_mock_verifier();
     let timeout: u64 = 10;
-    let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
+    let marketplace = deploy_marketplace(pox.contract_address, verifier, token.contract_address, timeout);
 
     let initial_owner = marketplace.get_owner();
     let new_owner: ContractAddress = 'new_owner'.try_into().unwrap();
@@ -518,8 +518,8 @@ fn test_old_owner_cannot_set_verifier_after_transfer() {
     stop_cheat_caller_address(marketplace.contract_address);
     
     // Old owner tries to set verifier (should fail)
-    let new_registry = deploy_mock_registry();
+    let new_verifier = deploy_mock_verifier();
     start_cheat_caller_address(marketplace.contract_address, initial_owner);
-    marketplace.set_registry_address(new_registry);
+    marketplace.set_verifier_address(new_verifier);
     stop_cheat_caller_address(marketplace.contract_address);
 }
