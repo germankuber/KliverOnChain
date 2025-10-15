@@ -1,31 +1,27 @@
-# 🎮 Kliver OnChain Platform
+# Kliver OnChain
 
-<div align="center">
-
-**Cairo smart contract suite for Starknet powering gamified token distribution, simulation-based rewards, and decentralized session marketplace with ZK proofs.**
+**Cairo smart contract suite for Starknet powering the Kliver platform: gamified token distribution, simulation-based rewards, and decentralized session marketplace.**
 
 [![Cairo](https://img.shields.io/badge/Cairo-2.8.2-orange?style=flat-square)](https://www.cairo-lang.org/)
 [![Starknet](https://img.shields.io/badge/Starknet-0.8.0-blue?style=flat-square)](https://www.starknet.io/)
 [![Tests](https://img.shields.io/badge/Tests-180%20Passing-success?style=flat-square)](#testing)
-[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
-
-</div>
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [System Architecture](#-system-architecture)
-- [Smart Contracts](#-smart-contracts)
-- [Deployment](#-deployment)
-- [Testing](#-testing)
-- [API Reference](#-api-reference)
+- [General Architecture](#general-architecture)
+- [Main Contracts](#main-contracts)
+- [Deployment](#deployment)
+- [Testing](#testing)
 
 ---
 
-## 🏗️ System Architecture
+## General Architecture
 
-### Contract Dependencies
+The Kliver OnChain system consists of 5 interconnected smart contracts that manage identity, tokens, content validation, proof of experience, and a decentralized marketplace.
+
+### Dependency Diagram
 
 ```
 ┌─────────────┐       ┌──────────────┐       ┌──────────────┐
@@ -44,151 +40,113 @@
                       │SessionsMarket│
                       │    place     │
                       └──────────────┘
-                             │
-                             ▼
-                      ┌──────────────┐
-                      │   Verifier   │
-                      │ (External)   │
-                      └──────────────┘
 ```
-
-**External Dependencies:**
-- **Verifier Contract**: Zero-knowledge proof verification contract (deployed separately)
-- **Payment Token**: ERC20 token for marketplace payments (deployed separately)
 
 ### Deployment Order
 
 ```
 1. KliverNFT           (Independent)
 2. KliverTokensCore    (Independent)
-3. Registry            (needs: NFT + TokensCore + Verifier*)
-   └─► Post-config:    TokensCore.set_registry_address(Registry)
-4. KliverPox           (needs: Registry)
-   └─► Post-config:    Registry.set_kliver_pox_address(KliverPox)
-5. SessionsMarketplace (needs: KliverPox + Verifier* + PaymentToken*)
+3. Registry            (Requires: NFT + TokensCore + Verifier*)
+   └─► Configuration:  TokensCore.set_registry_address(Registry)
+4. KliverPox           (Requires: Registry)
+   └─► Configuration:  Registry.set_kliver_pox_address(KliverPox)
+5. SessionsMarketplace (Requires: KliverPox + Registry + PaymentToken*)
 
 * = External dependency (deployed separately)
 ```
 
 ---
 
-## 📦 Smart Contracts
+## Main Contracts
 
-### 1. **KliverNFT** - Identity & Access Control
+### 1. KliverNFT - Identity System
 
-ERC721 badge system for platform access.
+**Purpose:** ERC721 badge system for platform access control.
 
-**Constructor**:
-```cairo
-constructor(owner: ContractAddress, base_uri: ByteArray)
-```
+**Features:**
+- One NFT per user (non-transferable/soulbound)
+- Owner-controlled minting
+- Permission validation for registrations
 
-**Key Functions**:
-```cairo
-fn mint_to_user(to: ContractAddress, token_id: u256)  // Owner only
-fn user_has_nft(user: ContractAddress) -> bool
-fn burn_user_nft(token_id: u256)
-```
+**Main functions:**
+- `mint_to_user(to, token_id)` - Mint NFT to user
+- `user_has_nft(user) -> bool` - Verify access
+- `burn_user_nft(token_id)` - Burn user's NFT
 
 ---
 
-### 2. **KliverTokensCore** - Multi-Token System (ERC1155)
+### 2. KliverTokensCore - Multi-Token System
 
-Time-based token distribution with simulation-linked claims.
+**Purpose:** ERC1155 token distribution system with time-based releases linked to simulations.
 
-**Constructor**:
-```cairo
-constructor(owner: ContractAddress, base_uri: ByteArray)
-```
-
-**Post-Deployment** ⚠️:
-```cairo
-fn set_registry_address(registry_address: ContractAddress)  // Required!
-```
-
-**Core Functions**:
-```cairo
-fn create_token(release_hour: u64, release_amount: u256, special_release: u256) -> u256
-fn register_simulation(simulation_id: felt252, token_id: u256, expiration: u64)
-fn add_to_whitelist(token_id: u256, simulation_id: felt252, wallet: ContractAddress)
-fn claim_tokens(token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> u256
-```
-
-**Features**:
-- Daily token releases at configured hour
-- Whitelist per simulation
+**Features:**
+- Daily token releases at configurable hours
+- Claims linked to specific simulations
+- Whitelist system per simulation
+- Special one-time release tokens
 - Accumulated days tracking
-- Special release tokens
+- Session and hint payments
+
+**Main functions:**
+- `create_token(release_hour, release_amount, special_release) -> u256` - Create token type
+- `register_simulation(simulation_id, token_id, expiration)` - Link token to simulation
+- `add_to_whitelist(token_id, simulation_id, wallet)` - Add to whitelist
+- `claim(token_id, simulation_id)` - Claim daily tokens
+- `pay_for_session(simulation_id, session_id, amount)` - Pay with tokens
+
+**Post-deployment:**
+- Requires configuration: `set_registry_address(registry_address)`
 
 ---
 
-### 3. **Registry** - Content Validation
+### 3. Registry - Validation Hub
 
-Cryptographic validation hub for all game content (characters, scenarios, simulations, sessions).
+**Purpose:** Cryptographic validation center for all game content (characters, scenarios, simulations, sessions).
 
-**Constructor**:
-```cairo
-constructor(
-    owner: ContractAddress,
-    nft_address: ContractAddress,
-    token_simulation_address: ContractAddress,
-    verifier_address: ContractAddress
-)
-```
-
-**Post-Deployment** ⚠️:
-```cairo
-fn set_kliver_pox_address(pox_address: ContractAddress)  // Required!
-```
-
-**Registration Functions**:
-```cairo
-fn register_character(character_id: felt252, character_hash: felt252)
-fn register_scenario(scenario_id: felt252, scenario_hash: felt252)
-fn register_simulation(simulation_id: felt252, scenario_id: felt252,
-                      character_id: felt252, simulation_hash: felt252,
-                      author: ContractAddress)
-fn register_session(metadata: SessionMetadata)  // Validates + mints in KliverPox
-```
-
-**Validation Functions**:
-```cairo
-fn verify_character(character_id: felt252, hash: felt252) -> VerificationResult
-fn verify_simulation(simulation_id: felt252, hash: felt252) -> VerificationResult
-fn verify_simulations(simulations: Array<SimulationVerificationRequest>) -> Array<SimulationVerificationResult>
-```
-
-**Features**:
+**Features:**
 - SHA256 hash storage
-- NFT-gated registration
-- Immutable content records
+- NFT-protected registration
 - Batch verification support
+- Component-based modular architecture
+- Immutable content validation
+
+**Main functions:**
+- `register_character(character_id, hash)` - Register character
+- `register_scenario(scenario_id, hash)` - Register scenario
+- `register_simulation(simulation_id, scenario_id, character_id, hash, author)` - Register simulation
+- `register_session(metadata)` - Register session and mint in KliverPox
+- `verify_simulation(simulation_id, hash) -> VerificationResult` - Verify simulation
+- `verify_simulations(simulations) -> Array<Result>` - Batch verification
+
+**Post-deployment:**
+- Requires configuration: `set_kliver_pox_address(pox_address)`
 
 ---
 
-### 4. **KliverPox** - Proof of Experience NFT
+### 4. KliverPox - Proof of eXecution NFT
 
-Session-based NFTs representing completed game sessions.
+**Purpose:** NFTs representing completed game sessions (Proof of eXecution).
 
-**Constructor**:
-```cairo
-constructor(registry_address: ContractAddress)
-```
+**Features:**
+- Session metadata storage
+- Indexing by token and session_id
+- Root hash registry for verification
+- Scoring system
+- Mintable only by Registry
 
-**Functions**:
-```cairo
-fn mint(metadata: SessionMetadata)  // Only Registry can call
-fn get_metadata_by_token(token_id: u256) -> KliverPoxMetadata
-fn get_metadata_by_session(session_id: felt252) -> KliverPoxMetadata
-fn has_session(session_id: felt252) -> bool
-```
+**Main functions:**
+- `mint(metadata)` - Mint PoX NFT (Registry only)
+- `get_metadata_by_token(token_id) -> KliverPoxMetadata` - Get metadata by token
+- `get_metadata_by_session(session_id) -> KliverPoxMetadata` - Get metadata by session
+- `has_session(session_id) -> bool` - Check if session exists
 
-**Metadata Structure**:
+**Metadata:**
 ```cairo
 struct KliverPoxMetadata {
     token_id: u256,
     session_id: felt252,
-    root_hash: felt252,
+    root_hash: felt252,           // ZK root for verification
     simulation_id: felt252,
     author: ContractAddress,
     score: u32
@@ -197,65 +155,46 @@ struct KliverPoxMetadata {
 
 ---
 
-### 5. **SessionsMarketplace** - Session Trading Platform
+### 5. SessionsMarketplace - P2P Trading
 
-Decentralized marketplace for buying/selling sessions with ERC20 payments and ZK proof verification.
+**Purpose:** Decentralized marketplace for buying/selling sessions with ZK proof verification.
 
-**External Dependencies:**
-- **Verifier Contract**: Required for ZK proof verification during purchase settlement
-- **Payment Token**: ERC20 token used for escrow payments
+**Features:**
+- Escrow payments with ERC20 tokens
+- Challenge-response system with ZK proofs
+- Orders with automatic timeout
+- Multiple buyers per listing
+- Complete listing history
+- Automatic refunds after timeout
 
-**Constructor**:
-```cairo
-constructor(
-    pox_address: ContractAddress,
-    verifier_address: ContractAddress,
-    payment_token_address: ContractAddress,
-    purchase_timeout_seconds: u64
-)
-```
+**Seller functions:**
+- `create_listing(token_id, price)` - Create listing
+- `close_listing(token_id)` - Close listing
+- `settle_purchase(token_id, buyer, challenge, proof)` - Settle sale with proof
 
-**Seller Functions**:
-```cairo
-fn create_listing(token_id: u256, price: u256)
-fn close_listing(token_id: u256)
-fn settle_purchase(token_id: u256, buyer: ContractAddress, challenge: u64, proof: Span<felt252>)
-```
+**Buyer functions:**
+- `open_purchase(token_id, challenge, amount)` - Open order with challenge (10-digit number)
+- `refund_purchase(token_id)` - Recover funds after timeout
 
-**Buyer Functions**:
-```cairo
-fn open_purchase(token_id: u256, challenge: u64, amount: u256)  // challenge: 10-digit number
-fn refund_purchase(token_id: u256)  // After timeout or if listing closed
-```
+**Query functions:**
+- `get_listing(token_id) -> Listing` - Get active listing
+- `get_order(token_id, buyer) -> Order` - Get order
+- `get_listing_history(token_id) -> Span<u256>` - Listing history
 
-**View Functions**:
-```cairo
-fn get_listing(token_id: u256) -> Listing
-fn get_order(token_id: u256, buyer: ContractAddress) -> Order
-fn get_listing_history(token_id: u256) -> Span<u256>  // All listing IDs
-```
-
-**Features**:
-- ERC20 escrow payments
-- Challenge-response with ZK proofs (challenge: 1000000000-9999999999)
-- Time-boxed purchases with automatic refunds
-- Multi-buyer support per listing
-- Complete listing history per token
-
-**Flow**:
+**Purchase flow:**
 ```
 1. Seller: create_listing(token_id, price)
 2. Buyer: open_purchase(token_id, challenge, price)
    └─► Funds locked in escrow
 3. Seller: settle_purchase(token_id, buyer, challenge, proof)
-   └─► ZK proof verified → funds released
+   └─► Proof verified → funds released
 4. Buyer (if timeout): refund_purchase(token_id)
-   └─► Funds returned after timeout
+   └─► Funds returned
 ```
 
 ---
 
-## 🚀 Deployment
+## Deployment
 
 ### Prerequisites
 
@@ -295,9 +234,9 @@ environments:
         purchase_timeout_seconds: 86400  # 24 hours
 ```
 
-### Deploy All Contracts
+### Complete Deployment (Recommended)
 
-**Recommended approach** - deploys everything in correct order with automatic configuration:
+Deploys all contracts in the correct order with automatic configuration:
 
 ```bash
 cd deploy
@@ -307,7 +246,7 @@ poetry run python kliver_deploy/deploy.py \
   --output-json
 ```
 
-**Output**:
+**Output:**
 ```json
 {
   "nft": "0x05bd...",
@@ -318,74 +257,111 @@ poetry run python kliver_deploy/deploy.py \
 }
 ```
 
-### Deploy Individual Contracts
+### Interactive Deployment
+
+For a step-by-step guided experience:
 
 ```bash
-# NFT
+cd deploy
+poetry run python deploy_interactive.py
+```
+
+**Interactive mode features:**
+- Intuitive visual menu
+- Parameter validation
+- Confirmation before each deployment
+- Dependency order information
+- Automatic JSON output
+
+### Individual Deployment
+
+If you prefer to deploy contracts separately:
+
+```bash
+# 1. NFT
 poetry run python kliver_deploy/deploy.py --environment dev --contract nft
 
-# TokensCore
+# 2. TokensCore
 poetry run python kliver_deploy/deploy.py --environment dev --contract kliver_tokens_core
 
-# Registry (requires NFT + TokensCore)
+# 3. Registry (requires NFT + TokensCore)
 poetry run python kliver_deploy/deploy.py \
   --environment dev \
   --contract registry \
   --nft-address 0xNFT_ADDR \
   --token-simulation-address 0xTOKEN_ADDR
 
-# KliverPox (requires Registry)
+# 4. KliverPox (requires Registry)
 poetry run python kliver_deploy/deploy.py \
   --environment dev \
   --contract kliver_pox \
   --registry-address 0xREGISTRY_ADDR
 
-# SessionsMarketplace (requires KliverPox)
+# 5. SessionsMarketplace (requires KliverPox)
 poetry run python kliver_deploy/deploy.py \
   --environment dev \
   --contract sessions_marketplace \
   --pox-address 0xPOX_ADDR \
-  --verifier-address 0xVERIFIER_ADDR \
+  --registry-address 0xREGISTRY_ADDR \
   --payment-token-address 0xERC20_ADDR \
   --purchase-timeout 86400
 ```
 
-⚠️ **Manual configuration required** when deploying individually:
-```bash
-# After deploying Registry and KliverPox
-sncast invoke \
-  --contract-address 0xREGISTRY_ADDR \
-  --function set_kliver_pox_address \
-  --calldata 0xPOX_ADDR
+**Manual configuration required** when deploying individually:
 
-# After deploying Registry and TokensCore
+```bash
+# Configure Registry in TokensCore
 sncast invoke \
   --contract-address 0xTOKENS_CORE_ADDR \
   --function set_registry_address \
   --calldata 0xREGISTRY_ADDR
+
+# Configure KliverPox in Registry
+sncast invoke \
+  --contract-address 0xREGISTRY_ADDR \
+  --function set_kliver_pox_address \
+  --calldata 0xPOX_ADDR
 ```
 
-### Deployment Options
+### Post-Deployment Configuration
+
+To configure already deployed contracts:
+
+```bash
+cd deploy
+poetry run python configure_interactive.py
+```
+
+**Available options:**
+- Configure Registry in TokensCore
+- Configure KliverPox in Registry
+- Configure Verifier in Registry
+- Configure Payment Token in Marketplace
+- View configured addresses
+- Generic method invocation
+
+### Deployment Parameters
 
 | Flag | Description | Required |
 |------|-------------|----------|
-| `--environment` | Environment (local/dev/qa/prod) | ✅ Yes |
-| `--contract` | Contract name or `all` | ✅ Yes |
+| `--environment` | Environment (local/dev/qa/prod) | Yes |
+| `--contract` | Contract name or `all` | Yes |
 | `--owner` | Owner address (defaults to deployer) | No |
 | `--nft-address` | NFT contract address | For registry |
 | `--token-simulation-address` | TokensCore address | For registry |
-| `--registry-address` | Registry address | For kliver_pox |
+| `--registry-address` | Registry address | For kliver_pox/marketplace |
 | `--pox-address` | KliverPox address | For marketplace |
 | `--verifier-address` | Verifier contract | Overrides config |
 | `--payment-token-address` | ERC20 payment token | For marketplace |
 | `--purchase-timeout` | Timeout in seconds | For marketplace |
 | `--no-compile` | Skip compilation | No |
-| `--output-json` | JSON output | No |
+| `--output-json` | JSON output format | No |
 
 ### Deployment Artifacts
 
-Each deployment creates a JSON file:
-```bash
+Each deployment generates a JSON file:
+
+```
 deployment_sepolia_kliver_pox_1760363093.json
 ```
 
@@ -408,7 +384,7 @@ Contains:
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Run Tests
 
@@ -417,149 +393,52 @@ Contains:
 scarb build
 scarb test
 
-# Run specific test
+# Specific test
 scarb test test_claim_accumulated_days
 
-# Run with verbose output
+# Verbose mode
 scarb test -v
 ```
 
 ### Test Coverage
 
-**180 comprehensive tests** covering:
+**180 tests** covering:
 
-- ✅ **Token Economics** (110+ tests)
+- **Token Economics (110+ tests)**
   - Token creation, claims, whitelist management
-  - Time-based releases, accumulated days
+  - Time-based releases and accumulated days
   - Edge cases and validations
 
-- ✅ **Content Validation** (40+ tests)
-  - Registration (character, scenario, simulation, session)
-  - Batch verification, hash validation
+- **Content Validation (40+ tests)**
+  - Registration of characters, scenarios, simulations, and sessions
+  - Batch verification and hash validation
   - NFT-gated access control
 
-- ✅ **NFT System** (15+ tests)
-  - Minting, burning, access control
+- **NFT System (15+ tests)**
+  - Minting, burning, and access control
 
-- ✅ **PoX System** (10+ tests)
-  - Session minting, metadata storage
+- **PoX System (10+ tests)**
+  - Session minting and metadata storage
   - Registry integration
 
-- ✅ **Marketplace** (10+ tests)
-  - Listing management, escrow, refunds
-  - Challenge validation, proof verification
+- **Marketplace (10+ tests)**
+  - Listing management, escrow, and refunds
+  - Challenge validation and proof verification
 
 ---
 
-## 📚 API Reference
+## More Information
 
-### Quick Reference
+To learn more about Kliver and our platform, visit:
 
-**KliverNFT**:
-```cairo
-mint_to_user(to: ContractAddress, token_id: u256)
-user_has_nft(user: ContractAddress) -> bool
-burn_user_nft(token_id: u256)
-```
-
-**KliverTokensCore**:
-```cairo
-create_token(release_hour: u64, release_amount: u256, special: u256) -> u256
-register_simulation(simulation_id: felt252, token_id: u256, expiration: u64)
-add_to_whitelist(token_id: u256, simulation_id: felt252, wallet: ContractAddress)
-claim_tokens(token_id: u256, simulation_id: felt252, wallet: ContractAddress) -> u256
-set_registry_address(registry: ContractAddress)  // Post-deployment
-```
-
-**Registry**:
-```cairo
-register_character(character_id: felt252, hash: felt252)
-register_scenario(scenario_id: felt252, hash: felt252)
-register_simulation(simulation_id: felt252, scenario_id: felt252,
-                   character_id: felt252, hash: felt252, author: ContractAddress)
-register_session(metadata: SessionMetadata)
-verify_simulation(simulation_id: felt252, hash: felt252) -> VerificationResult
-verify_simulations(simulations: Array<SimulationVerificationRequest>) -> Array<SimulationVerificationResult>
-set_kliver_pox_address(pox: ContractAddress)  // Post-deployment
-```
-
-**KliverPox**:
-```cairo
-mint(metadata: SessionMetadata)  // Only Registry
-get_metadata_by_session(session_id: felt252) -> KliverPoxMetadata
-get_metadata_by_token(token_id: u256) -> KliverPoxMetadata
-has_session(session_id: felt252) -> bool
-```
-
-**SessionsMarketplace**:
-```cairo
-// Seller
-create_listing(token_id: u256, price: u256)
-close_listing(token_id: u256)
-settle_purchase(token_id: u256, buyer: ContractAddress, challenge: u64, proof: Span<felt252>)
-
-// Buyer
-open_purchase(token_id: u256, challenge: u64, amount: u256)  // challenge: 1000000000-9999999999
-refund_purchase(token_id: u256)
-
-// View
-get_listing(token_id: u256) -> Listing
-get_order(token_id: u256, buyer: ContractAddress) -> Order
-get_order_status(token_id: u256, buyer: ContractAddress) -> OrderStatus
-get_token_listing_count(token_id: u256) -> u256
-```
-
-**Data Structures**:
-```cairo
-struct SessionMetadata {
-    session_id: felt252,
-    root_hash: felt252,
-    simulation_id: felt252,
-    author: ContractAddress,
-    score: u32
-}
-
-struct Listing {
-    session_id: felt252,
-    root: felt252,
-    seller: ContractAddress,
-    buyer: ContractAddress,
-    status: ListingStatus,  // Open, Closed
-    challenge: u64,
-    price: u256
-}
-
-struct Order {
-    session_id: felt252,
-    buyer: ContractAddress,
-    challenge: u64,
-    amount: u256,
-    status: OrderStatus  // Open, Settled, Refunded
-}
-```
-
-For complete documentation, see inline comments in `src/interfaces/`.
+**[kliver.ai](http://kliver.ai)**
 
 ---
 
-## 📄 License
+## License
 
-MIT License - see [LICENSE](LICENSE) file.
-
----
-
-## 👥 Contact
-
-- **Developer**: German Kuber
-- **GitHub**: [@germankuber](https://github.com/germankuber)
-- **Project**: [KliverOnChain](https://github.com/germankuber/KliverOnChain)
+MIT License - see [LICENSE](LICENSE) file
 
 ---
 
-<div align="center">
-
-**Built with ❤️ using Cairo and Starknet**
-
-[Report Bug](https://github.com/germankuber/KliverOnChain/issues) • [Request Feature](https://github.com/germankuber/KliverOnChain/issues)
-
-</div>
+**Built with Cairo and Starknet**
