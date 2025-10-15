@@ -249,13 +249,20 @@ poetry run python kliver_deploy/deploy.py \
 **Output:**
 ```json
 {
-  "nft": "0x05bd...",
-  "kliver_tokens_core": "0x0170...",
-  "registry": "0x00f7...",
-  "kliver_pox": "0x069e...",
-  "sessions_marketplace": "0x07e0..."
+  "Nft": "0x052b1adc747e150870ef1d0de8b14d15ba9209814f90a3f99d032d59f46ff939",
+  "TokenSimulation": "0x043ea8c61ad673ccb6662bec74a88e19cb0f6b782a0a87a80a2868cf2752cc18",
+  "Registry": "0x0494de6d83afb23643f21201c552e716cf7fe1ff8dd6400e150c9010ebe02892",
+  "KliverPox": "0x019452d409c98507d83aded94fac6781cc6266279246a42eb1ac882368de1552",
+  "MarketPlace": "0x06ab7e68c323a453299cde01a6c2398162fc252c0f3e4c77abcda9054ec79e26"
 }
 ```
+
+**Live deployment on Sepolia:**
+- **KliverNFT**: [`0x052b1adc...f46ff939`](https://sepolia.starkscan.co/contract/0x052b1adc747e150870ef1d0de8b14d15ba9209814f90a3f99d032d59f46ff939)
+- **KliverTokensCore**: [`0x043ea8c6...2752cc18`](https://sepolia.starkscan.co/contract/0x043ea8c61ad673ccb6662bec74a88e19cb0f6b782a0a87a80a2868cf2752cc18)
+- **Registry**: [`0x0494de6d...ebe02892`](https://sepolia.starkscan.co/contract/0x0494de6d83afb23643f21201c552e716cf7fe1ff8dd6400e150c9010ebe02892)
+- **KliverPox**: [`0x019452d4...68de1552`](https://sepolia.starkscan.co/contract/0x019452d409c98507d83aded94fac6781cc6266279246a42eb1ac882368de1552)
+- **SessionsMarketplace**: [`0x06ab7e68...4ec79e26`](https://sepolia.starkscan.co/contract/0x06ab7e68c323a453299cde01a6c2398162fc252c0f3e4c77abcda9054ec79e26)
 
 ### Interactive Deployment
 
