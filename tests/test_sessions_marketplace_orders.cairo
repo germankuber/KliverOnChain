@@ -356,7 +356,7 @@ fn test_set_registry_address_by_owner() {
     let owner = marketplace.get_owner();
     
     // Deploy a new verifier
-    let new_registry = deploy_mock_verifier();
+    let new_registry = deploy_mock_registry();
     
     // Owner changes verifier
     start_cheat_caller_address(marketplace.contract_address, owner);
@@ -379,7 +379,7 @@ fn test_set_registry_address_by_non_owner_should_fail() {
     let timeout: u64 = 10;
     let marketplace = deploy_marketplace(pox.contract_address, registry_addr, token.contract_address, timeout);
 
-    let new_registry = deploy_mock_verifier();
+    let new_registry = deploy_mock_registry();
     
     // Non-owner tries to change verifier
     start_cheat_caller_address(marketplace.contract_address, BUYER());
@@ -488,7 +488,7 @@ fn test_new_owner_can_set_verifier() {
     stop_cheat_caller_address(marketplace.contract_address);
     
     // New owner sets verifier
-    let new_registry = deploy_mock_verifier();
+    let new_registry = deploy_mock_registry();
     start_cheat_caller_address(marketplace.contract_address, new_owner);
     marketplace.set_registry_address(new_registry);
     stop_cheat_caller_address(marketplace.contract_address);
@@ -518,7 +518,7 @@ fn test_old_owner_cannot_set_verifier_after_transfer() {
     stop_cheat_caller_address(marketplace.contract_address);
     
     // Old owner tries to set verifier (should fail)
-    let new_registry = deploy_mock_verifier();
+    let new_registry = deploy_mock_registry();
     start_cheat_caller_address(marketplace.contract_address, initial_owner);
     marketplace.set_registry_address(new_registry);
     stop_cheat_caller_address(marketplace.contract_address);
