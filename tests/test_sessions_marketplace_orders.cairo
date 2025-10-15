@@ -35,11 +35,6 @@ fn deploy_kliver_pox(registry: ContractAddress) -> IKliverPoxDispatcher {
     IKliverPoxDispatcher { contract_address: addr }
 }
 
-fn deploy_mock_verifier() -> ContractAddress {
-    let contract = declare("MockVerifier").unwrap().contract_class();
-    let (addr, _) = contract.deploy(@ArrayTrait::new()).unwrap();
-    addr
-}
 
 fn deploy_mock_registry() -> ContractAddress {
     let contract = declare("MockSessionRegistry").unwrap().contract_class();

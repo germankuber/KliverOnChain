@@ -433,7 +433,7 @@ class ContractDeployer:
 
         # Define validation functions based on contract type
         validation_functions = {
-            "nft": "name",  # ERC721
+            "nft": "name",           # ERC721
             "registry": "get_owner",  # Registry specific
             "token": "balance_of",  # ERC1155
             "token_simulation": "balance_of",  # ERC1155 (TokenSimulation)
