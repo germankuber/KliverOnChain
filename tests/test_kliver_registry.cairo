@@ -18,9 +18,8 @@ use kliver_on_chain::interfaces::simulation_registry::{
     SimulationWithTokenMetadata,
 };
 use kliver_on_chain::types::{
-    VerificationResult, SimulationVerificationRequest, SimulationVerificationResult,
-    ScenarioVerificationRequest, ScenarioVerificationResult, CharacterVerificationRequest,
-    CharacterVerificationResult,
+    VerificationResult, SimulationVerificationRequest,
+    ScenarioVerificationRequest, CharacterVerificationRequest,
 };
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
@@ -1727,7 +1726,7 @@ fn test_simulation_exists_zero_id() {
 
 #[test]
 fn test_get_verifier_address() {
-    let (_, _, _, owner_dispatcher, _, owner) = deploy_contract();
+    let (_, _, _, owner_dispatcher, _, _owner) = deploy_contract();
     
     // Get the verifier address set during deployment
     let verifier_addr = owner_dispatcher.get_verifier_address();

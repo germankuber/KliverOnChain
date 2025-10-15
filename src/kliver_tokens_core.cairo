@@ -200,7 +200,7 @@ mod KliverTokensCore {
             simulation_id,
             token_id,
             caller,
-            creation_timestamp_midnight, // ← SIEMPRE medianoche
+            creation_timestamp_midnight, 
             expiration_timestamp,
         );
 

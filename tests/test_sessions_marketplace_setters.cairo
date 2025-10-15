@@ -1,10 +1,9 @@
 use kliver_on_chain::interfaces::marketplace_interface::{
     IMarketplaceDispatcher, IMarketplaceDispatcherTrait,
 };
-use kliver_on_chain::mocks::mock_erc20::MockERC20::{IERC20Dispatcher, IERC20DispatcherTrait};
+use kliver_on_chain::mocks::mock_erc20::MockERC20::IERC20Dispatcher;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
-    stop_cheat_caller_address,
 };
 use starknet::{ContractAddress};
 use core::num::traits::Zero;
